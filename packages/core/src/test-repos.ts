@@ -10,5 +10,6 @@ export const testRepos: readonly TestRepo[] = [
   { repo: "toeverything/AFFiNE", reason: "TypeScript and Rust app monorepo on a canary branch" },
   { repo: "medusajs/medusa", reason: "Large TypeScript commerce monorepo" },
   { repo: "sugarlabs/www-v2", reason: "Community website project" },
+  { repo: "sugarlabs/musicblocks", reason: "Large plain JavaScript application" },
   { repo: "accordproject/template-playground", reason: "Small TypeScript repository" },
 ];

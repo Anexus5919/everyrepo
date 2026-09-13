@@ -86,7 +86,7 @@ export function buildReport(enginePath: string): SnapshotReport {
       mostReferenced: all(`
         SELECT r.name AS name, COUNT(*) AS "references"
         FROM symbol_ref r
-        WHERE r.name IN (SELECT name FROM symbol WHERE exported = 1)
+        WHERE r.name IN (SELECT name FROM symbol)
         GROUP BY r.name ORDER BY 2 DESC LIMIT 10`),
       ...(stats.estimate ? { estimate: stats.estimate } : {}),
     };

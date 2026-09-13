@@ -88,10 +88,15 @@ function stringList(value: unknown): string[] {
 }
 
 function globMatcher(globs: string[]): (dir: string) => boolean {
-  const include = globs.filter((glob) => !glob.startsWith("!")).map(normalizeDir);
+  // "." refers to the repository root, which is detected separately
+  const include = globs
+    .filter((glob) => !glob.startsWith("!"))
+    .map(normalizeDir)
+    .filter(Boolean);
   const exclude = globs
     .filter((glob) => glob.startsWith("!"))
-    .map((glob) => normalizeDir(glob.slice(1)));
+    .map((glob) => normalizeDir(glob.slice(1)))
+    .filter(Boolean);
   if (include.length === 0) return () => false;
   const isIn = picomatch(include, { dot: true });
   const isOut = exclude.length > 0 ? picomatch(exclude, { dot: true }) : () => false;

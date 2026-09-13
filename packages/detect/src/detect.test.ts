@@ -42,6 +42,13 @@ describe("classifyPath", () => {
     ["package.json", "config", "json"],
     ["vite.config.ts", "config", "typescript"],
     ["crates/core/src/lib.rs", "src", "rust"],
+    ["core/src/main/resources/hudson/model/Job/index.jelly", "src", "jelly"],
+    ["core/src/main/resources/hudson/model/Messages_de.properties", "locale", "properties"],
+    ["core/src/main/resources/hudson/model/Job/index_pt_BR.properties", "locale", "properties"],
+    ["core/src/main/resources/hudson/model/Messages.properties", "config", "properties"],
+    ["core/src/main/resources/hudson/model/Job/help-name.html", "docs", "html"],
+    ["www/apps/book/app/learn/page.tsx", "docs", "tsx"],
+    ["www/apps/resources/generated/files-map.mjs", "generated", "javascript"],
     ["LICENSE", "other", undefined],
   ])("%s is %s", (path, kind, language) => {
     const result = classifyPath(path);
@@ -166,6 +173,24 @@ describe("detectRepository", () => {
       "services/api": "go:github.com/acme/api",
       "tools/py": "python:acme-tools",
     });
+  });
+
+  it("ignores root workspace entries and treats oversized source files as generated", async () => {
+    const { entries, readText } = fixture({
+      "package.json": JSON.stringify({ name: "app", workspaces: [".", "./", "packages/*"] }),
+      "packages/ui/package.json": JSON.stringify({ name: "@app/ui" }),
+      "packages/ui/src/Button.tsx": "export const Button = () => null;",
+    });
+    const huge = { path: "packages/ui/src/Icons.tsx", oid: "huge", bytes: 1_500_000 };
+    const detection = await detectRepository({
+      entries: [...entries, huge],
+      readText,
+      repoName: "app",
+    });
+    expect(detection.modules.map((module) => module.path)).toEqual(["", "packages/ui"]);
+    const icons = detection.files.find((file) => file.path === huge.path);
+    expect(icons?.kind).toBe("generated");
+    expect(detection.sourceTokens).toBeLessThan(100);
   });
 
   it("falls back to top-level directories when no manifests exist", async () => {

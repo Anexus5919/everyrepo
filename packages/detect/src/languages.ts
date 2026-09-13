@@ -44,7 +44,7 @@ const EXTENSIONS: Record<string, string> = {
   ".less": "less",
   ".html": "html",
   ".htm": "html",
-  ".jelly": "xml",
+  ".jelly": "jelly",
   ".md": "markdown",
   ".mdx": "mdx",
   ".rst": "rst",
@@ -95,6 +95,7 @@ export const CODE_LANGUAGES = new Set([
   "vue",
   "svelte",
   "astro",
+  "jelly",
 ]);
 
 export const DATA_LANGUAGES = new Set(["json", "yaml", "toml", "xml", "properties", "ini"]);

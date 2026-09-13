@@ -40,6 +40,8 @@ export interface DetectInput {
 }
 
 const EXCLUDED_MODULE_KINDS = new Set<FileKind>(["vendored", "generated", "test", "example"]);
+// Hand-written source files are almost never this large; such files are data or build output
+const MAX_SOURCE_BYTES = 1_000_000;
 
 export async function detectRepository(input: DetectInput): Promise<Detection> {
   const paths = new Set(input.entries.map((entry) => entry.path));
@@ -48,7 +50,10 @@ export async function detectRepository(input: DetectInput): Promise<Detection> {
   const isGenerated = generatedMatcherFromGitattributes(await readText(".gitattributes"));
 
   const classified = input.entries.map((entry) => {
-    const { language, kind } = classifyPath(entry.path, isGenerated);
+    const { language, kind: pathKind } = classifyPath(entry.path, isGenerated);
+    const oversized =
+      (pathKind === "src" || pathKind === "types") && entry.bytes > MAX_SOURCE_BYTES;
+    const kind: FileKind = oversized ? "generated" : pathKind;
     return {
       ...entry,
       kind,

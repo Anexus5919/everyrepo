@@ -31,7 +31,7 @@ const EXAMPLE_DIRS = new Set([
   "sandbox",
 ]);
 const LOCALE_DIRS = new Set(["locales", "locale", "i18n", "l10n", "translations"]);
-const DOCS_ROOTS = new Set(["docs", "doc", "documentation", "website"]);
+const DOCS_ROOTS = new Set(["docs", "doc", "documentation", "website", "www", "site"]);
 const LOCKFILES = new Set([
   "pnpm-lock.yaml",
   "package-lock.json",
@@ -89,6 +89,7 @@ export function generatedMatcherFromGitattributes(content: string | undefined): 
     );
     if (!marked) continue;
     const anchored = pattern.startsWith("/") ? pattern.slice(1) : pattern;
+    if (!anchored) continue;
     patterns.push(pattern.includes("/") ? anchored : `**/${anchored}`);
   }
   if (patterns.length === 0) return () => false;
@@ -116,6 +117,7 @@ export function classifyPath(
     isGenerated(path) ||
     LOCKFILES.has(lower) ||
     dirs.includes("__generated__") ||
+    dirs.includes("generated") ||
     dirs.includes("__snapshots__") ||
     dirs.includes("dist") ||
     /\.generated\.|\.pb\.go$|_pb2\.py$|\.snap$/.test(lower)
@@ -133,11 +135,17 @@ export function classifyPath(
     return result("test");
   }
   if (dirs.some((dir) => EXAMPLE_DIRS.has(dir))) return result("example");
-  if (dirs.some((dir) => LOCALE_DIRS.has(dir)) || extension === ".po" || extension === ".pot") {
+  if (
+    dirs.some((dir) => LOCALE_DIRS.has(dir)) ||
+    extension === ".po" ||
+    extension === ".pot" ||
+    /_[a-z]{2,3}(_[A-Z]{2})?\.properties$/.test(fileName)
+  ) {
     return result("locale");
   }
   if (
     (dirs[0] !== undefined && DOCS_ROOTS.has(dirs[0])) ||
+    /^help(-[\w.-]+)?\.html$/.test(lower) ||
     detected === "markdown" ||
     detected === "mdx" ||
     detected === "rst"

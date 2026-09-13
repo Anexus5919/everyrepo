@@ -1,4 +1,4 @@
-import { estimateTokens, sizeTierFor, type FileKind, type SizeTier } from "@kickstart/core";
+import { estimateTokens, sizeTierFor, type FileKind, type SizeTier } from "@everyrepo/core";
 import { detectDocsSources, type DocsSource } from "./docs.ts";
 import { classifyPath, generatedMatcherFromGitattributes } from "./kinds.ts";
 import { detectModules, moduleForPath, type DetectedModule, type ReadText } from "./modules.ts";

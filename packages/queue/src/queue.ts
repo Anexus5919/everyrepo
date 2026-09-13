@@ -1,4 +1,4 @@
-import type { JobKind } from "@kickstart/core";
+import type { JobKind } from "@everyrepo/core";
 import {
   and,
   asc,
@@ -9,7 +9,7 @@ import {
   lt,
   type AppDb,
   type AppExecutor,
-} from "@kickstart/db";
+} from "@everyrepo/db";
 
 export type Job = typeof indexJobs.$inferSelect;
 

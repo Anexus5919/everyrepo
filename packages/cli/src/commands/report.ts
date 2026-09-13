@@ -1,6 +1,6 @@
-import { formatRepoRef, parseRepoRef, repoDirName } from "@kickstart/core";
-import { engineDbPath, findRepo } from "@kickstart/db";
-import { buildReport, type SnapshotReport } from "@kickstart/pipeline";
+import { formatRepoRef, parseRepoRef, repoDirName } from "@everyrepo/core";
+import { engineDbPath, findRepo } from "@everyrepo/db";
+import { buildReport, type SnapshotReport } from "@everyrepo/pipeline";
 import { Command } from "commander";
 import { openContext } from "../context.ts";
 
@@ -72,7 +72,7 @@ export function reportCommand(): Command {
         const repo = findRepo(context.appDb, ref);
         if (!repo?.lastIndexedSha) {
           throw new Error(
-            `${formatRepoRef(ref)} has not been indexed yet. Run: pnpm kickstart index ${formatRepoRef(ref)}`,
+            `${formatRepoRef(ref)} has not been indexed yet. Run: pnpm everyrepo index ${formatRepoRef(ref)}`,
           );
         }
         const report = buildReport(

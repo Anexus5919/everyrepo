@@ -3,7 +3,7 @@ import { access } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { Command } from "commander";
-import { loadLocalConfig, parseRepoRef, repoDirName, testRepos } from "@kickstart/core";
+import { loadLocalConfig, parseRepoRef, repoDirName, testRepos } from "@everyrepo/core";
 
 const run = promisify(execFile);
 

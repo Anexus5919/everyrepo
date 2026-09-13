@@ -1,4 +1,4 @@
-import { FILE_KINDS, MODULE_KINDS, SIZE_TIERS } from "@kickstart/core";
+import { FILE_KINDS, MODULE_KINDS, SIZE_TIERS } from "@everyrepo/core";
 import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const snapshots = sqliteTable("snapshot", {

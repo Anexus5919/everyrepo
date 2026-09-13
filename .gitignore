@@ -12,7 +12,7 @@ coverage/
 *.db
 .data/
 
-kickstart.local.json
+everyrepo.local.json
 CLAUDE.local.md
 
 *.log

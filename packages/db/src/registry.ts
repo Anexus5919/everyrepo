@@ -1,4 +1,4 @@
-import { formatRepoRef, type RepoRef } from "@kickstart/core";
+import { formatRepoRef, type RepoRef } from "@everyrepo/core";
 import { eq } from "drizzle-orm";
 import { orgs, repos } from "./app-schema.ts";
 import type { AppDb } from "./open.ts";

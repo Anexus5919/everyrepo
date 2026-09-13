@@ -1,4 +1,4 @@
-import { repoDirName, type LocalConfig, type RepoRef, type SizeTier } from "@kickstart/core";
+import { repoDirName, type LocalConfig, type RepoRef, type SizeTier } from "@everyrepo/core";
 import {
   engineDbPath,
   eq,
@@ -9,10 +9,10 @@ import {
   repos,
   snapshots,
   type AppDb,
-} from "@kickstart/db";
-import { detectRepository } from "@kickstart/detect";
-import { isParseable, parseSource } from "@kickstart/parse";
-import type { StageHandler } from "@kickstart/queue";
+} from "@everyrepo/db";
+import { detectRepository } from "@everyrepo/detect";
+import { isParseable, parseSource } from "@everyrepo/parse";
+import type { StageHandler } from "@everyrepo/queue";
 import {
   BlobReader,
   ensureBlobs,
@@ -22,7 +22,7 @@ import {
   resolveBranch,
   resolveRepoSource,
   resolveSnapshot,
-} from "@kickstart/repo";
+} from "@everyrepo/repo";
 import { createParseWriter, writeDetection, type ParsedFile } from "./engine-writer.ts";
 import { estimateIndexCost, type CostEstimate } from "./estimate.ts";
 

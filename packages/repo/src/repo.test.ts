@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseRepoRef } from "@kickstart/core";
+import { parseRepoRef } from "@everyrepo/core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { git } from "./git.ts";
 import { resolveRepoSource, resolveSnapshot } from "./source.ts";

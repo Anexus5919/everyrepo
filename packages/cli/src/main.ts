@@ -5,7 +5,7 @@ import { reportCommand } from "./commands/report.ts";
 import { reposCommand } from "./commands/repos.ts";
 
 const program = new Command()
-  .name("kickstart")
+  .name("everyrepo")
   .description("Index and explain open-source repositories")
   .version("0.0.0");
 

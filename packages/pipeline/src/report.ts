@@ -1,5 +1,5 @@
-import { openEngineDb, snapshots } from "@kickstart/db";
-import type { DocsSource, LanguageStat } from "@kickstart/detect";
+import { openEngineDb, snapshots } from "@everyrepo/db";
+import type { DocsSource, LanguageStat } from "@everyrepo/detect";
 import type { CostEstimate } from "./estimate.ts";
 
 export interface ModuleSummary {

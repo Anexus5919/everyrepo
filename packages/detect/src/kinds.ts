@@ -1,4 +1,4 @@
-import type { FileKind } from "@kickstart/core";
+import type { FileKind } from "@everyrepo/core";
 import picomatch from "picomatch";
 import { CODE_LANGUAGES, DATA_LANGUAGES, detectLanguage, extensionOf } from "./languages.ts";
 

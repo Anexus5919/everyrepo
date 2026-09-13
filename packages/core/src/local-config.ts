@@ -16,7 +16,7 @@ export type LocalRepo = z.infer<typeof localRepoSchema>;
 export type LocalConfig = z.infer<typeof localConfigSchema>;
 
 export async function loadLocalConfig(
-  path = process.env["KICKSTART_CONFIG"] ?? "kickstart.local.json",
+  path = process.env["EVERYREPO_CONFIG"] ?? "everyrepo.local.json",
 ): Promise<LocalConfig> {
   let raw: string;
   try {
@@ -24,7 +24,7 @@ export async function loadLocalConfig(
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       throw new Error(
-        `Local config not found at ${path}. Copy kickstart.local.example.json to kickstart.local.json and edit it.`,
+        `Local config not found at ${path}. Copy everyrepo.local.example.json to everyrepo.local.json and edit it.`,
         { cause: error },
       );
     }

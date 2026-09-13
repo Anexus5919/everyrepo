@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { formatRepoRef, repoDirName, type LocalConfig, type RepoRef } from "@kickstart/core";
+import { formatRepoRef, repoDirName, type LocalConfig, type RepoRef } from "@everyrepo/core";
 import { git, gitOptional } from "./git.ts";
 
 export interface RepoSource {

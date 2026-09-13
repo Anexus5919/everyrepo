@@ -1,10 +1,10 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { parseRepoRef, type LocalConfig } from "@kickstart/core";
-import { ensureRepo, findRepo, openAppDb } from "@kickstart/db";
-import { claimNextJob, enqueueJob, runJob } from "@kickstart/queue";
-import { git } from "@kickstart/repo";
+import { parseRepoRef, type LocalConfig } from "@everyrepo/core";
+import { ensureRepo, findRepo, openAppDb } from "@everyrepo/db";
+import { claimNextJob, enqueueJob, runJob } from "@everyrepo/queue";
+import { git } from "@everyrepo/repo";
 import { afterAll, describe, expect, it } from "vitest";
 import { estimateIndexCost } from "./estimate.ts";
 import { buildReport } from "./report.ts";

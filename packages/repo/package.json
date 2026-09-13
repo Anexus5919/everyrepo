@@ -1,5 +1,5 @@
 {
-  "name": "@kickstart/repo",
+  "name": "@everyrepo/repo",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -7,6 +7,6 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@kickstart/core": "workspace:*"
+    "@everyrepo/core": "workspace:*"
   }
 }

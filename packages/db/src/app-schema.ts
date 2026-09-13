@@ -1,4 +1,4 @@
-import { JOB_KINDS, JOB_STATUSES, REPO_STATUSES, SIZE_TIERS } from "@kickstart/core";
+import { JOB_KINDS, JOB_STATUSES, REPO_STATUSES, SIZE_TIERS } from "@everyrepo/core";
 import { index, integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 const timestamp = (name: string) => integer(name, { mode: "timestamp_ms" });

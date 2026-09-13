@@ -1,5 +1,5 @@
-import { loadLocalConfig, type LocalConfig } from "@kickstart/core";
-import { appDbPath, openAppDb, type AppDb } from "@kickstart/db";
+import { loadLocalConfig, type LocalConfig } from "@everyrepo/core";
+import { appDbPath, openAppDb, type AppDb } from "@everyrepo/db";
 
 export interface CliContext {
   config: LocalConfig;

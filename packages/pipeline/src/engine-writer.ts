@@ -1,8 +1,8 @@
-import type { RepoRef } from "@kickstart/core";
-import { formatRepoRef } from "@kickstart/core";
-import { eq, files, modules, snapshots, symbolRefs, symbols, type EngineDb } from "@kickstart/db";
-import type { Detection } from "@kickstart/detect";
-import type { ParseResult } from "@kickstart/parse";
+import type { RepoRef } from "@everyrepo/core";
+import { formatRepoRef } from "@everyrepo/core";
+import { eq, files, modules, snapshots, symbolRefs, symbols, type EngineDb } from "@everyrepo/db";
+import type { Detection } from "@everyrepo/detect";
+import type { ParseResult } from "@everyrepo/parse";
 
 export const ENGINE_VERSION = "0.1.0";
 const INSERT_CHUNK = 500;

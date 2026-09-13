@@ -1,5 +1,5 @@
 {
-  "dataDir": "C:/path/to/kickstart-data",
+  "dataDir": "C:/path/to/everyrepo-data",
   "localRepos": {
     "mui/mui-x": { "path": "C:/path/to/mui-x", "remote": "upstream", "defaultBranch": "master" }
   }

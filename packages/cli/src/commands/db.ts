@@ -1,4 +1,4 @@
-import { appDbPath } from "@kickstart/db";
+import { appDbPath } from "@everyrepo/db";
 import { Command } from "commander";
 import { openContext } from "../context.ts";
 

@@ -1,5 +1,5 @@
 {
-  "name": "@kickstart/db",
+  "name": "@everyrepo/db",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -11,7 +11,7 @@
     "drizzle-kit": "^0.31.10"
   },
   "dependencies": {
-    "@kickstart/core": "workspace:*"
+    "@everyrepo/core": "workspace:*"
   },
   "scripts": {
     "db:generate": "drizzle-kit generate --config drizzle.app.config.ts && drizzle-kit generate --config drizzle.engine.config.ts"

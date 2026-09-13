@@ -1,5 +1,5 @@
-import { parseRepoRef } from "@kickstart/core";
-import { ensureRepo, eq, indexJobs, openAppDb, type AppDb } from "@kickstart/db";
+import { parseRepoRef } from "@everyrepo/core";
+import { ensureRepo, eq, indexJobs, openAppDb, type AppDb } from "@everyrepo/db";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   claimJob,

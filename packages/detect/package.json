@@ -1,5 +1,5 @@
 {
-  "name": "@kickstart/detect",
+  "name": "@everyrepo/detect",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -7,7 +7,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@kickstart/core": "workspace:*",
+    "@everyrepo/core": "workspace:*",
     "fast-xml-parser": "^5.11.1",
     "picomatch": "^4.0.7",
     "smol-toml": "^1.8.0",

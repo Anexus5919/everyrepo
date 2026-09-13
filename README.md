@@ -1,6 +1,6 @@
-# kickstart
+# EveryRepo
 
-Working codename. A tool that explains any open-source repository: how its codebase is organized,
+A tool that explains any open-source repository: how its codebase is organized,
 how contributions get merged, where a newcomer can start, and what changed recently.
 
 ## Requirements
@@ -12,14 +12,14 @@ how contributions get merged, where a newcomer can start, and what changed recen
 
 ```sh
 pnpm install
-cp kickstart.local.example.json kickstart.local.json
+cp everyrepo.local.example.json everyrepo.local.json
 ```
 
-Edit `kickstart.local.json` to point at a data directory and any local clones you already have.
+Edit `everyrepo.local.json` to point at a data directory and any local clones you already have.
 
 ## Commands
 
 | Command                     | Purpose                                      |
 | --------------------------- | -------------------------------------------- |
 | `pnpm check`                | Format check, lint, typecheck and tests      |
-| `pnpm kickstart repos list` | Show test repositories and their local state |
+| `pnpm everyrepo repos list` | Show test repositories and their local state |

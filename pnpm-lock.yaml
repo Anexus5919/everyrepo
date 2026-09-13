@@ -38,25 +38,25 @@ importers:
 
   packages/cli:
     dependencies:
-      '@kickstart/core':
+      '@everyrepo/core':
         specifier: workspace:*
         version: link:../core
-      '@kickstart/db':
+      '@everyrepo/db':
         specifier: workspace:*
         version: link:../db
-      '@kickstart/detect':
+      '@everyrepo/detect':
         specifier: workspace:*
         version: link:../detect
-      '@kickstart/parse':
+      '@everyrepo/parse':
         specifier: workspace:*
         version: link:../parse
-      '@kickstart/pipeline':
+      '@everyrepo/pipeline':
         specifier: workspace:*
         version: link:../pipeline
-      '@kickstart/queue':
+      '@everyrepo/queue':
         specifier: workspace:*
         version: link:../queue
-      '@kickstart/repo':
+      '@everyrepo/repo':
         specifier: workspace:*
         version: link:../repo
       commander:
@@ -71,7 +71,7 @@ importers:
 
   packages/db:
     dependencies:
-      '@kickstart/core':
+      '@everyrepo/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -84,7 +84,7 @@ importers:
 
   packages/detect:
     dependencies:
-      '@kickstart/core':
+      '@everyrepo/core':
         specifier: workspace:*
         version: link:../core
       fast-xml-parser:
@@ -130,37 +130,37 @@ importers:
 
   packages/pipeline:
     dependencies:
-      '@kickstart/core':
+      '@everyrepo/core':
         specifier: workspace:*
         version: link:../core
-      '@kickstart/db':
+      '@everyrepo/db':
         specifier: workspace:*
         version: link:../db
-      '@kickstart/detect':
+      '@everyrepo/detect':
         specifier: workspace:*
         version: link:../detect
-      '@kickstart/parse':
+      '@everyrepo/parse':
         specifier: workspace:*
         version: link:../parse
-      '@kickstart/queue':
+      '@everyrepo/queue':
         specifier: workspace:*
         version: link:../queue
-      '@kickstart/repo':
+      '@everyrepo/repo':
         specifier: workspace:*
         version: link:../repo
 
   packages/queue:
     dependencies:
-      '@kickstart/core':
+      '@everyrepo/core':
         specifier: workspace:*
         version: link:../core
-      '@kickstart/db':
+      '@everyrepo/db':
         specifier: workspace:*
         version: link:../db
 
   packages/repo:
     dependencies:
-      '@kickstart/core':
+      '@everyrepo/core':
         specifier: workspace:*
         version: link:../core
 

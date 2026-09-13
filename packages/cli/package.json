@@ -1,5 +1,5 @@
 {
-  "name": "@kickstart/cli",
+  "name": "@everyrepo/cli",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -7,13 +7,13 @@
     ".": "./src/main.ts"
   },
   "dependencies": {
-    "@kickstart/core": "workspace:*",
-    "@kickstart/db": "workspace:*",
-    "@kickstart/detect": "workspace:*",
-    "@kickstart/parse": "workspace:*",
-    "@kickstart/pipeline": "workspace:*",
-    "@kickstart/queue": "workspace:*",
-    "@kickstart/repo": "workspace:*",
+    "@everyrepo/core": "workspace:*",
+    "@everyrepo/db": "workspace:*",
+    "@everyrepo/detect": "workspace:*",
+    "@everyrepo/parse": "workspace:*",
+    "@everyrepo/pipeline": "workspace:*",
+    "@everyrepo/queue": "workspace:*",
+    "@everyrepo/repo": "workspace:*",
     "commander": "^15.0.0"
   }
 }

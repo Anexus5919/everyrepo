@@ -1,4 +1,4 @@
-import type { SizeTier } from "@kickstart/core";
+import type { SizeTier } from "@everyrepo/core";
 
 export interface EstimateInput {
   sizeTier: SizeTier;

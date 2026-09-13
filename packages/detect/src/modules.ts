@@ -1,5 +1,5 @@
 import { posix } from "node:path";
-import type { ModuleKind } from "@kickstart/core";
+import type { ModuleKind } from "@everyrepo/core";
 import { XMLParser } from "fast-xml-parser";
 import picomatch from "picomatch";
 import { parse as parseToml } from "smol-toml";

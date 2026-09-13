@@ -1,8 +1,8 @@
 import { hostname } from "node:os";
-import { formatRepoRef, parseRepoRef } from "@kickstart/core";
-import { ensureRepo } from "@kickstart/db";
-import { createIndexHandlers, stagesUntil } from "@kickstart/pipeline";
-import { claimJob, enqueueJob, findOpenJob, runJob } from "@kickstart/queue";
+import { formatRepoRef, parseRepoRef } from "@everyrepo/core";
+import { ensureRepo } from "@everyrepo/db";
+import { createIndexHandlers, stagesUntil } from "@everyrepo/pipeline";
+import { claimJob, enqueueJob, findOpenJob, runJob } from "@everyrepo/queue";
 import { Command } from "commander";
 import { openContext, timestamp } from "../context.ts";
 

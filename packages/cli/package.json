@@ -1,0 +1,13 @@
+{
+  "name": "@kickstart/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/main.ts"
+  },
+  "dependencies": {
+    "@kickstart/core": "workspace:*",
+    "commander": "^15.0.0"
+  }
+}

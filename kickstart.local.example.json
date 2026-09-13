@@ -1,0 +1,6 @@
+{
+  "dataDir": "C:/path/to/kickstart-data",
+  "localRepos": {
+    "mui/mui-x": { "path": "C:/path/to/mui-x", "remote": "upstream", "defaultBranch": "master" }
+  }
+}

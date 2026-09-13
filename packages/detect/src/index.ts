@@ -1,5 +1,6 @@
 export {
   detectRepository,
+  hasGeneratedHeader,
   type DetectInput,
   type DetectedFile,
   type Detection,

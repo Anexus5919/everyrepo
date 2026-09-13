@@ -29,6 +29,7 @@ const EXAMPLE_DIRS = new Set([
   "samples",
   "sample",
   "sandbox",
+  "playground",
 ]);
 const LOCALE_DIRS = new Set(["locales", "locale", "i18n", "l10n", "translations"]);
 const DOCS_ROOTS = new Set(["docs", "doc", "documentation", "website", "www", "site"]);
@@ -120,7 +121,7 @@ export function classifyPath(
     dirs.includes("generated") ||
     dirs.includes("__snapshots__") ||
     dirs.includes("dist") ||
-    /\.generated\.|\.pb\.go$|_pb2\.py$|\.snap$/.test(lower)
+    /\.generated\.|\.gen\.[^.]+$|\.pb\.go$|_pb2\.py$|\.snap$/.test(lower)
   ) {
     return result("generated");
   }
@@ -130,6 +131,7 @@ export function classifyPath(
     /\.(test|spec)\.[^.]+$/.test(lower) ||
     /_test\.(go|py)$/.test(lower) ||
     /^test_.*\.py$/.test(lower) ||
+    /^tests?\.rs$/.test(lower) ||
     /^[A-Z]\w*(Test|Tests|IT)\.(java|kt|scala|groovy)$/.test(fileName)
   ) {
     return result("test");

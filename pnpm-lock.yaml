@@ -50,6 +50,9 @@ importers:
       '@kickstart/parse':
         specifier: workspace:*
         version: link:../parse
+      '@kickstart/pipeline':
+        specifier: workspace:*
+        version: link:../pipeline
       '@kickstart/queue':
         specifier: workspace:*
         version: link:../queue
@@ -124,6 +127,27 @@ importers:
       web-tree-sitter:
         specifier: ^0.27.0
         version: 0.27.0
+
+  packages/pipeline:
+    dependencies:
+      '@kickstart/core':
+        specifier: workspace:*
+        version: link:../core
+      '@kickstart/db':
+        specifier: workspace:*
+        version: link:../db
+      '@kickstart/detect':
+        specifier: workspace:*
+        version: link:../detect
+      '@kickstart/parse':
+        specifier: workspace:*
+        version: link:../parse
+      '@kickstart/queue':
+        specifier: workspace:*
+        version: link:../queue
+      '@kickstart/repo':
+        specifier: workspace:*
+        version: link:../repo
 
   packages/queue:
     dependencies:

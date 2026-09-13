@@ -1,0 +1,17 @@
+{
+  "name": "@kickstart/pipeline",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@kickstart/core": "workspace:*",
+    "@kickstart/db": "workspace:*",
+    "@kickstart/detect": "workspace:*",
+    "@kickstart/parse": "workspace:*",
+    "@kickstart/queue": "workspace:*",
+    "@kickstart/repo": "workspace:*"
+  }
+}

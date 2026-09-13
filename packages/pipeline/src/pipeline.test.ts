@@ -1,0 +1,104 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { parseRepoRef, type LocalConfig } from "@kickstart/core";
+import { ensureRepo, findRepo, openAppDb } from "@kickstart/db";
+import { claimNextJob, enqueueJob, runJob } from "@kickstart/queue";
+import { git } from "@kickstart/repo";
+import { afterAll, describe, expect, it } from "vitest";
+import { estimateIndexCost } from "./estimate.ts";
+import { buildReport } from "./report.ts";
+import { createIndexHandlers, stagesUntil, type SourceOutput } from "./stages.ts";
+
+const root = mkdtempSync(join(tmpdir(), "pipeline-test-"));
+
+afterAll(() => {
+  rmSync(root, { recursive: true, force: true });
+});
+
+async function createRepo(dir: string, files: Record<string, string>): Promise<void> {
+  for (const [path, content] of Object.entries(files)) {
+    mkdirSync(dirname(join(dir, path)), { recursive: true });
+    writeFileSync(join(dir, path), content);
+  }
+  await git(["init", "-q", "-b", "main", dir]);
+  await git(["add", "-A"], dir);
+  await git(["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "init"], dir);
+}
+
+describe("index pipeline", () => {
+  it("indexes a local clone end to end and reports on it", async () => {
+    const upstream = join(root, "upstream");
+    await createRepo(upstream, {
+      "package.json": JSON.stringify({ name: "widgets", workspaces: ["packages/*"] }),
+      LICENSE: "MIT License\n\nPermission is hereby granted, free of charge",
+      "packages/core/package.json": JSON.stringify({ name: "@widgets/core" }),
+      "packages/core/src/store.ts":
+        "/** Keeps state. */\nexport class Store { load() { return read(); } }\nfunction read() { return 1; }\n",
+      "packages/core/src/store.test.ts": "import { Store } from './store';\nnew Store().load();\n",
+      "server/src/main/java/app/Server.java":
+        "package app;\npublic class Server { public void start() { new Store(); } }\n",
+      "README.md": "# Widgets\n",
+    });
+    const fork = join(root, "fork");
+    await git(["clone", "-q", upstream, fork]);
+
+    const config: LocalConfig = {
+      dataDir: join(root, "data"),
+      localRepos: { "acme/widgets": { path: fork, remote: "origin", defaultBranch: "main" } },
+    };
+    const ref = parseRepoRef("acme/widgets");
+    const appDb = openAppDb(":memory:");
+    const repo = ensureRepo(appDb, ref);
+    enqueueJob(appDb, { repoId: repo.id, kind: "full", stages: stagesUntil(undefined) });
+
+    const handlers = createIndexHandlers({ config, appDb, ref, repoId: repo.id, fetch: false });
+    const job = await runJob(appDb, claimNextJob(appDb, "test")!, handlers);
+    expect(job.error).toBeNull();
+    expect(job.status).toBe("succeeded");
+
+    const stored = findRepo(appDb, ref)!;
+    expect(stored.status).toBe("indexed");
+    expect(stored.sizeTier).toBe("S");
+    expect(stored.lastIndexedSha).toBe(await git(["rev-parse", "HEAD"], upstream));
+
+    const outputs = appDb.$client
+      .prepare("SELECT output FROM job_stage WHERE stage = 'source'")
+      .get() as { output: string };
+    const report = buildReport((JSON.parse(outputs.output) as SourceOutput).enginePath);
+    expect(report.repo).toBe("acme/widgets");
+    expect(report.topModules.map((module) => module.path).sort()).toEqual(["", "packages/core"]);
+    expect(report.licenses).toEqual([{ license: "MIT", modules: 2 }]);
+    expect(report.parse["ok"]).toBe(3);
+    expect(report.definitions).toBeGreaterThanOrEqual(5);
+    expect(report.mostReferenced.map((row) => row.name)).toContain("Store");
+    expect(report.estimate?.pages).toBe(8);
+  }, 60_000);
+
+  it("rejects unknown stages", () => {
+    expect(stagesUntil("detect")).toEqual(["source", "detect"]);
+    expect(() => stagesUntil("wiki")).toThrow(/Unknown stage/);
+  });
+});
+
+describe("estimateIndexCost", () => {
+  it("summarizes large files from signatures and runs bulk work locally for large repositories", () => {
+    const small = estimateIndexCost({
+      sizeTier: "S",
+      sourceFileTokens: [1000, 1000],
+      sourceDirectories: 2,
+    });
+    expect(small.directorySummaryTokens).toBe(0);
+    expect(small.localTokens).toBe(0);
+    expect(small.fileSummaryTokens).toBe(2000);
+
+    const large = estimateIndexCost({
+      sizeTier: "L",
+      sourceFileTokens: Array.from({ length: 1000 }, () => 3000),
+      sourceDirectories: 200,
+    });
+    expect(large.fileSummaryTokens).toBe(1000 * 600);
+    expect(large.localTokens).toBe(large.fileSummaryTokens + large.directorySummaryTokens);
+    expect(large.cloudTokens).toBe(large.planningTokens + large.pageTokens);
+  });
+});

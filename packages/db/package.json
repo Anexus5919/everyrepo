@@ -1,0 +1,19 @@
+{
+  "name": "@kickstart/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "drizzle-kit": "^0.31.10"
+  },
+  "dependencies": {
+    "@kickstart/core": "workspace:*"
+  },
+  "scripts": {
+    "db:generate": "drizzle-kit generate --config drizzle.app.config.ts && drizzle-kit generate --config drizzle.engine.config.ts"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "@kickstart/detect",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@kickstart/core": "workspace:*",
+    "fast-xml-parser": "^5.11.1",
+    "picomatch": "^4.0.7",
+    "smol-toml": "^1.8.0",
+    "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "@types/picomatch": "^4.0.3"
+  }
+}

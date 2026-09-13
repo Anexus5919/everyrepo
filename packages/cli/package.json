@@ -8,6 +8,11 @@
   },
   "dependencies": {
     "@kickstart/core": "workspace:*",
+    "@kickstart/db": "workspace:*",
+    "@kickstart/detect": "workspace:*",
+    "@kickstart/parse": "workspace:*",
+    "@kickstart/queue": "workspace:*",
+    "@kickstart/repo": "workspace:*",
     "commander": "^15.0.0"
   }
 }

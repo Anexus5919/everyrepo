@@ -1,5 +1,5 @@
 import { FILE_KINDS, MODULE_KINDS, SIZE_TIERS } from "@everyrepo/core";
-import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, primaryKey, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const snapshots = sqliteTable("snapshot", {
   sha: text("sha").primaryKey(),
@@ -37,9 +37,60 @@ export const files = sqliteTable(
     parseStatus: text("parse_status", { enum: ["skipped", "ok", "partial", "failed"] })
       .notNull()
       .default("skipped"),
+    // Java package or Go package clause, used for import resolution
+    packageName: text("package_name"),
+    pagerank: real("pagerank"),
+    clusterId: integer("cluster_id"),
   },
   (table) => [index("file_module").on(table.moduleId), index("file_kind").on(table.kind)],
 );
+
+export const fileImports = sqliteTable(
+  "file_import",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    fileId: integer("file_id")
+      .notNull()
+      .references(() => files.id, { onDelete: "cascade" }),
+    specifier: text("specifier").notNull(),
+    kind: text("kind").notNull(),
+    names: text("names", { mode: "json" }).$type<string[]>(),
+    line: integer("line").notNull(),
+    // resolved, external or unresolved
+    resolution: text("resolution"),
+  },
+  (table) => [index("file_import_file").on(table.fileId)],
+);
+
+export const EDGE_KINDS = ["import", "reference", "cochange"] as const;
+
+export const edges = sqliteTable(
+  "edge",
+  {
+    srcFileId: integer("src_file_id")
+      .notNull()
+      .references(() => files.id, { onDelete: "cascade" }),
+    dstFileId: integer("dst_file_id")
+      .notNull()
+      .references(() => files.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: EDGE_KINDS }).notNull(),
+    weight: real("weight").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.srcFileId, table.dstFileId, table.kind] }),
+    index("edge_dst").on(table.dstFileId),
+  ],
+);
+
+export const clusters = sqliteTable("cluster", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  key: text("key").notNull().unique(),
+  moduleId: integer("module_id").references(() => modules.id),
+  label: text("label").notNull(),
+  fileCount: integer("file_count").notNull(),
+  tokenCount: integer("token_count").notNull(),
+  topFiles: text("top_files", { mode: "json" }).$type<string[]>().notNull(),
+});
 
 export const symbols = sqliteTable(
   "symbol",

@@ -55,10 +55,40 @@ const GRAMMARS: Record<ParseableLanguage, GrammarSpec> = {
   go: { pkg: "tree-sitter-go", wasm: "tree-sitter-go.wasm", queryPackages: ["tree-sitter-go"] },
 };
 
+const JS_IMPORTS = `
+(import_statement source: (string (string_fragment) @import))
+(export_statement source: (string (string_fragment) @export))
+(call_expression function: (identifier) @require.fn arguments: (arguments . (string (string_fragment) @require)))
+(call_expression function: (import) arguments: (arguments . (string (string_fragment) @dynamic)))
+`;
+
+const IMPORT_QUERIES: Record<ParseableLanguage, string> = {
+  javascript: JS_IMPORTS,
+  typescript: JS_IMPORTS,
+  tsx: JS_IMPORTS,
+  java: `
+(package_declaration) @package
+(import_declaration) @import
+`,
+  python: `
+(import_statement) @import
+(import_from_statement) @from
+`,
+  go: `
+(package_clause (package_identifier) @package)
+(import_spec path: (_) @import)
+`,
+  rust: `
+(mod_item) @mod
+(use_declaration argument: (_) @use)
+`,
+};
+
 export interface Grammar {
   language: Language;
   parser: Parser;
   query: Query;
+  importQuery: Query;
 }
 
 const require = createRequire(import.meta.url);
@@ -84,7 +114,12 @@ export function loadGrammar(name: ParseableLanguage): Promise<Grammar> {
         .join("\n");
       const parser = new Parser();
       parser.setLanguage(language);
-      return { language, parser, query: new Query(language, querySource) };
+      return {
+        language,
+        parser,
+        query: new Query(language, querySource),
+        importQuery: new Query(language, IMPORT_QUERIES[name]),
+      };
     })();
     grammars.set(name, pending);
   }

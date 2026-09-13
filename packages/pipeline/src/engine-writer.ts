@@ -1,6 +1,17 @@
 import type { RepoRef } from "@everyrepo/core";
 import { formatRepoRef } from "@everyrepo/core";
-import { eq, files, modules, snapshots, symbolRefs, symbols, type EngineDb } from "@everyrepo/db";
+import {
+  clusters,
+  edges,
+  eq,
+  fileImports,
+  files,
+  modules,
+  snapshots,
+  symbolRefs,
+  symbols,
+  type EngineDb,
+} from "@everyrepo/db";
 import type { Detection } from "@everyrepo/detect";
 import type { ParseResult } from "@everyrepo/parse";
 
@@ -23,8 +34,11 @@ export interface SnapshotInfo {
 // Replaces everything in the engine database with a fresh detection result
 export function writeDetection(engine: EngineDb, info: SnapshotInfo, detection: Detection): void {
   engine.transaction((tx) => {
+    tx.delete(edges).run();
+    tx.delete(fileImports).run();
     tx.delete(symbolRefs).run();
     tx.delete(symbols).run();
+    tx.delete(clusters).run();
     tx.delete(files).run();
     tx.delete(modules).run();
     tx.delete(snapshots).run();
@@ -110,12 +124,21 @@ export function createParseWriter(engine: EngineDb) {
   const insertRef = client.prepare(
     "INSERT INTO symbol_ref (file_id, name, kind, line) VALUES (?, ?, ?, ?)",
   );
-  const setStatus = client.prepare("UPDATE file SET parse_status = ? WHERE id = ?");
+  const insertImport = client.prepare(
+    "INSERT INTO file_import (file_id, specifier, kind, names, line) VALUES (?, ?, ?, ?, ?)",
+  );
+  const setStatus = client.prepare(
+    "UPDATE file SET parse_status = ?, package_name = ? WHERE id = ?",
+  );
 
   const writeBatch = client.transaction((batch: ParsedFile[]) => {
     for (const item of batch) {
-      setStatus.run(item.status, item.fileId);
+      setStatus.run(item.status, item.result?.packageName ?? null, item.fileId);
       if (!item.result) continue;
+      for (const ref of item.result.imports) {
+        const names = ref.names ? JSON.stringify(ref.names) : null;
+        insertImport.run(item.fileId, ref.specifier, ref.kind, names, ref.line);
+      }
       for (const symbol of item.result.definitions) {
         insertSymbol.run(
           item.fileId,
@@ -137,9 +160,16 @@ export function createParseWriter(engine: EngineDb) {
   return {
     clear() {
       client.transaction(() => {
+        client.prepare("DELETE FROM edge").run();
+        client.prepare("DELETE FROM file_import").run();
         client.prepare("DELETE FROM symbol_ref").run();
         client.prepare("DELETE FROM symbol").run();
-        client.prepare("UPDATE file SET parse_status = 'skipped'").run();
+        client
+          .prepare(
+            "UPDATE file SET parse_status = 'skipped', package_name = NULL, cluster_id = NULL",
+          )
+          .run();
+        client.prepare("DELETE FROM cluster").run();
       })();
     },
     write(batch: ParsedFile[]) {

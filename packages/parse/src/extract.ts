@@ -1,5 +1,6 @@
 import type { Node } from "web-tree-sitter";
 import { loadGrammar, type ParseableLanguage } from "./grammars.ts";
+import { extractImports, type ImportRef } from "./imports.ts";
 
 export interface DefinitionSymbol {
   name: string;
@@ -20,6 +21,8 @@ export interface ReferenceSymbol {
 export interface ParseResult {
   definitions: DefinitionSymbol[];
   references: ReferenceSymbol[];
+  imports: ImportRef[];
+  packageName?: string;
   hasErrors: boolean;
 }
 
@@ -182,6 +185,7 @@ export async function parseSource(
     return {
       definitions: [...definitions.values()].sort((a, b) => a.startLine - b.startLine),
       references,
+      ...extractImports(language, grammar.importQuery, tree.rootNode),
       hasErrors: tree.rootNode.hasError,
     };
   } finally {

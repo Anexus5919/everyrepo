@@ -133,6 +133,8 @@ async function readCommits(gitDir: string, sha: string): Promise<string[][]> {
       "core.quotepath=false",
       "log",
       "--no-merges",
+      // Rename detection reads file contents, which partial clones would download one by one
+      "--no-renames",
       `--format=${COMMIT_FORMAT}`,
       "--name-only",
       `--since=${since}`,

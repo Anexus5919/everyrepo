@@ -1,10 +1,17 @@
 import { EXTERNAL, resolved, UNRESOLVED, type GraphFile, type ResolvedImport } from "../types.ts";
 
+// Packages are lowercase and classes capitalized, so the package ends before the first capital
+function packageOf(specifier: string, kind: string): string {
+  if (kind === "wildcard") return specifier;
+  const segments = specifier.split(".");
+  const firstClass = segments.findIndex((segment) => /^[A-Z]/.test(segment));
+  return segments.slice(0, firstClass > 0 ? firstClass : segments.length - 1).join(".");
+}
+
 // Resolves Java imports through the package declarations found while parsing
 export function createJavaResolver(files: readonly GraphFile[]) {
   const byClass = new Map<string, string[]>();
   const byPackage = new Map<string, string[]>();
-  const rootPackages = new Set<string>();
 
   for (const file of files) {
     if (file.language !== "java" || !file.packageName) continue;
@@ -12,7 +19,6 @@ export function createJavaResolver(files: readonly GraphFile[]) {
     const fqn = `${file.packageName}.${className}`;
     byClass.set(fqn, [...(byClass.get(fqn) ?? []), file.path]);
     byPackage.set(file.packageName, [...(byPackage.get(file.packageName) ?? []), file.path]);
-    rootPackages.add(file.packageName.split(".")[0]!);
   }
 
   function findClass(name: string): string[] | undefined {
@@ -26,7 +32,6 @@ export function createJavaResolver(files: readonly GraphFile[]) {
   }
 
   return function resolveJava(specifier: string, kind: string): ResolvedImport {
-    const isOwn = rootPackages.has(specifier.split(".")[0]!);
     let targets: string[] | undefined;
     if (kind === "wildcard") {
       targets = byPackage.get(specifier) ?? findClass(specifier);
@@ -36,6 +41,7 @@ export function createJavaResolver(files: readonly GraphFile[]) {
       targets = findClass(specifier);
     }
     if (targets) return resolved(targets);
-    return isOwn ? UNRESOLVED : EXTERNAL;
+    // A missing class counts as internal only when its exact package is defined in the repository
+    return byPackage.has(packageOf(specifier, kind)) ? UNRESOLVED : EXTERNAL;
   };
 }

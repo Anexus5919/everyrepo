@@ -50,6 +50,38 @@ function printReport(report: SnapshotReport): void {
   lines.push(
     `  most referenced: ${report.mostReferenced.map((row) => `${row.name} (${number(row.references)})`).join(", ")}`,
   );
+  if (report.imports.length > 0) {
+    lines.push("");
+    lines.push("Imports by language");
+    const byLanguage = new Map<string, Record<string, number>>();
+    for (const row of report.imports) {
+      const counts = byLanguage.get(row.language) ?? {};
+      counts[row.resolution] = row.count;
+      byLanguage.set(row.language, counts);
+    }
+    for (const [language, counts] of byLanguage) {
+      const internal = (counts["resolved"] ?? 0) + (counts["unresolved"] ?? 0);
+      const rate = internal > 0 ? Math.round((100 * (counts["resolved"] ?? 0)) / internal) : 100;
+      lines.push(
+        `  ${language.padEnd(12)} ${number(counts["resolved"] ?? 0).padStart(7)} resolved ${number(counts["unresolved"] ?? 0).padStart(6)} unresolved ${number(counts["external"] ?? 0).padStart(7)} external  ${rate}% of internal`,
+      );
+    }
+    lines.push(
+      `Edges: ${report.edges.map((row) => `${row.kind} ${number(row.count)}`).join(", ")}`,
+    );
+    lines.push("");
+    lines.push("Most central source files");
+    for (const file of report.topRankedFiles) {
+      lines.push(`  ${file.score.toFixed(4)}  ${file.path}`);
+    }
+    lines.push("");
+    lines.push(`Clusters: ${report.clusterCount} (largest by tokens)`);
+    for (const cluster of report.largestClusters) {
+      lines.push(
+        `  ${cluster.label.padEnd(56)} ${String(cluster.files).padStart(5)} files ${number(cluster.tokens).padStart(9)} tokens`,
+      );
+    }
+  }
   if (report.estimate) {
     const estimate = report.estimate;
     lines.push("");

@@ -91,8 +91,11 @@ describe("Java, Python, Go and Rust resolution", () => {
     const job = file("core/src/main/java/hudson/model/Job.java", { packageName: "hudson.model" });
     const run = file("core/src/main/java/hudson/model/Run.java", { packageName: "hudson.model" });
     const util = file("core/src/main/java/hudson/util/Timer.java", { packageName: "hudson.util" });
+    const acegi = file("core/src/main/java/org/acegisecurity/Auth.java", {
+      packageName: "org.acegisecurity",
+    });
     const resolve = createImportResolver({
-      files: [job, run, util],
+      files: [job, run, util, acegi],
       modules: [],
       aliases: [],
       packages: [],
@@ -103,7 +106,9 @@ describe("Java, Python, Go and Rust resolution", () => {
     expect(resolve(util, ref("hudson.model", "wildcard")).targets).toEqual([job.path, run.path]);
     expect(resolve(job, ref("hudson.util.Timer.get", "static")).targets).toEqual([util.path]);
     expect(resolve(job, ref("java.util.List")).resolution).toBe("external");
-    expect(resolve(job, ref("hudson.missing.Thing")).resolution).toBe("unresolved");
+    expect(resolve(job, ref("org.junit.Test")).resolution).toBe("external");
+    expect(resolve(job, ref("hudson.remoting.Channel")).resolution).toBe("external");
+    expect(resolve(job, ref("hudson.model.Missing")).resolution).toBe("unresolved");
   });
 
   it("resolves Python absolute, relative and submodule imports", () => {

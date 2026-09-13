@@ -29,6 +29,11 @@ export interface SnapshotReport {
   references: number;
   definitionKinds: Array<{ kind: string; count: number }>;
   mostReferenced: Array<{ name: string; references: number }>;
+  imports: Array<{ language: string; resolution: string; count: number }>;
+  edges: Array<{ kind: string; count: number }>;
+  clusterCount: number;
+  largestClusters: Array<{ label: string; files: number; tokens: number; topFile: string }>;
+  topRankedFiles: Array<{ path: string; score: number }>;
   estimate?: CostEstimate;
 }
 
@@ -88,6 +93,25 @@ export function buildReport(enginePath: string): SnapshotReport {
         FROM symbol_ref r
         WHERE r.name IN (SELECT name FROM symbol)
         GROUP BY r.name ORDER BY 2 DESC LIMIT 10`),
+      imports: all(`
+        SELECT COALESCE(f.language, 'other') AS language, COALESCE(i.resolution, 'pending') AS resolution,
+               COUNT(*) AS count
+        FROM file_import i JOIN file f ON f.id = i.file_id
+        GROUP BY 1, 2 ORDER BY 1, 2`),
+      edges: all(`SELECT kind, COUNT(*) AS count FROM edge GROUP BY kind ORDER BY kind`),
+      clusterCount: one<{ count: number }>(`SELECT COUNT(*) AS count FROM cluster`).count,
+      largestClusters: all<{ label: string; files: number; tokens: number; topFiles: string }>(`
+        SELECT label, file_count AS files, token_count AS tokens, top_files AS topFiles
+        FROM cluster ORDER BY token_count DESC LIMIT 10`).map((row) => ({
+        label: row.label,
+        files: row.files,
+        tokens: row.tokens,
+        topFile: (JSON.parse(row.topFiles) as string[])[0] ?? "",
+      })),
+      topRankedFiles: all(`
+        SELECT path, pagerank AS score FROM file
+        WHERE pagerank IS NOT NULL AND kind IN ('src', 'types')
+        ORDER BY pagerank DESC LIMIT 10`),
       ...(stats.estimate ? { estimate: stats.estimate } : {}),
     };
   } finally {

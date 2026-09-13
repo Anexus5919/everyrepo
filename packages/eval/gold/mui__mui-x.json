@@ -1,0 +1,213 @@
+{
+  "repo": "mui/mui-x",
+  "sha": "10145aab74a567aabe96a4460f75bf1e5c9786b3",
+  "questions": [
+    {
+      "id": "mui-x-01",
+      "type": "concept",
+      "question": "How can one data grid feature change data owned by another feature, for example adding its own column or making rows taller, without the two feature hooks calling each other directly?",
+      "expected": [
+        "docsTech/processing.md",
+        "packages/x-data-grid/src/hooks/core/pipeProcessing/useGridPipeProcessing.ts",
+        "packages/x-data-grid/src/hooks/core/pipeProcessing/useGridRegisterPipeProcessor.ts"
+      ],
+      "note": "Tech doc explains pipe processors with column and row height examples; the hooks implement the processor registry and chained application."
+    },
+    {
+      "id": "mui-x-02",
+      "type": "flow",
+      "question": "When the data grid loads its rows from a server, what happens after the user changes the sort order or goes to another page: how are rows requested, reused from a cache, and protected against responses that arrive out of order?",
+      "expected": [
+        "packages/x-data-grid/src/hooks/features/dataSource/useGridDataSourceBase.ts",
+        "packages/x-data-grid/src/hooks/features/dataSource/cache.ts",
+        "packages/x-data-grid/src/hooks/features/dataSource/utils.ts"
+      ],
+      "note": "Base hook listens to sort and pagination changes, fetches rows, checks the cache and drops stale request ids; cache.ts has the TTL cache and utils.ts splits responses into cache chunks."
+    },
+    {
+      "id": "mui-x-03",
+      "type": "flow",
+      "question": "What happens when a user edits a data grid cell and presses Enter: how does the grid leave edit mode, call the developer's save callback, and move focus to the cell below?",
+      "expected": [
+        "packages/x-data-grid/src/hooks/features/editing/useGridCellEditing.ts",
+        "packages/x-data-grid/src/hooks/features/editing/useGridEditing.ts"
+      ],
+      "note": "Cell editing hook maps Enter to a stop reason, calls processRowUpdate or the data source, updates rows and focuses the cell below; the editing hook wires cell and row editing together."
+    },
+    {
+      "id": "mui-x-04",
+      "type": "concept",
+      "question": "With tree data turned on in Data Grid Pro, how are flat rows turned into a parent and child hierarchy, and what happens when a row's path points to a parent that does not exist as its own row?",
+      "expected": [
+        "packages/x-data-grid-pro/src/utils/tree/insertDataRowInTree.ts",
+        "packages/x-data-grid-pro/src/utils/tree/createRowTree.ts",
+        "packages/x-data-grid-pro/src/hooks/features/treeData/useGridTreeDataPreProcessors.tsx"
+      ],
+      "note": "insertDataRowInTree walks each path and creates auto-generated group nodes for missing parents; createRowTree loops over rows; the pre-processors read getTreeDataPath and register the tree creation strategy."
+    },
+    {
+      "id": "mui-x-05",
+      "type": "locate",
+      "question": "Where are the built-in summary functions for Premium grid columns, such as sum, average, min and max, defined together with the column types each one supports?",
+      "expected": [
+        "packages/x-data-grid-premium/src/hooks/features/aggregation/gridAggregationFunctions.ts"
+      ],
+      "note": "Defines sum, avg, min, max, size and boolean size functions with their allowed column types."
+    },
+    {
+      "id": "mui-x-06",
+      "type": "locate",
+      "question": "Where is the code that builds the spreadsheet file off the main thread when the Premium data grid is exported to Excel using a web worker?",
+      "expected": [
+        "packages/x-data-grid-premium/src/hooks/features/export/serializer/setupExcelExportWebWorker.ts",
+        "packages/x-data-grid-premium/src/hooks/features/export/useGridExcelExport.tsx",
+        "packages/x-data-grid-premium/src/hooks/features/export/serializer/excelSerializer.ts"
+      ],
+      "note": "Worker setup listens for messages and builds the workbook; the export hook serializes rows and columns and posts them to the worker; the serializer holds the row and column serialization helpers."
+    },
+    {
+      "id": "mui-x-07",
+      "type": "locate",
+      "question": "Where is the license key checked when a commercial component renders, and where is the decision made to draw the 'MUI X Missing license key' text over the component?",
+      "expected": [
+        "packages/x-license/src/useLicenseVerifier/useLicenseVerifier.ts",
+        "packages/x-license/src/verifyLicense/verifyLicense.ts",
+        "packages/x-license/src/Watermark/Watermark.tsx"
+      ],
+      "note": "The verifier hook reads the global key, caches the status and logs errors; verifyLicense decodes and validates the key; Watermark renders the message when the status is not valid."
+    },
+    {
+      "id": "mui-x-08",
+      "type": "concept",
+      "question": "How do the date and time pickers stay independent of any one date library, so that an app can choose dayjs, Luxon or moment?",
+      "expected": [
+        "packages/x-date-pickers/src/models/adapters.ts",
+        "packages/x-date-pickers/src/LocalizationProvider/LocalizationProvider.tsx",
+        "packages/x-date-pickers/src/AdapterDayjs/AdapterDayjs.ts"
+      ],
+      "note": "adapters.ts defines the adapter interface and formats; LocalizationProvider instantiates the chosen adapter and shares it via context; AdapterDayjs is a concrete implementation."
+    },
+    {
+      "id": "mui-x-09",
+      "type": "locate",
+      "question": "Where does the keyboard date input split a format such as MM/DD/YYYY into separate month, day and year parts that the user can type into one at a time?",
+      "expected": [
+        "packages/x-date-pickers/src/internals/hooks/useField/buildSectionsFromFormat.ts",
+        "packages/x-date-pickers/src/internals/hooks/useField/useFieldCharacterEditing.ts",
+        "packages/x-date-pickers/src/internals/hooks/useField/useFieldState.ts"
+      ],
+      "note": "buildSectionsFromFormat expands the format into sections; character editing applies typed digits and letters to the active section; useFieldState holds and updates the sections."
+    },
+    {
+      "id": "mui-x-10",
+      "type": "concept",
+      "question": "In bar charts, how are several series stacked on top of each other, and how are negative values handled so they stack below zero?",
+      "expected": [
+        "packages/x-charts/src/internals/stacking/stackSeries.ts",
+        "packages/x-charts/src/internals/stacking/offset/offsetDiverging.ts",
+        "packages/x-charts/src/BarChart/seriesConfig/bar/seriesProcessor.ts"
+      ],
+      "note": "stackSeries defines stack order and offset options and stacking groups; offsetDiverging puts negatives below zero; the bar series processor applies d3 stacking to the series."
+    },
+    {
+      "id": "mui-x-11",
+      "type": "concept",
+      "question": "How is a chart's internal state put together from separate plugins, and which plugins does every chart get regardless of its type?",
+      "expected": [
+        "packages/x-charts/src/internals/store/useCharts.ts",
+        "packages/x-charts/src/internals/plugins/corePlugins/corePlugins.ts",
+        "packages/x-charts/src/BarChart/BarChart.plugins.ts"
+      ],
+      "note": "useCharts merges core and chart plugins, builds initial state and runs each plugin; corePlugins lists the always-on plugins; BarChart.plugins shows a chart-specific plugin list."
+    },
+    {
+      "id": "mui-x-12",
+      "type": "locate",
+      "question": "Where is mouse wheel zooming handled for Pro charts, including keeping the point under the cursor in place while the visible range gets smaller?",
+      "expected": [
+        "packages/x-charts-pro/src/internals/plugins/useChartProZoom/gestureHooks/useZoomOnWheel.ts",
+        "packages/x-charts-pro/src/internals/plugins/useChartProZoom/gestureHooks/useZoom.utils.ts",
+        "packages/x-charts-pro/src/internals/plugins/useChartProZoom/useChartProZoom.ts"
+      ],
+      "note": "useZoomOnWheel computes the center ratio and new range on wheel events; zoomAtPoint in the utils does the math; the zoom plugin wires all gesture hooks and zoom state."
+    },
+    {
+      "id": "mui-x-13",
+      "type": "flow",
+      "question": "What happens when a user drags an item in the Pro tree view and drops it onto another item: how is it decided whether it becomes a child or a sibling, and how is the tree updated afterwards?",
+      "expected": [
+        "packages/x-tree-view-pro/src/internals/plugins/itemsReordering/TreeViewItemsReorderingPlugin.ts",
+        "packages/x-tree-view-pro/src/internals/plugins/itemsReordering/itemPlugin.ts",
+        "packages/x-tree-view-pro/src/internals/plugins/itemsReordering/utils.ts"
+      ],
+      "note": "Plugin computes valid actions, sets the drag target and moves the item on completion; the item plugin wires drag events on each item; utils has chooseActionToApply and moveItemInTree."
+    },
+    {
+      "id": "mui-x-14",
+      "type": "locate",
+      "question": "Where is the logic that checks all children when a parent item is checked in the tree view, and marks a parent as checked once all of its children are checked?",
+      "expected": [
+        "packages/x-tree-view/src/internals/plugins/selection/TreeViewSelectionPlugin.ts"
+      ],
+      "note": "Selection plugin contains propagateSelection handling descendants and parents propagation, plus range selection."
+    },
+    {
+      "id": "mui-x-15",
+      "type": "locate",
+      "question": "Where is the code that expands a repeating calendar event, such as one that happens every second Tuesday, into the individual occurrences shown for the visible days?",
+      "expected": [
+        "packages/x-scheduler-internals-premium/src/internals/utils/recurring-events/getRecurringEventOccurrencesForVisibleDays.ts",
+        "packages/x-scheduler-internals-premium/src/internals/plugins/schedulerRecurringEventsPlugin.ts",
+        "packages/x-scheduler-internals-premium/src/internals/utils/recurring-events/rRuleString.ts"
+      ],
+      "note": "The expander class generates daily, weekly, monthly and yearly occurrences in the visible range; the plugin exposes it to the scheduler; rRuleString parses the recurrence rule."
+    },
+    {
+      "id": "mui-x-16",
+      "type": "concept",
+      "question": "In the scheduler day and week views, how are events that overlap in time laid out side by side in separate columns?",
+      "expected": [
+        "packages/x-scheduler-internals/src/use-event-occurrences-with-timeline-position/useEventOccurrencesWithTimelinePosition.ts",
+        "packages/x-scheduler/src/internals/components/day-time-grid/TimeGridColumn.tsx",
+        "packages/x-scheduler-internals/src/sort-event-occurrences/sortEventOccurrences.ts"
+      ],
+      "note": "The hook sorts occurrences and assigns first and last lane indexes with heaps and a binary indexed tree; TimeGridColumn uses it to set the column count; the sort helper orders by start then end."
+    },
+    {
+      "id": "mui-x-17",
+      "type": "concept",
+      "question": "How does the small shared state store used by the charts and tree view notify React components about changes, and how are derived values memoized?",
+      "expected": [
+        "packages/x-internals/src/store/Store.ts",
+        "packages/x-internals/src/store/useStore.ts",
+        "packages/x-internals/src/store/createSelector.ts"
+      ],
+      "note": "Store holds state and listeners with set and update; useStore subscribes via useSyncExternalStore; createSelector wraps reselect with an lru memoizer."
+    },
+    {
+      "id": "mui-x-18",
+      "type": "docs",
+      "question": "How do I run the unit tests for only one package, either in jsdom or in a real browser, and how do I type check a single package?",
+      "expected": ["AGENTS.md"],
+      "note": "Project guidelines list pnpm test:unit and test:browser with project filters plus the per-package typescript commands."
+    },
+    {
+      "id": "mui-x-19",
+      "type": "docs",
+      "question": "How can I opt out of the usage data that MUI X collects while my app runs in development mode?",
+      "expected": [
+        "docs/data/guides/telemetry/telemetry.md",
+        "packages/x-telemetry/README.md",
+        "packages/x-telemetry/src/runtime/config.ts"
+      ],
+      "note": "Telemetry guide and package README describe the env variable, settings API and global flag; config.ts shows how those switches are read."
+    },
+    {
+      "id": "mui-x-20",
+      "type": "docs",
+      "question": "As a new contributor to the data grid, how is the code split between the free, Pro and Premium packages, and which folders hold the components, the feature logic and the column type defaults?",
+      "expected": ["docsTech/README.md"],
+      "note": "Contributor tech doc explains package layering, the components, hooks core/utils/features, colDef and models folders, and state and event access."
+    }
+  ]
+}

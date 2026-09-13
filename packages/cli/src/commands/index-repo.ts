@@ -1,10 +1,10 @@
 import { hostname } from "node:os";
 import { formatRepoRef, parseRepoRef } from "@everyrepo/core";
-import { ensureRepo } from "@everyrepo/db";
+import { ensureRepo, neuronsUsed } from "@everyrepo/db";
 import { createIndexHandlers, stagesUntil } from "@everyrepo/pipeline";
 import { claimJob, enqueueJob, findOpenJob, runJob } from "@everyrepo/queue";
 import { Command } from "commander";
-import { openContext, timestamp } from "../context.ts";
+import { openContext, openEmbedder, timestamp } from "../context.ts";
 
 interface IndexOptions {
   until?: string;
@@ -35,16 +35,27 @@ export function indexCommand(): Command {
         if (!job) {
           throw new Error(`Job ${queued.id} is already running in another process`);
         }
+        const configured = job.stages.includes("embed") ? await openEmbedder(context) : undefined;
+        if (configured?.server.started) log("started the local embedding server");
         const handlers = createIndexHandlers({
           config: context.config,
           appDb: context.appDb,
           ref,
           repoId: repo.id,
           fetch: options.fetch,
+          embedder: configured?.embedder,
         });
         const started = Date.now();
-        const result = await runJob(context.appDb, job, handlers, { heartbeatMs: 15_000, log });
+        const result = await runJob(context.appDb, job, handlers, {
+          heartbeatMs: 15_000,
+          log,
+        }).finally(() => configured?.server.stop());
         const seconds = ((Date.now() - started) / 1000).toFixed(1);
+        if (configured?.provider === "workers-ai") {
+          log(
+            `Workers AI neurons used today: ${neuronsUsed(context.appDb, configured.provider).toFixed(0)}`,
+          );
+        }
         if (result.status !== "succeeded") {
           log(
             `job ${result.id} ${result.status} after ${seconds}s: ${result.error ?? "unknown error"}`,

@@ -32,6 +32,20 @@ const EXAMPLE_DIRS = new Set([
   "playground",
 ]);
 const LOCALE_DIRS = new Set(["locales", "locale", "i18n", "l10n", "translations"]);
+const LANGUAGE_CODES =
+  "ar|bn|cs|de|el|es|fa|fr|he|hi|hu|id|it|ja|ko|nl|pl|pt|ro|ru|sv|th|tr|uk|vi|zh";
+const REGION = "(?:[-_](?:cn|tw|hk|hans|hant|br|pt|mx|es))?";
+// guide-ja, documentation-es, zh-cn: a translated copy of a docs folder
+const TRANSLATED_DIR = new RegExp(
+  `^(?:(?:guide|docs?|documentation|manual|tutorials?|handbook)[-_])?(?:${LANGUAGE_CODES})${REGION}$`,
+);
+// README.zh-CN.md, intro-pt.md; "it" and "id" are left out because they end many English names
+const TRANSLATED_DOC = new RegExp(
+  `[._-](?:${LANGUAGE_CODES.replace("id|it|", "")})${REGION}\\.(?:md|mdx|rst)$`,
+);
+const TRANSLATED_HELP = new RegExp(`_(?:${LANGUAGE_CODES})(?:_[A-Z]{2})?\\.html$`);
+const CHANGELOG_FILE =
+  /^(?:changelog|changes|history|release[-_]?notes)(?:[.-][\w-]+)*\.(?:md|mdx|rst|txt)$/;
 const DOCS_ROOTS = new Set(["docs", "doc", "documentation", "website", "www", "site"]);
 const LOCKFILES = new Set([
   "pnpm-lock.yaml",
@@ -137,11 +151,20 @@ export function classifyPath(
     return result("test");
   }
   if (dirs.some((dir) => EXAMPLE_DIRS.has(dir))) return result("example");
+  const documentLike = detected === "markdown" || detected === "mdx" || detected === "rst";
+  if (
+    CHANGELOG_FILE.test(lower) ||
+    (documentLike && dirs.some((dir) => dir.startsWith("changelog")))
+  ) {
+    return result("changelog");
+  }
   if (
     dirs.some((dir) => LOCALE_DIRS.has(dir)) ||
     extension === ".po" ||
     extension === ".pot" ||
-    /_[a-z]{2,3}(_[A-Z]{2})?\.properties$/.test(fileName)
+    /_[a-z]{2,3}(_[A-Z]{2})?\.properties$/.test(fileName) ||
+    TRANSLATED_HELP.test(fileName) ||
+    (documentLike && (TRANSLATED_DOC.test(lower) || dirs.some((dir) => TRANSLATED_DIR.test(dir))))
   ) {
     return result("locale");
   }
@@ -150,7 +173,8 @@ export function classifyPath(
     /^help(-[\w.-]+)?\.html$/.test(lower) ||
     detected === "markdown" ||
     detected === "mdx" ||
-    detected === "rst"
+    detected === "rst" ||
+    detected === "asciidoc"
   ) {
     return result("docs");
   }

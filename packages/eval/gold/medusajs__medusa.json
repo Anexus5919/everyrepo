@@ -1,0 +1,209 @@
+{
+  "repo": "medusajs/medusa",
+  "sha": "f8dce55556a1e68d6ea9b2fb88852b2a76fbd73c",
+  "questions": [
+    {
+      "id": "medusa-01",
+      "type": "concept",
+      "question": "How does the pricing module decide which price a customer sees for a product variant when there are sale price lists, override price lists, quantity tiers and region or customer group rules?",
+      "expected": [
+        "packages/modules/pricing/src/services/pricing-module.ts",
+        "packages/modules/pricing/src/repositories/pricing.ts"
+      ],
+      "note": "The service picks calculated vs original price by price list type; the repository SQL filters prices by currency, quantity range and matching rules."
+    },
+    {
+      "id": "medusa-02",
+      "type": "locate",
+      "question": "Where does the server check whether a request carries a valid login session, a bearer token, or a secret API key before letting it reach an admin endpoint?",
+      "expected": [
+        "packages/core/framework/src/http/middlewares/authenticate-middleware.ts",
+        "packages/core/framework/src/http/router.ts"
+      ],
+      "note": "The authenticate middleware handles session, JWT bearer and Basic secret key auth; the router applies it per namespace and skips routes that opted out."
+    },
+    {
+      "id": "medusa-03",
+      "type": "flow",
+      "question": "What happens after a payment provider calls the backend's webhook URL, up to the point where the payment is captured or the cart is turned into an order?",
+      "expected": [
+        "packages/core/core-flows/src/payment/workflows/process-payment.ts",
+        "packages/medusa/src/subscribers/payment-webhook.ts",
+        "packages/medusa/src/api/hooks/payment/[provider]/route.ts"
+      ],
+      "note": "The hook route emits a delayed event, the subscriber maps it to a webhook action, and the process payment workflow captures, authorizes or completes the cart."
+    },
+    {
+      "id": "medusa-04",
+      "type": "concept",
+      "question": "If one step in a workflow fails for good, how does the engine roll back the steps that already succeeded?",
+      "expected": [
+        "packages/core/orchestration/src/transaction/transaction-orchestrator.ts",
+        "packages/core/workflows-sdk/src/utils/composer/create-step.ts"
+      ],
+      "note": "The orchestrator marks permanent failures, flags finished steps to revert and runs compensation; create-step wires each step's compensation function."
+    },
+    {
+      "id": "medusa-05",
+      "type": "locate",
+      "question": "Where are a cart's subtotal, tax total, discount total and shipping total computed from its line items and shipping methods?",
+      "expected": [
+        "packages/core/utils/src/totals/cart/index.ts",
+        "packages/core/utils/src/totals/line-item/index.ts",
+        "packages/modules/cart/src/services/cart-module.ts"
+      ],
+      "note": "The cart totals decorator sums item and shipping totals; line item helpers compute per item tax and discounts; the cart module calls the decorator."
+    },
+    {
+      "id": "medusa-06",
+      "type": "docs",
+      "question": "I want to try my changes to the Medusa monorepo inside a real Medusa app. How do I point a test project at my local packages and rebuild after edits?",
+      "expected": [
+        "CONTRIBUTING.md",
+        "www/apps/book/app/learn/resources/contribution-guidelines/code/page.mdx"
+      ],
+      "note": "Both describe replacing dependencies with file references and resolutions to the local fork, then building or watching and reinstalling."
+    },
+    {
+      "id": "medusa-07",
+      "type": "concept",
+      "question": "Module services only list their data models, yet they expose methods to create, list, update, soft delete and restore each model. Where do those generated methods come from?",
+      "expected": [
+        "packages/core/utils/src/modules-sdk/medusa-service.ts",
+        "packages/core/utils/src/modules-sdk/medusa-internal-service.ts"
+      ],
+      "note": "The service factory builds per model method names and delegates to the internal service that implements the actual data access operations."
+    },
+    {
+      "id": "medusa-08",
+      "type": "locate",
+      "question": "Where is the connection between a product variant and its inventory items declared, including how many units of an inventory item one variant needs?",
+      "expected": [
+        "packages/modules/link-modules/src/definitions/product-variant-inventory-item.ts"
+      ],
+      "note": "This link definition joins the product and inventory modules and adds the required quantity extra column on the pivot table."
+    },
+    {
+      "id": "medusa-09",
+      "type": "flow",
+      "question": "When a shopper places an order from their cart through the store API, which workflow runs, and how is an already authorized or captured payment reverted if the order cannot be created?",
+      "expected": [
+        "packages/core/core-flows/src/cart/workflows/complete-cart.ts",
+        "packages/medusa/src/api/store/carts/[id]/complete/route.ts",
+        "packages/core/core-flows/src/cart/steps/compensate-payment-if-needed.ts"
+      ],
+      "note": "The store complete route runs the complete cart workflow, which creates the order and authorizes payment; the compensation step cancels or refunds on failure."
+    },
+    {
+      "id": "medusa-10",
+      "type": "concept",
+      "question": "How do scheduled background jobs work under the hood? Is a cron job file just turned into a workflow with a schedule?",
+      "expected": [
+        "packages/core/framework/src/jobs/job-loader.ts",
+        "packages/core/orchestration/src/workflow/scheduler.ts"
+      ],
+      "note": "The job loader wraps each job handler in a step and a scheduled workflow; the workflow scheduler normalizes the cron options and hands them to storage."
+    },
+    {
+      "id": "medusa-11",
+      "type": "locate",
+      "question": "Where is the code that decides which cart items qualify and which items get discounted for a buy X get Y promotion?",
+      "expected": [
+        "packages/modules/promotion/src/utils/compute-actions/buy-get.ts",
+        "packages/modules/promotion/src/services/promotion-module.ts"
+      ],
+      "note": "The buy-get compute actions util selects buy side and target items and quantities; the promotion service dispatches to it when computing actions."
+    },
+    {
+      "id": "medusa-12",
+      "type": "concept",
+      "question": "How do custom widgets placed in a project's admin folder end up rendered in specific spots of dashboard pages, such as the order details page?",
+      "expected": [
+        "packages/admin/admin-vite-plugin/src/widgets/generate-widgets.ts",
+        "packages/admin/dashboard/src/dashboard-app/dashboard-app.tsx",
+        "packages/admin/admin-shared/src/extensions/widgets/constants.ts"
+      ],
+      "note": "The vite plugin parses widget files and their zone config, the dashboard app registers widgets per zone, and admin-shared lists the valid zones."
+    },
+    {
+      "id": "medusa-13",
+      "type": "locate",
+      "question": "Where does the backend reserve stock for cart items when an order is placed, and update the reserved quantity at a stock location?",
+      "expected": [
+        "packages/core/core-flows/src/cart/steps/reserve-inventory.ts",
+        "packages/modules/inventory/src/services/inventory-module.ts"
+      ],
+      "note": "The reserve inventory step creates reservations under a lock with a compensation that deletes them; the inventory module increments reserved quantity on levels."
+    },
+    {
+      "id": "medusa-14",
+      "type": "docs",
+      "question": "How do I run the API server and the background worker as separate instances in production, and which setting or environment variable controls that?",
+      "expected": [
+        "www/apps/book/app/learn/production/worker-mode/page.mdx",
+        "packages/core/framework/src/config/config.ts"
+      ],
+      "note": "The worker mode docs explain shared, server and worker modes; the config manager resolves the mode from project config or the worker mode env variable."
+    },
+    {
+      "id": "medusa-15",
+      "type": "concept",
+      "question": "How are files in a project's API folder turned into HTTP endpoints, including folder names in square brackets that become URL parameters and files that opt out of authentication?",
+      "expected": [
+        "packages/core/framework/src/http/routes-loader.ts",
+        "packages/core/framework/src/http/router.ts"
+      ],
+      "note": "The routes loader scans for route files, converts bracket segments to params and reads method and auth or CORS flags; the router registers them on Express."
+    },
+    {
+      "id": "medusa-16",
+      "type": "locate",
+      "question": "In the admin dashboard, where are browser URLs like the products list or an order detail page mapped to the React page components that render them?",
+      "expected": ["packages/admin/dashboard/src/dashboard-app/routes/get-route.map.tsx"],
+      "note": "The route map defines the nested react-router tree with lazy imports for every core admin page."
+    },
+    {
+      "id": "medusa-17",
+      "type": "flow",
+      "question": "What happens when I run the database migration command in a Medusa project: how does the CLI find the command, and what runs after the module migrations finish?",
+      "expected": [
+        "packages/medusa/src/commands/db/migrate.ts",
+        "packages/cli/medusa-cli/src/create-cli.ts",
+        "packages/medusa/src/commands/db/sync-links.ts"
+      ],
+      "note": "The CLI resolves the command from the medusa package; migrate runs module migrations, then syncs link tables, search indexes and migration scripts."
+    },
+    {
+      "id": "medusa-18",
+      "type": "concept",
+      "question": "How are changes to an existing order, such as returns, exchanges or edits, recorded as actions and replayed to compute the updated order and the amount still owed or to be refunded?",
+      "expected": [
+        "packages/modules/order/src/utils/calculate-order-change.ts",
+        "packages/modules/order/src/utils/apply-order-changes.ts",
+        "packages/modules/order/src/utils/actions/return-item.ts"
+      ],
+      "note": "The change processor replays registered action types and builds the summary; apply-order-changes persists results; return-item is an example action type."
+    },
+    {
+      "id": "medusa-19",
+      "type": "locate",
+      "question": "Where does the backend work out which shipping options are available for a cart based on the shipping address country, province, city or postal code and the option's own rules?",
+      "expected": [
+        "packages/modules/fulfillment/src/services/fulfillment-module-service.ts",
+        "packages/modules/fulfillment/src/utils/utils.ts",
+        "packages/core/core-flows/src/cart/workflows/list-shipping-options-for-cart.ts"
+      ],
+      "note": "The fulfillment service builds geo zone constraints from the address and filters options by rules using the rule engine in utils; the cart workflow passes the address."
+    },
+    {
+      "id": "medusa-20",
+      "type": "docs",
+      "question": "After changing a data model in a module, how should I create the database migration, and should I ever write or edit the migration file by hand?",
+      "expected": [
+        "CLAUDE.md",
+        "www/apps/book/app/learn/fundamentals/data-models/write-migration/page.mdx"
+      ],
+      "note": "CLAUDE.md says to run the module's migration create script and never hand edit; the docs page covers generating migrations and writing them manually."
+    }
+  ]
+}

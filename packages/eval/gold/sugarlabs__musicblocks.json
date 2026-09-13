@@ -1,0 +1,158 @@
+{
+  "repo": "sugarlabs/musicblocks",
+  "sha": "7bf8ffaf5b3840782324c22ada1ef9ec6047a074",
+  "questions": [
+    {
+      "id": "musicblocks-01",
+      "type": "locate",
+      "question": "Where are keyboard shortcuts handled, for example using the space bar to start playback or Alt+S to stop a running program?",
+      "expected": ["js/activity/keyboard-controller.js"],
+      "note": "KeyboardController registers the keydown listener and dispatches space, Alt/Ctrl combos and arrow keys."
+    },
+    {
+      "id": "musicblocks-02",
+      "type": "concept",
+      "question": "How does the interpreter walk through a stack of blocks, evaluating each block's inputs, running it, and then scheduling the next block in the flow?",
+      "expected": ["js/logo.js"],
+      "note": "Logo.runFromBlock and runFromBlockNow evaluate arguments, run the block, and queue the next flow with turtle delays."
+    },
+    {
+      "id": "musicblocks-03",
+      "type": "locate",
+      "question": "Where are the built-in tuning systems such as just intonation, Pythagorean and meantone defined along with their interval ratios?",
+      "expected": ["js/utils/musicutils.js", "js/widgets/temperament.js"],
+      "note": "musicutils.js holds the TEMPERAMENTS list and TEMPERAMENT ratio tables; temperament.js is the widget for viewing and editing them."
+    },
+    {
+      "id": "musicblocks-04",
+      "type": "flow",
+      "question": "What happens between clicking the Play button in the toolbar and the start blocks actually beginning to run?",
+      "expected": ["js/activity/toolbar-controller.js", "js/logo.js", "js/activity.js"],
+      "note": "activity.js wires the play icon to _doFastButton, ToolbarController.runFast clears turtles and calls Logo.runLogoCommands, which finds start blocks and runs them."
+    },
+    {
+      "id": "musicblocks-05",
+      "type": "concept",
+      "question": "When the user presses Stop, how does the app make sure animation and sound callbacks that were already scheduled do not keep firing afterwards?",
+      "expected": ["js/utils/ManagedTimer.js", "js/logo.js"],
+      "note": "ManagedTimer tracks and guards every engine timeout; Logo.doStopTurtles calls clearAll and clears turtle listeners."
+    },
+    {
+      "id": "musicblocks-06",
+      "type": "concept",
+      "question": "Are the instrument and drum sound samples all downloaded when the app starts, or only when a project actually uses them?",
+      "expected": ["js/utils/synthutils.js"],
+      "note": "Synth keeps SAMPLE_INFO paths, lazily loads each sample via requirejs in _loadSample, and preloads only instruments found in a loaded project."
+    },
+    {
+      "id": "musicblocks-07",
+      "type": "locate",
+      "question": "Where is the feature that records a video of the drawing canvas together with the music audio?",
+      "expected": ["js/activity/recorder.js"],
+      "note": "setupActivityRecorder captures the canvas or screen stream and mixes in the Tone.js audio destination for recording."
+    },
+    {
+      "id": "musicblocks-08",
+      "type": "concept",
+      "question": "How are advanced palettes and blocks hidden from the user when the app is in beginner mode?",
+      "expected": ["js/protoblocks.js", "js/turtledefs.js", "js/palette.js"],
+      "note": "BaseBlock.setup hides blocks not flagged as beginner blocks, turtledefs.js lists SKIPPALETTES, and palette.js skips those palette buttons."
+    },
+    {
+      "id": "musicblocks-09",
+      "type": "flow",
+      "question": "When I drag a block and drop it close to another block, how does the app decide whether it snaps into a socket or bounces away?",
+      "expected": [
+        "js/activity/block-drag-controller.js",
+        "js/connection-validator.js",
+        "js/block.js"
+      ],
+      "note": "block.js calls blockMoved on drag end; BlockDragController searches nearby docks and snaps or bounces based on ConnectionValidator dock type rules."
+    },
+    {
+      "id": "musicblocks-10",
+      "type": "concept",
+      "question": "Why does the canvas frame rate drop when nobody is interacting with the app, and what brings it back to full speed?",
+      "expected": ["js/activity/idle-watcher.js"],
+      "note": "The idle watcher throttles the createjs ticker to 1 FPS after 5 seconds without input or playback and restores 60 FPS on mouse, key, touch or wheel events."
+    },
+    {
+      "id": "musicblocks-11",
+      "type": "locate",
+      "question": "Where is an imported MIDI file converted into note blocks and action stacks?",
+      "expected": ["js/midi.js", "js/project-manager.js"],
+      "note": "project-manager.js reads the dropped or chosen file and shows the max blocks prompt; midi.js transcribeMidi builds the action and start block JSON."
+    },
+    {
+      "id": "musicblocks-12",
+      "type": "concept",
+      "question": "How does a pen color number, together with shade and grey values, get turned into an actual RGB color for drawing?",
+      "expected": ["js/utils/munsell.js", "js/turtle-painter.js"],
+      "note": "getMunsellColor interpolates the Munsell table from hue, value and chroma; the Painter calls it whenever color, shade or grey changes."
+    },
+    {
+      "id": "musicblocks-13",
+      "type": "locate",
+      "question": "Where is the code that turns the block stacks of a project into JavaScript source for the code editor?",
+      "expected": [
+        "js/js-export/generate.js",
+        "js/js-export/ASTutils.js",
+        "js/js-export/README.md"
+      ],
+      "note": "JSGenerate builds stack trees and serializes the AST built by ASTUtils; the README explains the export mechanics."
+    },
+    {
+      "id": "musicblocks-14",
+      "type": "concept",
+      "question": "How do translated interface strings get from the PO translation files into the running app, and how is the initial language chosen?",
+      "expected": ["js/loader.js", "convert_po_to_json.py", "js/utils/utils.js"],
+      "note": "convert_po_to_json.py writes locale JSON, loader.js picks the saved or browser language and initializes i18next with it, and the underscore helper in utils.js looks strings up."
+    },
+    {
+      "id": "musicblocks-15",
+      "type": "flow",
+      "question": "When I publish a project to the Planet, what is validated and sent to the server, and how is my local copy marked as published afterwards?",
+      "expected": [
+        "planet/js/Publisher.js",
+        "planet/js/ServerInterface.js",
+        "planet/js/ProjectStorage.js"
+      ],
+      "note": "Publisher.publishProject checks title and description, encodes project data, calls ServerInterface.addProject, then stores published data via ProjectStorage."
+    },
+    {
+      "id": "musicblocks-16",
+      "type": "locate",
+      "question": "Where does the AI debugging assistant decide which backend server to send the project to, and where does it ask the user for consent first?",
+      "expected": ["js/widgets/aidebugger.js"],
+      "note": "AIDebuggerWidget maps allowed hostnames to backend URLs and shows a consent banner before any project data is sent."
+    },
+    {
+      "id": "musicblocks-17",
+      "type": "locate",
+      "question": "Where is the code that spreads drawing commands placed inside a note over the duration of that note so the movement matches the sound?",
+      "expected": ["js/embedded-graphics-scheduler.js", "js/logo.js"],
+      "note": "EmbeddedGraphicsScheduler.schedule splits forward, arc and turn steps across the beat; Logo.dispatchTurtleSignals delegates to it."
+    },
+    {
+      "id": "musicblocks-18",
+      "type": "docs",
+      "question": "What steps are needed to add a new widget, including making its window close automatically when the block that opened it is deleted?",
+      "expected": ["js/widgets/README.md", "js/widgets/widgetWindows.js"],
+      "note": "The widgets README lists the steps including lazy-load dependencies and the KEY_MAPPING entry, which lives in widgetWindows.js."
+    },
+    {
+      "id": "musicblocks-19",
+      "type": "docs",
+      "question": "How do I run a single test file, and what mocks do I need when writing a unit test for one of the block palette files?",
+      "expected": ["Docs/TESTING.md"],
+      "note": "The testing guide shows npm test commands, shared test helpers, and a block test template with the common mocks."
+    },
+    {
+      "id": "musicblocks-20",
+      "type": "docs",
+      "question": "My pull request failed the sign-off check. How do I add the required trailer to commits I already made, and what format must the PR title follow?",
+      "expected": ["CONTRIBUTING.md", "Docs/ci-pipeline.md"],
+      "note": "CONTRIBUTING.md covers the DCO sign-off fixes and Conventional Commit titles; ci-pipeline.md describes the dco-check and pr-title-check workflows."
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 import { JOB_KINDS, JOB_STATUSES, REPO_STATUSES, SIZE_TIERS } from "@everyrepo/core";
-import { index, integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, primaryKey, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 const timestamp = (name: string) => integer(name, { mode: "timestamp_ms" });
 const createdAt = () =>
@@ -71,4 +71,18 @@ export const jobStages = sqliteTable(
     finishedAt: timestamp("finished_at"),
   },
   (table) => [primaryKey({ columns: [table.jobId, table.stage] })],
+);
+
+// Paid-service usage per UTC day, checked against free allowances before each call
+export const budgetCounters = sqliteTable(
+  "budget_counter",
+  {
+    day: text("day").notNull(),
+    provider: text("provider").notNull(),
+    model: text("model").notNull(),
+    requests: integer("requests").notNull().default(0),
+    tokens: integer("tokens").notNull().default(0),
+    neurons: real("neurons").notNull().default(0),
+  },
+  (table) => [primaryKey({ columns: [table.day, table.provider, table.model] })],
 );

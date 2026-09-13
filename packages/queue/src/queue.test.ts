@@ -7,6 +7,7 @@ import {
   enqueueJob,
   findOpenJob,
   runJob,
+  StageDeferredError,
   type StageHandler,
 } from "./queue.ts";
 
@@ -55,6 +56,29 @@ describe("job queue", () => {
     expect(second.status).toBe("succeeded");
     expect(second.attempts).toBe(2);
     expect(calls).toEqual(["a", "b", "b", "c"]);
+  });
+
+  it("defers a job without using an attempt and resumes it later", async () => {
+    let quotaLeft = false;
+    const handlers: Record<string, StageHandler> = {
+      a: async () => "a",
+      b: async () => {
+        if (!quotaLeft) throw new StageDeferredError("daily quota used");
+        return "b";
+      },
+    };
+    enqueueJob(db, { repoId, kind: "full", stages: ["a", "b"] });
+    for (let day = 0; day < 4; day += 1) {
+      const deferred = await runJob(db, claimNextJob(db, "worker-1")!, handlers);
+      expect(deferred).toMatchObject({
+        status: "queued",
+        attempts: 0,
+        error: "b: daily quota used",
+      });
+    }
+    quotaLeft = true;
+    const done = await runJob(db, claimNextJob(db, "worker-1")!, handlers);
+    expect(done.status).toBe("succeeded");
   });
 
   it("marks a job failed once attempts are exhausted", async () => {

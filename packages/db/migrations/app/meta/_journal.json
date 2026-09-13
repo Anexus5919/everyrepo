@@ -8,6 +8,13 @@
       "when": 1789296212918,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1789341681245,
+      "tag": "0001_budget_counter",
+      "breakpoints": true
     }
   ]
 }

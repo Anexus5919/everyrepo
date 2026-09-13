@@ -1,0 +1,123 @@
+{
+  "repo": "sugarlabs/www-v2",
+  "sha": "884cd9574641f4d693c92de9d8d038cb8eaf889a",
+  "questions": [
+    {
+      "id": "www-v2-01",
+      "type": "locate",
+      "question": "Which file decides what page component is shown for each URL path on the site, including the fallback for unknown paths?",
+      "expected": ["src/routes.tsx"],
+      "note": "Creates the browser router with every path to page mapping and the catch-all not found route."
+    },
+    {
+      "id": "www-v2-02",
+      "type": "locate",
+      "question": "Where are the rotating promotional messages at the top of the home page, like the donate and merchandise calls to action, configured?",
+      "expected": ["src/constants/Banner.ts", "src/sections/Banner.tsx", "src/pages/MainPage.tsx"],
+      "note": "Banner.ts holds the message configs, Banner.tsx rotates them every 4 seconds, MainPage passes the configs in."
+    },
+    {
+      "id": "www-v2-03",
+      "type": "locate",
+      "question": "Where are the online giving links and the list of yearly nonprofit tax filing PDFs kept for the donation page?",
+      "expected": ["src/constants/Donation.ts", "src/pages/Donate.tsx"],
+      "note": "Donation.ts defines the every.org URLs and Form 990 filing list; Donate.tsx renders them with a show more toggle."
+    },
+    {
+      "id": "www-v2-04",
+      "type": "locate",
+      "question": "Where is the list of top navigation menu entries defined, including the items grouped under About?",
+      "expected": [
+        "src/constants/Header.ts",
+        "src/sections/Header.tsx",
+        "src/sections/NavDropdown.tsx"
+      ],
+      "note": "Header.ts holds the menu data, Header.tsx renders links for desktop and mobile, NavDropdown renders the About submenu."
+    },
+    {
+      "id": "www-v2-05",
+      "type": "locate",
+      "question": "Where are the Matrix chat rooms that visitors are invited to join listed?",
+      "expected": ["src/constants/matrixLinks.ts", "src/pages/Matrix.tsx"],
+      "note": "matrixLinks.ts lists room titles and matrix.to URLs; Matrix.tsx renders them as room cards with setup steps."
+    },
+    {
+      "id": "www-v2-06",
+      "type": "concept",
+      "question": "How does the site load news posts stored as markdown files and parse the metadata block at the top of each file, such as title, date, category and tags?",
+      "expected": ["src/utils/posts-utils.ts"],
+      "note": "Uses import.meta.glob raw imports, a regex frontmatter parser, defaults for missing fields and sorts posts by date."
+    },
+    {
+      "id": "www-v2-07",
+      "type": "concept",
+      "question": "How does a news post get connected to its writer's profile, and what happens when the writer field is just a plain name instead of a path to a profile file?",
+      "expected": ["src/utils/author-utils.ts", "src/utils/posts-utils.ts"],
+      "note": "parseAuthorReference resolves .md paths to author files and falls back to building a slug from the plain name."
+    },
+    {
+      "id": "www-v2-08",
+      "type": "concept",
+      "question": "What extra markdown shortcuts can articles use, such as YouTube embeds, note or warning callout boxes, highlighted text and collapsible sections, and how is the resulting HTML kept safe?",
+      "expected": ["src/utils/MarkdownRenderer.tsx"],
+      "note": "Preprocesses custom syntax with regex replacements and renders through react-markdown with a custom sanitize schema."
+    },
+    {
+      "id": "www-v2-09",
+      "type": "concept",
+      "question": "How does the light and dark theme switch remember the visitor's choice across page reloads?",
+      "expected": ["src/components/shared/DarkModeToggle.tsx"],
+      "note": "Reads and writes a theme key in localStorage and toggles the dark class on the root html element."
+    },
+    {
+      "id": "www-v2-10",
+      "type": "concept",
+      "question": "How does the page that shows people who worked on Sugar Labs code get repository and committer data from GitHub, and how does it load more repositories while scrolling?",
+      "expected": ["src/pages/Contributors.tsx"],
+      "note": "Calls the GitHub REST API with axios, pages through contributors, and uses an IntersectionObserver for infinite repo loading."
+    },
+    {
+      "id": "www-v2-11",
+      "type": "flow",
+      "question": "What happens when someone opens a link to a single news article: how is the right post found from the URL and turned into rendered content with clickable zoomable images?",
+      "expected": [
+        "src/pages/News/NewsDetailPage.tsx",
+        "src/utils/posts-utils.ts",
+        "src/utils/MarkdownRenderer.tsx"
+      ],
+      "note": "Detail page reads the slug param, fetches the post by slug from markdown, renders it and wires image click modals."
+    },
+    {
+      "id": "www-v2-12",
+      "type": "flow",
+      "question": "On the Raspberry Pi try-now page, what happens when a visitor clicks one of the operating system cards like Fedora or Debian?",
+      "expected": [
+        "src/pages/TryNow/Raspberry.tsx",
+        "src/components/TryNow/StepsToUse.tsx",
+        "src/constants/TryNowData/raspberryPiData.ts"
+      ],
+      "note": "Click matches a steps group by heading, sets it as selected, scrolls to it, and the steps carousel renders it from the data file."
+    },
+    {
+      "id": "www-v2-13",
+      "type": "docs",
+      "question": "How do I add a new icon to the set of browser tab icons that the site cycles through?",
+      "expected": ["docs/Adding_favicon.md", "public/Randomfavicon.js"],
+      "note": "Doc explains placing the SVG in public/favicons and adding it to the array in the script that swaps icons every 2 seconds."
+    },
+    {
+      "id": "www-v2-14",
+      "type": "docs",
+      "question": "What commands do I run to start the local development server and to check linting, formatting and the build before opening a pull request?",
+      "expected": ["docs/CONTRIBUTING.md", "docs/dev_guide.md"],
+      "note": "CONTRIBUTING lists the pre-commit checklist commands; dev_guide covers install, dev server port and preview."
+    },
+    {
+      "id": "www-v2-15",
+      "type": "docs",
+      "question": "As a GSoC student writing weekly progress reports for the website, how do I set up my writer profile and which template should each report follow?",
+      "expected": ["docs/GSoC-Blogpost-Guidelines.md"],
+      "note": "Describes the author profile file, the weekly post frontmatter template, and the branch and PR naming workflow."
+    }
+  ]
+}

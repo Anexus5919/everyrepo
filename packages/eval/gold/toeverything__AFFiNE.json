@@ -1,0 +1,209 @@
+{
+  "repo": "toeverything/AFFiNE",
+  "sha": "868acf8505eb349223e367ef75070d24eb04f7ad",
+  "questions": [
+    {
+      "id": "affine-01",
+      "type": "concept",
+      "question": "When a user types / in a document, how do the individual block packages add their own entries to that popup menu, and how is the order of the entries decided?",
+      "expected": [
+        "blocksuite/affine/widgets/slash-menu/src/extensions.ts",
+        "blocksuite/affine/widgets/slash-menu/src/utils.ts",
+        "blocksuite/affine/blocks/image/src/configs/slash-menu.ts"
+      ],
+      "note": "extensions.ts registers per-block config extensions, utils.ts merges them and sorts by the group string, the image config shows a block contributing an item"
+    },
+    {
+      "id": "affine-02",
+      "type": "concept",
+      "question": "How does the editor convert a document to Markdown and back, and how does each block type plug in its own conversion rules?",
+      "expected": [
+        "blocksuite/affine/shared/src/adapters/markdown/markdown.ts",
+        "blocksuite/affine/shared/src/adapters/markdown/block-adapter.ts",
+        "blocksuite/affine/blocks/paragraph/src/adapters/markdown.ts"
+      ],
+      "note": "the shared adapter walks the AST and snapshot using registered block matchers, block-adapter.ts defines the matcher extension, the paragraph adapter is a concrete matcher"
+    },
+    {
+      "id": "affine-03",
+      "type": "locate",
+      "question": "Where are the rules for filtering rows in a table or kanban view implemented, for example text contains or starts with, and where are grouped and/or conditions checked against a row?",
+      "expected": [
+        "blocksuite/affine/data-view/src/core/filter/eval.ts",
+        "blocksuite/affine/data-view/src/core/filter/filter-fn/string.ts",
+        "blocksuite/affine/data-view/src/core/filter/types.ts"
+      ],
+      "note": "eval.ts evaluates single filters and and/or groups per row, string.ts defines the text filter functions, types.ts defines the filter tree shape"
+    },
+    {
+      "id": "affine-04",
+      "type": "locate",
+      "question": "Where do I declare a new experimental feature toggle that shows up in workspace settings, and where is its on or off state saved?",
+      "expected": [
+        "packages/frontend/core/src/modules/feature-flag/constant.ts",
+        "packages/frontend/core/src/modules/feature-flag/entities/flags.ts"
+      ],
+      "note": "constant.ts lists every flag with default state and configurability, flags.ts reads and writes each flag through global state storage"
+    },
+    {
+      "id": "affine-05",
+      "type": "concept",
+      "question": "How do React components in the app get hold of shared services, and how are services scoped so each workspace or doc gets its own instances?",
+      "expected": [
+        "packages/common/infra/src/framework/core/framework.ts",
+        "packages/common/infra/src/framework/core/provider.ts",
+        "packages/common/infra/src/framework/react/index.tsx"
+      ],
+      "note": "framework.ts registers components per scope, provider.ts resolves them and creates scopes and entities, react/index.tsx exposes hooks and scope providers"
+    },
+    {
+      "id": "affine-06",
+      "type": "concept",
+      "question": "How does offline search in the browser break text into searchable terms, including Chinese or Japanese text, and how are matching docs scored?",
+      "expected": [
+        "packages/common/nbstore/src/impls/idb/indexer/tokenizer.ts",
+        "packages/common/nbstore/src/impls/idb/indexer/bm25.ts",
+        "packages/common/nbstore/src/impls/idb/indexer/inverted-index.ts"
+      ],
+      "note": "tokenizer.ts splits words and uses n-grams for CJK, bm25.ts holds the scoring formula, inverted-index.ts stores terms in IndexedDB and applies the score"
+    },
+    {
+      "id": "affine-07",
+      "type": "flow",
+      "question": "When I type in a doc that belongs to a cloud workspace, how does the change travel from local storage to the server over the socket and get broadcast to other collaborators?",
+      "expected": [
+        "packages/common/nbstore/src/sync/doc/peer.ts",
+        "packages/common/nbstore/src/impls/cloud/doc.ts",
+        "packages/backend/server/src/core/sync/gateway.ts"
+      ],
+      "note": "peer.ts queues push and pull jobs between local and remote storage, cloud/doc.ts emits the push over socket.io, gateway.ts handles the push, stores it and broadcasts updates"
+    },
+    {
+      "id": "affine-08",
+      "type": "locate",
+      "question": "Where does the server verify the proof of work token that desktop and mobile clients send instead of solving the Cloudflare captcha?",
+      "expected": [
+        "packages/backend/native/src/runtime/backend_runtime/runtime_state/captcha.rs",
+        "packages/common/native/src/hashcash.rs",
+        "packages/backend/server/src/plugins/captcha/service.ts"
+      ],
+      "note": "captcha.rs consumes the stored challenge and checks the stamp, hashcash.rs implements stamp minting and checking, service.ts picks the provider and calls the native runtime"
+    },
+    {
+      "id": "affine-09",
+      "type": "concept",
+      "question": "How does meeting audio recording in the desktop app move through its states, from detecting a meeting app to importing the finished audio into a doc?",
+      "expected": [
+        "packages/frontend/apps/electron/src/main/recording/state-transitions.md",
+        "packages/frontend/apps/electron/src/main/recording/coordinator.ts",
+        "packages/frontend/apps/electron/src/main/recording/feature.ts"
+      ],
+      "note": "the markdown file documents session and import state machines, coordinator.ts persists and transitions recording jobs, feature.ts wires app detection and native capture"
+    },
+    {
+      "id": "affine-10",
+      "type": "locate",
+      "question": "Where is importing Microsoft OneNote notebooks implemented, and how are the parsed pages handed to the desktop app in batches?",
+      "expected": [
+        "packages/frontend/native/src/import/onenote/mod.rs",
+        "packages/frontend/native/src/import/session.rs",
+        "packages/frontend/apps/electron/src/main/import/handlers.ts"
+      ],
+      "note": "onenote/mod.rs parses notebooks into docs and assets, session.rs exposes create and next batch functions to Node, handlers.ts calls them from Electron IPC"
+    },
+    {
+      "id": "affine-11",
+      "type": "locate",
+      "question": "Where are the tools that the AI chat can call, such as searching workspace docs or the web, defined, and where does the server decide which tools a chat gets?",
+      "expected": [
+        "packages/backend/server/src/plugins/copilot/runtime/tool-runtime.ts",
+        "packages/backend/server/src/plugins/copilot/tools/tool.ts",
+        "packages/backend/server/src/plugins/copilot/tools/doc-search.ts"
+      ],
+      "note": "tool-runtime.ts builds the tool set per chat options, tool.ts defines the tool shape and helper, doc-search.ts is an example tool"
+    },
+    {
+      "id": "affine-12",
+      "type": "locate",
+      "question": "Where is the email that tells someone they were invited to join a workspace written, and where is its subject line set?",
+      "expected": [
+        "packages/backend/server/src/mails/workspaces/invitation.tsx",
+        "packages/backend/server/src/mails/index.tsx",
+        "packages/backend/server/src/mails/render.ts"
+      ],
+      "note": "invitation.tsx is the React email template, index.tsx maps templates to subjects, render.ts renders them to HTML"
+    },
+    {
+      "id": "affine-13",
+      "type": "locate",
+      "question": "Where are the short names like web, server or desktop that map to full package names for the monorepo helper command defined, and where are they resolved?",
+      "expected": ["tools/utils/src/distribution.ts", "tools/cli/src/command.ts"],
+      "note": "distribution.ts holds the alias to package map, command.ts validates the argument and resolves the alias to a package"
+    },
+    {
+      "id": "affine-14",
+      "type": "concept",
+      "question": "How are backend server settings declared with default values, and how can a self-hoster override them with environment variables or a JSON settings file?",
+      "expected": [
+        "packages/backend/server/src/base/config/register.ts",
+        "packages/backend/server/src/base/config/env.ts",
+        "packages/backend/server/src/base/config/factory.ts"
+      ],
+      "note": "register.ts defines module config descriptors, reads env overrides and config.json paths, env.ts parses env values, factory.ts loads and validates the final config"
+    },
+    {
+      "id": "affine-15",
+      "type": "concept",
+      "question": "On the whiteboard canvas, how is the stacking order of shapes and blocks stored, and how does bringing an item to the front or sending it back change it?",
+      "expected": [
+        "blocksuite/framework/std/src/gfx/layer.ts",
+        "blocksuite/framework/std/src/utils/layer.ts",
+        "blocksuite/affine/blocks/root/src/edgeless/configs/toolbar/more.ts"
+      ],
+      "note": "layer.ts keeps fractional index keys, builds layers and computes reordered indexes, utils/layer.ts compares indexes, more.ts applies front and back actions from the toolbar"
+    },
+    {
+      "id": "affine-16",
+      "type": "flow",
+      "question": "What happens on the server when a user signs in with an emailed one-time link instead of a password, from requesting the email to clicking the link and getting a session?",
+      "expected": [
+        "packages/backend/server/src/core/auth/controller.ts",
+        "packages/backend/server/src/core/auth/magic-link.ts",
+        "packages/backend/native/src/runtime/backend_runtime/auth_session/login.rs"
+      ],
+      "note": "controller.ts exposes sign-in endpoints, magic-link.ts sends and completes the link via the runtime, login.rs stores the OTP hash, queues the mail and verifies attempts"
+    },
+    {
+      "id": "affine-17",
+      "type": "flow",
+      "question": "What happens when a user attaches a large file in a cloud workspace, and how does the upload choose between a direct presigned upload, a multipart upload, or sending it through the API?",
+      "expected": [
+        "packages/common/nbstore/src/impls/cloud/blob-writer.ts",
+        "packages/backend/server/src/core/workspaces/resolvers/blob.ts",
+        "packages/backend/server/src/core/storage/wrappers/blob.ts"
+      ],
+      "note": "blob-writer.ts starts the upload and follows the method the server returns, resolvers/blob.ts reserves quota and picks the method, wrappers/blob.ts talks to object storage"
+    },
+    {
+      "id": "affine-18",
+      "type": "docs",
+      "question": "How do I run the backend server locally along with its database and cache services, and which test accounts can I log in with?",
+      "expected": ["docs/developing-server.md"],
+      "note": "covers docker compose for postgres, redis and mailhog, native build, init, dev command and the seeded dev, pro and team users"
+    },
+    {
+      "id": "affine-19",
+      "type": "docs",
+      "question": "Which branch should my pull request target, how must the PR title be formatted, and what has to pass before it can be merged?",
+      "expected": ["docs/BUILDING.md", "docs/CONTRIBUTING.md"],
+      "note": "both describe targeting canary, Conventional Commits titles with allowed scopes, and the CLA, CI and review requirements"
+    },
+    {
+      "id": "affine-20",
+      "type": "docs",
+      "question": "What are the steps to build and package the Electron desktop app installer, and why do I need to reinstall dependencies with a different yarn setting?",
+      "expected": ["docs/building-desktop-client-app.md"],
+      "note": "explains building native modules and core, reinstalling with hoisting off, and the make commands for Mac, Linux and Windows"
+    }
+  ]
+}

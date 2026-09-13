@@ -10,6 +10,8 @@
     "@everyrepo/core": "workspace:*",
     "@everyrepo/db": "workspace:*",
     "@everyrepo/detect": "workspace:*",
+    "@everyrepo/embed": "workspace:*",
+    "@everyrepo/eval": "workspace:*",
     "@everyrepo/parse": "workspace:*",
     "@everyrepo/pipeline": "workspace:*",
     "@everyrepo/queue": "workspace:*",

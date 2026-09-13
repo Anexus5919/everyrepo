@@ -56,6 +56,12 @@ importers:
       '@everyrepo/detect':
         specifier: workspace:*
         version: link:../detect
+      '@everyrepo/embed':
+        specifier: workspace:*
+        version: link:../embed
+      '@everyrepo/eval':
+        specifier: workspace:*
+        version: link:../eval
       '@everyrepo/parse':
         specifier: workspace:*
         version: link:../parse
@@ -122,6 +128,21 @@ importers:
         specifier: ^4.0.3
         version: 4.0.3
 
+  packages/embed:
+    dependencies:
+      '@everyrepo/core':
+        specifier: workspace:*
+        version: link:../core
+
+  packages/eval:
+    dependencies:
+      '@everyrepo/core':
+        specifier: workspace:*
+        version: link:../core
+      zod:
+        specifier: ^4.6.4
+        version: 4.6.4
+
   packages/graph:
     dependencies:
       '@everyrepo/core':
@@ -179,6 +200,9 @@ importers:
       '@everyrepo/detect':
         specifier: workspace:*
         version: link:../detect
+      '@everyrepo/embed':
+        specifier: workspace:*
+        version: link:../embed
       '@everyrepo/graph':
         specifier: workspace:*
         version: link:../graph
@@ -215,6 +239,9 @@ importers:
       '@everyrepo/db':
         specifier: workspace:*
         version: link:../db
+      '@everyrepo/embed':
+        specifier: workspace:*
+        version: link:../embed
 
 packages:
 

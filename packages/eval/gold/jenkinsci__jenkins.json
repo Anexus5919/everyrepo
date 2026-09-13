@@ -1,0 +1,211 @@
+{
+  "repo": "jenkinsci/jenkins",
+  "sha": "003f706d2f3ea233d56e30770741182716ab8808",
+  "questions": [
+    {
+      "id": "jenkins-01",
+      "type": "locate",
+      "question": "Where does Jenkins reject form submissions that are missing the anti cross-site request forgery token, and how is that token value generated?",
+      "expected": [
+        "core/src/main/java/hudson/security/csrf/CrumbFilter.java",
+        "core/src/main/java/hudson/security/csrf/DefaultCrumbIssuer.java"
+      ],
+      "note": "The servlet filter checks POST requests for a valid crumb and returns 403; the default issuer hashes user name, session id and a salt."
+    },
+    {
+      "id": "jenkins-02",
+      "type": "locate",
+      "question": "Where is the code that runs when someone starts Jenkins with java -jar on the war file, checks the Java version and boots the embedded web server?",
+      "expected": ["war/src/main/java/executable/Main.java"],
+      "note": "Executable war main class with the supported Java version check, option help text and extraction and launch of the bundled Winstone server."
+    },
+    {
+      "id": "jenkins-03",
+      "type": "locate",
+      "question": "Plugins built against an old core version keep working after features were moved out of core into separate plugins. Where does core add those implicit plugin dependencies?",
+      "expected": [
+        "core/src/main/java/jenkins/plugins/DetachedPluginsUtil.java",
+        "core/src/main/java/hudson/ClassicPluginStrategy.java"
+      ],
+      "note": "Detached plugin list loading and implied dependency computation, called from the classic plugin strategy when reading plugin manifests."
+    },
+    {
+      "id": "jenkins-04",
+      "type": "locate",
+      "question": "Where is an API token sent with HTTP basic authentication checked against the tokens a user has created, and where are those tokens stored in hashed form?",
+      "expected": [
+        "core/src/main/java/jenkins/security/BasicHeaderApiTokenAuthenticator.java",
+        "core/src/main/java/jenkins/security/ApiTokenProperty.java",
+        "core/src/main/java/jenkins/security/apitoken/ApiTokenStore.java"
+      ],
+      "note": "Basic header authenticator treats the password as a token and (through a small helper) calls the user property match, which looks it up in the store of SHA-256 hashed tokens."
+    },
+    {
+      "id": "jenkins-05",
+      "type": "locate",
+      "question": "Where is the check that stops an agent from asking the controller to run arbitrary code over the remoting channel?",
+      "expected": [
+        "core/src/main/java/jenkins/security/s2m/CallableDirectionChecker.java",
+        "core/src/main/java/jenkins/security/SlaveToMasterCallable.java",
+        "core/src/main/java/jenkins/security/Roles.java"
+      ],
+      "note": "Role checker installed on every channel rejects callables not targeted at the controller role; the base callable and role constants define that role."
+    },
+    {
+      "id": "jenkins-06",
+      "type": "locate",
+      "question": "Where is the logic that picks which agent and executor a waiting build gets assigned to, which makes a job tend to run on the same agent each time?",
+      "expected": [
+        "core/src/main/java/hudson/model/LoadBalancer.java",
+        "core/src/main/java/hudson/util/ConsistentHash.java",
+        "core/src/main/java/hudson/model/queue/MappingWorksheet.java"
+      ],
+      "note": "Default load balancer maps work chunks to executor chunks using a consistent hash keyed on the task affinity key over the mapping worksheet."
+    },
+    {
+      "id": "jenkins-07",
+      "type": "locate",
+      "question": "When I type into the search box in the page header, where does the browser code fetch suggestions and which server endpoint answers them?",
+      "expected": [
+        "src/main/js/components/command-palette/datasources.js",
+        "src/main/js/api/search.js",
+        "core/src/main/java/hudson/search/Search.java"
+      ],
+      "note": "Command palette data source calls the search API helper, which fetches the search suggest URL served by the suggest method on the server search class."
+    },
+    {
+      "id": "jenkins-08",
+      "type": "concept",
+      "question": "How does the H symbol in a periodic build schedule pick a time that is spread out across jobs but stays the same for a given job?",
+      "expected": [
+        "core/src/main/java/hudson/scheduler/Hash.java",
+        "core/src/main/java/hudson/scheduler/BaseParser.java",
+        "core/src/main/resources/hudson/triggers/TimerTrigger/help-spec.jelly"
+      ],
+      "note": "Hash seeds a stable pseudo-random generator from the job name, the parser uses it to choose values for H fields, and the help text explains the syntax."
+    },
+    {
+      "id": "jenkins-09",
+      "type": "concept",
+      "question": "In what order does Jenkins start up (plugins, system configuration, jobs), and how can plugin code ask to run at a specific point during startup?",
+      "expected": [
+        "core/src/main/java/hudson/init/InitMilestone.java",
+        "core/src/main/java/hudson/init/Initializer.java",
+        "core/src/main/java/jenkins/InitReactorRunner.java"
+      ],
+      "note": "Milestone enum lists and orders the startup phases, the annotation lets methods declare after and before milestones, and the runner executes the reactor."
+    },
+    {
+      "id": "jenkins-10",
+      "type": "concept",
+      "question": "How does core automatically find and create the classes that plugins annotate to hook into core features?",
+      "expected": [
+        "core/src/main/java/hudson/ExtensionFinder.java",
+        "core/src/main/java/hudson/Extension.java",
+        "core/src/main/java/hudson/ExtensionList.java"
+      ],
+      "note": "The finder loads SezPoz annotation indices into a Guice injector, the annotation documents auto registration, and the list holds discovered instances per type."
+    },
+    {
+      "id": "jenkins-11",
+      "type": "concept",
+      "question": "Jobs with thousands of builds do not keep every build in memory. How are old build records loaded on demand and released again under memory pressure?",
+      "expected": [
+        "core/src/main/java/jenkins/model/lazy/AbstractLazyLoadRunMap.java",
+        "core/src/main/java/jenkins/model/lazy/BuildReference.java",
+        "core/src/main/java/hudson/model/RunMap.java"
+      ],
+      "note": "Lazy sorted map retrieves build directories on request, build references hold builds through soft or weak holders, and the run map is the concrete subclass used by jobs."
+    },
+    {
+      "id": "jenkins-12",
+      "type": "concept",
+      "question": "How are passwords and other secrets encrypted when they are saved into XML configuration files, and where does the key that protects them live on disk?",
+      "expected": [
+        "core/src/main/java/hudson/util/Secret.java",
+        "core/src/main/java/jenkins/security/DefaultConfidentialStore.java",
+        "core/src/main/java/jenkins/security/CryptoConfidentialKey.java"
+      ],
+      "note": "Secret encrypts with an AES key and IV, the key comes from a confidential key, and the default store keeps keys under secrets encrypted by master.key."
+    },
+    {
+      "id": "jenkins-13",
+      "type": "concept",
+      "question": "How does core serve WebSocket connections without depending directly on one servlet container's API, and how are idle connections kept alive?",
+      "expected": [
+        "core/src/main/java/jenkins/websocket/WebSockets.java",
+        "websocket/spi/src/main/java/jenkins/websocket/Provider.java",
+        "core/src/main/java/jenkins/websocket/WebSocketSession.java"
+      ],
+      "note": "Upgrade helper loads a provider through ServiceLoader, the provider interface abstracts the container, and the session schedules periodic pings."
+    },
+    {
+      "id": "jenkins-14",
+      "type": "concept",
+      "question": "How does an inbound agent prove its identity when it connects over WebSocket, and how does the new channel get attached to the right agent node?",
+      "expected": [
+        "core/src/main/java/jenkins/agents/WebSocketAgents.java",
+        "core/src/main/java/jenkins/slaves/JnlpAgentReceiver.java",
+        "core/src/main/java/jenkins/slaves/DefaultJnlpSlaveReceiver.java"
+      ],
+      "note": "The WebSocket endpoint compares the agent secret header with an HMAC of the agent name, then the default receiver approves the connection and sets the channel on the computer."
+    },
+    {
+      "id": "jenkins-15",
+      "type": "flow",
+      "question": "What happens when I run the command line client jar in WebSocket mode, from the client opening the connection to the server running the command and returning an exit code?",
+      "expected": [
+        "core/src/main/java/hudson/cli/CLIAction.java",
+        "cli/src/main/java/hudson/cli/CLI.java",
+        "cli/src/main/java/hudson/cli/PlainCLIProtocol.java"
+      ],
+      "note": "Client parses the mode and connects to cli/ws, the server action checks origin and runs the command in a server side handler, and the plain protocol frames args, stdin, stdout and exit."
+    },
+    {
+      "id": "jenkins-16",
+      "type": "flow",
+      "question": "During first-time setup, when I choose the suggested plugins, what happens between the browser request, the server side install endpoint, the download jobs and the progress polling?",
+      "expected": [
+        "src/main/js/api/pluginManager.js",
+        "core/src/main/java/hudson/PluginManager.java",
+        "core/src/main/java/hudson/model/UpdateCenter.java"
+      ],
+      "note": "JS API posts to installPlugins and polls installStatus; the plugin manager deploys each plugin as update center jobs, which download, verify checksums and report status."
+    },
+    {
+      "id": "jenkins-17",
+      "type": "flow",
+      "question": "What happens after a user clicks Build Now on a job, until an executor actually starts running the build?",
+      "expected": [
+        "core/src/main/java/jenkins/model/ParameterizedJobMixIn.java",
+        "core/src/main/java/hudson/model/Queue.java",
+        "core/src/main/java/hudson/model/Executor.java"
+      ],
+      "note": "The build request handler schedules the job in the queue, queue maintenance moves items from waiting to buildable to pending on a free executor, and the executor thread creates and runs the build."
+    },
+    {
+      "id": "jenkins-18",
+      "type": "docs",
+      "question": "How do I build jenkins.war quickly without running tests, and which Maven profiles run only unit tests versus all tests?",
+      "expected": ["CONTRIBUTING.md"],
+      "note": "Contributing guide documents the quick-build command, launching a dev instance and the light-test, smoke-test and all-tests profiles."
+    },
+    {
+      "id": "jenkins-19",
+      "type": "docs",
+      "question": "What sections must a pull request description contain, which changelog category labels can I use, and how many approvals are needed before a maintainer merges it?",
+      "expected": [".github/PULL_REQUEST_TEMPLATE.md", "docs/MAINTAINERS.adoc", "CONTRIBUTING.md"],
+      "note": "The template lists required sections and changelog categories, and the maintainer and contributing docs describe the two approval rule and merge process."
+    },
+    {
+      "id": "jenkins-20",
+      "type": "docs",
+      "question": "What does setting a separate resource root URL do, what are the security trade-offs, and how long do those resource links stay valid?",
+      "expected": [
+        "core/src/main/resources/jenkins/security/ResourceDomainConfiguration/help-url.html",
+        "core/src/main/java/jenkins/security/ResourceDomainRootAction.java"
+      ],
+      "note": "Help page explains redirecting user content to a second domain, authentication, HMAC tokens and the 30 minute expiry that the root action enforces."
+    }
+  ]
+}

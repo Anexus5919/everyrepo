@@ -1,5 +1,5 @@
 import { FILE_KINDS, MODULE_KINDS, SIZE_TIERS } from "@everyrepo/core";
-import { index, integer, primaryKey, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { blob, index, integer, primaryKey, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const snapshots = sqliteTable("snapshot", {
   sha: text("sha").primaryKey(),
@@ -142,3 +142,11 @@ export const chunks = sqliteTable(
   },
   (table) => [index("chunk_file").on(table.fileId)],
 );
+
+// Unit-length float32 vectors at the model's full dimension, one per chunk
+export const chunkVectors = sqliteTable("chunk_vector", {
+  chunkId: integer("chunk_id")
+    .primaryKey()
+    .references(() => chunks.id, { onDelete: "cascade" }),
+  vector: blob("vector", { mode: "buffer" }).notNull(),
+});

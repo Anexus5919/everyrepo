@@ -1,6 +1,18 @@
 {
   "dataDir": "C:/path/to/everyrepo-data",
   "localRepos": {
-    "mui/mui-x": { "path": "C:/path/to/mui-x", "remote": "upstream", "defaultBranch": "master" }
+    "mui/mui-x": {
+      "path": "C:/path/to/mui-x",
+      "remote": "upstream",
+      "defaultBranch": "master"
+    }
+  },
+  "embeddings": {
+    "provider": "workers-ai",
+    "model": "@cf/qwen/qwen3-embedding-0.6b",
+    "dimensions": 1024,
+    "batchSize": 32,
+    "dailyNeuronBudget": 9000,
+    "concurrency": 4
   }
 }

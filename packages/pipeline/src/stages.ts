@@ -1,5 +1,6 @@
 import { repoDirName, type LocalConfig, type RepoRef, type SizeTier } from "@everyrepo/core";
 import {
+  embeddingCachePath,
   engineDbPath,
   eq,
   files,
@@ -11,6 +12,7 @@ import {
   type AppDb,
 } from "@everyrepo/db";
 import { detectRepository } from "@everyrepo/detect";
+import type { Embedder } from "@everyrepo/embed";
 import { isParseable, parseSource } from "@everyrepo/parse";
 import type { StageHandler } from "@everyrepo/queue";
 import {
@@ -25,10 +27,19 @@ import {
 } from "@everyrepo/repo";
 import { createParseWriter, writeDetection, type ParsedFile } from "./engine-writer.ts";
 import { runChunkStage } from "./chunk-stage.ts";
+import { runEmbedStage } from "./embed-stage.ts";
 import { runGraphStage } from "./graph-stage.ts";
 import { estimateIndexCost, type CostEstimate } from "./estimate.ts";
 
-export const INDEX_STAGES = ["source", "detect", "parse", "graph", "chunk", "estimate"] as const;
+export const INDEX_STAGES = [
+  "source",
+  "detect",
+  "parse",
+  "graph",
+  "chunk",
+  "embed",
+  "estimate",
+] as const;
 export type IndexStage = (typeof INDEX_STAGES)[number];
 
 export interface PipelineOptions {
@@ -37,6 +48,7 @@ export interface PipelineOptions {
   ref: RepoRef;
   repoId: number;
   fetch: boolean;
+  embedder?: Embedder | undefined;
 }
 
 export interface SourceOutput {
@@ -227,6 +239,17 @@ export function createIndexHandlers(options: PipelineOptions): Record<IndexStage
     });
   };
 
+  const embed: StageHandler = async ({ outputs, heartbeat, log }) => {
+    const snapshot = sourceOutput(outputs);
+    return runEmbedStage({
+      enginePath: snapshot.enginePath,
+      cachePath: embeddingCachePath(config.dataDir, repoDirName(ref)),
+      embedder: options.embedder,
+      log,
+      heartbeat,
+    });
+  };
+
   const estimate: StageHandler = async ({ outputs, job, log }) => {
     const snapshot = sourceOutput(outputs);
     const engine = openEngineDb(snapshot.enginePath);
@@ -274,7 +297,7 @@ export function createIndexHandlers(options: PipelineOptions): Record<IndexStage
     }
   };
 
-  return { source, detect, parse, graph, chunk, estimate };
+  return { source, detect, parse, graph, chunk, embed, estimate };
 }
 
 export function stagesUntil(stage: string | undefined): IndexStage[] {

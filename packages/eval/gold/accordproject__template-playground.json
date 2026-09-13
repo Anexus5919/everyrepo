@@ -1,0 +1,102 @@
+{
+  "repo": "accordproject/template-playground",
+  "sha": "4aae4c91a694ab7b2b163ab1cab9beb7d4145db8",
+  "questions": [
+    {
+      "id": "template-playground-01",
+      "type": "locate",
+      "question": "Where is the code that connects to the different AI vendors and streams the chat reply back piece by piece?",
+      "expected": ["src/ai-assistant/llmProviders.ts", "src/ai-assistant/chatRelay.ts"],
+      "note": "llmProviders defines one streaming provider class per vendor plus the factory; chatRelay picks the provider and appends streamed chunks to the chat."
+    },
+    {
+      "id": "template-playground-02",
+      "type": "locate",
+      "question": "Where is the button that exports the rendered agreement preview to a PDF file implemented?",
+      "expected": ["src/pages/MainContainer.tsx"],
+      "note": "MainContainer has the Download PDF button and the html2pdf export handler that forces a white background."
+    },
+    {
+      "id": "template-playground-03",
+      "type": "locate",
+      "question": "Where does the data model editor define the keyword and type highlighting for the modeling language?",
+      "expected": ["src/editors/ConcertoEditor.tsx"],
+      "note": "ConcertoEditor registers the concerto language with Monaco and its Monarch tokenizer keyword and type lists."
+    },
+    {
+      "id": "template-playground-04",
+      "type": "locate",
+      "question": "Where does the Learn section get the text for its tutorial modules, and where is the order of the modules defined?",
+      "expected": [
+        "src/utils/fetchContent.ts",
+        "src/constants/learningSteps/steps.ts",
+        "src/components/Content.tsx"
+      ],
+      "note": "fetchContent downloads the module markdown from GitHub, steps lists the module order, Content renders it with previous and next navigation."
+    },
+    {
+      "id": "template-playground-05",
+      "type": "concept",
+      "question": "How does the playground turn the template text, the data model and the sample JSON into the live HTML preview?",
+      "expected": ["src/store/store.ts", "src/utils/validators/index.ts"],
+      "note": "The debounced rebuild in the store validates inputs, builds the model manager, runs the template interpreter and transforms the result to HTML."
+    },
+    {
+      "id": "template-playground-06",
+      "type": "concept",
+      "question": "How is the AI provider API key protected when it is saved in the browser?",
+      "expected": ["src/utils/secureKeyStorage.ts", "src/components/AIConfigSection.tsx"],
+      "note": "secureKeyStorage encrypts the key with AES-GCM derived from a WebAuthn PRF credential; AIConfigSection falls back to memory-only when unsupported."
+    },
+    {
+      "id": "template-playground-07",
+      "type": "concept",
+      "question": "How do the AI inline code suggestions in the editors avoid sending a request on every keystroke?",
+      "expected": ["src/ai-assistant/autocompletion.ts", "src/ai-assistant/activityTracker.ts"],
+      "note": "autocompletion waits one second, checks last editor activity, and enforces an in-flight flag plus a two second gap between requests."
+    },
+    {
+      "id": "template-playground-08",
+      "type": "concept",
+      "question": "How does clicking an error in the problems list move the cursor to the right line in the right editor?",
+      "expected": ["src/utils/editorNavigation.ts", "src/components/ProblemPanel.tsx"],
+      "note": "ProblemPanel parses source, line and column from error text; editorNavigation keeps a registry of editors and reveals and highlights the line."
+    },
+    {
+      "id": "template-playground-09",
+      "type": "flow",
+      "question": "What happens when someone opens a shared playground link: how is the encoded state read from the address and restored into the editors?",
+      "expected": ["src/App.tsx", "src/store/store.ts", "src/utils/compression/compression.ts"],
+      "note": "App reads the hash or legacy query data, the store loadFromLink decompresses and fills editors and compiles logic, compression wraps LZString."
+    },
+    {
+      "id": "template-playground-10",
+      "type": "flow",
+      "question": "What happens after a user presses Send Request on a contract with logic, until the response, state and events appear in the results tabs?",
+      "expected": [
+        "src/store/store.ts",
+        "src/components/SandboxFrame.tsx",
+        "src/components/ContractRequestEditor.tsx"
+      ],
+      "note": "The button calls triggerContract, which posts compiled code to the sandbox iframe; SandboxFrame routes the result back to the pending resolver."
+    },
+    {
+      "id": "template-playground-11",
+      "type": "docs",
+      "question": "What Node.js version is required, and which commands start the dev server and run the unit and browser tests?",
+      "expected": ["README.md", "DEVELOPERS.md"],
+      "note": "README lists Node 22 or newer and the dev, unit test, e2e and build commands; DEVELOPERS covers setup and the testing guide."
+    },
+    {
+      "id": "template-playground-12",
+      "type": "docs",
+      "question": "What commit message format and sign-off do maintainers expect on contributions?",
+      "expected": [
+        "AGENTS.md",
+        ".github/copilot-instructions.md",
+        ".github/pull_request_template.md"
+      ],
+      "note": "These docs require type(scope): description messages with a DCO Signed-off-by line, and the PR checklist repeats it."
+    }
+  ]
+}

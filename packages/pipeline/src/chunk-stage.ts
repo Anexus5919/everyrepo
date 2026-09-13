@@ -25,6 +25,7 @@ export interface ChunkOutput {
 
 const MAX_FILE_BYTES = 512 * 1024;
 const MARKDOWN_LANGUAGES = new Set(["markdown", "mdx", "rst"]);
+const PLAIN_DOC_LANGUAGES = new Set(["asciidoc", "text", "html"]);
 const MAX_DEFINES_IN_HEADER = 4;
 
 interface FileRow {
@@ -81,7 +82,12 @@ export async function runChunkStage(input: ChunkInput): Promise<ChunkOutput> {
            ORDER BY f.path`,
         )
         .all(MAX_FILE_BYTES) as FileRow[]
-    ).filter((file) => file.kind !== "docs" || MARKDOWN_LANGUAGES.has(file.language ?? ""));
+    ).filter(
+      (file) =>
+        file.kind !== "docs" ||
+        MARKDOWN_LANGUAGES.has(file.language ?? "") ||
+        PLAIN_DOC_LANGUAGES.has(file.language ?? ""),
+    );
 
     const symbolsByFile = new Map<number, SymbolRow[]>();
     const symbolRows = sql

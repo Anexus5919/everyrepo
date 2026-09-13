@@ -7,6 +7,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@everyrepo/db": "workspace:*"
+    "@everyrepo/db": "workspace:*",
+    "@everyrepo/embed": "workspace:*"
   }
 }

@@ -5,6 +5,7 @@ export {
   enqueueJob,
   findOpenJob,
   runJob,
+  StageDeferredError,
   type ClaimOptions,
   type EnqueueInput,
   type Job,

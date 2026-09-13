@@ -36,6 +36,11 @@ export interface StageContext {
 
 export type StageHandler = (context: StageContext) => Promise<unknown>;
 
+// Thrown by a stage that cannot continue yet, such as after a daily quota; the job waits without using an attempt
+export class StageDeferredError extends Error {
+  override readonly name = "StageDeferredError";
+}
+
 export interface RunOptions {
   heartbeatMs?: number;
   log?: (message: string) => void;
@@ -204,6 +209,7 @@ export async function runJob(
         error: message,
         finishedAt: new Date(),
       });
+      if (error instanceof StageDeferredError) return deferJob(db, job, `${stage}: ${message}`);
       return failJob(db, job, `${stage}: ${message}`);
     } finally {
       clearInterval(timer);
@@ -213,6 +219,21 @@ export async function runJob(
   return db
     .update(indexJobs)
     .set({ status: "succeeded", lockedBy: null, finishedAt: new Date(), error: null })
+    .where(eq(indexJobs.id, job.id))
+    .returning()
+    .get();
+}
+
+function deferJob(db: AppDb, job: Job, message: string): Job {
+  const current = db.select().from(indexJobs).where(eq(indexJobs.id, job.id)).get();
+  return db
+    .update(indexJobs)
+    .set({
+      status: "queued",
+      lockedBy: null,
+      attempts: Math.max(0, (current?.attempts ?? job.attempts) - 1),
+      error: message,
+    })
     .where(eq(indexJobs.id, job.id))
     .returning()
     .get();

@@ -21,9 +21,12 @@ TypeScript source directly and run with tsx. Tests use Vitest.
   - `repos list` shows the test repositories and their upstream heads
   - `db migrate` creates or upgrades `app.sqlite` in `dataDir`
   - `index <owner/repo> [--until <stage>] [--no-fetch]` runs or resumes the index job
-    (stages: source, detect, parse, graph, chunk, estimate)
+    (stages: source, detect, parse, graph, chunk, embed, estimate); embed is skipped when
+    `embeddings` is not configured
   - `report <owner/repo> [--json]` summarizes the latest snapshot
   - `search <owner/repo> <query...> [--limit <n>]` runs keyword search over indexed chunks
+  - `eval [repos...] [--modes keyword,vector,hybrid] [--dims <n>] [--details]` scores retrieval
+    against the gold question sets in `packages/eval/gold`
 - `pnpm --filter @everyrepo/db db:generate` regenerates SQL migrations after schema changes.
 
 ## Layout
@@ -43,7 +46,12 @@ TypeScript source directly and run with tsx. Tests use Vitest.
 - `packages/graph`: import resolution (JS/TS, Java, Python, Go, Rust), reference and co-change
   edges, PageRank and size-balanced file clusters
 - `packages/chunk`: syntax-aware code chunks, markdown sections, identifier terms
-- `packages/search`: FTS5 keyword search over chunks
+- `packages/embed`: embedding providers (Cloudflare Workers AI by default, an optional local server
+  exposing /v1/embeddings, a hashing embedder for tests) and vector helpers; vectors are cached per
+  repository by content hash, and Workers AI usage is counted per UTC day against
+  `dailyNeuronBudget`, pausing the job when it is used up
+- `packages/search`: FTS5 keyword, vector and hybrid (reciprocal rank fusion) search over chunks
+- `packages/eval`: gold question sets and retrieval metrics
 - `packages/pipeline`: index stage handlers, cost estimate, snapshot report
 - `packages/cli`: the `everyrepo` command
 - `apps/`: web app and worker, added later
@@ -58,3 +66,4 @@ TypeScript source directly and run with tsx. Tests use Vitest.
 - Never change branches, files or stashes in the local clones listed in `everyrepo.local.json`.
   Only read from them or fetch into them. Derived copies go under `dataDir`.
 - Machine-specific paths and secrets live in `everyrepo.local.json` and `.env`, both gitignored.
+  `.env.example` lists the variable names. Never print, log or commit token values.

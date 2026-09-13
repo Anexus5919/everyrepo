@@ -7,6 +7,7 @@ export const FILE_KINDS = [
   "test",
   "example",
   "docs",
+  "changelog",
   "locale",
   "config",
   "generated",

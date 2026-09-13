@@ -2,11 +2,13 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { parseRepoRef, type LocalConfig } from "@everyrepo/core";
-import { ensureRepo, findRepo, openAppDb, openEngineDb } from "@everyrepo/db";
-import { searchKeyword } from "@everyrepo/search";
-import { claimNextJob, enqueueJob, runJob } from "@everyrepo/queue";
+import { embeddingCachePath, ensureRepo, findRepo, openAppDb, openEngineDb } from "@everyrepo/db";
+import { createHashingEmbedder, EmbeddingBudgetError, type Embedder } from "@everyrepo/embed";
+import { loadVectorIndex, searchHybrid, searchKeyword, searchVector } from "@everyrepo/search";
+import { claimNextJob, enqueueJob, runJob, StageDeferredError } from "@everyrepo/queue";
 import { git } from "@everyrepo/repo";
 import { afterAll, describe, expect, it } from "vitest";
+import { runEmbedStage } from "./embed-stage.ts";
 import { estimateIndexCost } from "./estimate.ts";
 import { buildReport } from "./report.ts";
 import { createIndexHandlers, stagesUntil, type SourceOutput } from "./stages.ts";
@@ -53,7 +55,15 @@ describe("index pipeline", () => {
     const repo = ensureRepo(appDb, ref);
     enqueueJob(appDb, { repoId: repo.id, kind: "full", stages: stagesUntil(undefined) });
 
-    const handlers = createIndexHandlers({ config, appDb, ref, repoId: repo.id, fetch: false });
+    const embedder = createHashingEmbedder();
+    const handlers = createIndexHandlers({
+      config,
+      appDb,
+      ref,
+      repoId: repo.id,
+      fetch: false,
+      embedder,
+    });
     const job = await runJob(appDb, claimNextJob(appDb, "test")!, handlers);
     expect(job.error).toBeNull();
     expect(job.status).toBe("succeeded");
@@ -79,7 +89,53 @@ describe("index pipeline", () => {
         }
       ).n,
     ).toBeGreaterThanOrEqual(1);
+    const index = loadVectorIndex(engine);
+    const chunkCount = (
+      engine.$client.prepare("SELECT COUNT(*) AS n FROM chunk").get() as { n: number }
+    ).n;
+    expect(index.chunkIds.length).toBe(chunkCount);
+    const [query] = await embedder.embed(["keeps state store"], "query");
+    expect(searchVector(engine, index, query!, 5)[0]?.path).toBe("packages/core/src/store.ts");
+    expect(searchHybrid(engine, index, "keeps state store", query!, 5)[0]?.path).toBe(
+      "packages/core/src/store.ts",
+    );
     engine.$client.close();
+
+    const again = await runEmbedStage({
+      enginePath,
+      cachePath: embeddingCachePath(config.dataDir, "acme__widgets"),
+      embedder,
+      log: () => {},
+      heartbeat: () => {},
+    });
+    expect(again).toMatchObject({ chunks: chunkCount, cached: chunkCount, embedded: 0 });
+
+    // A used-up allowance pauses the stage; vectors embedded before it stay cached
+    let calls = 0;
+    const limited: Embedder = {
+      ...embedder,
+      model: "limited",
+      batchSize: 1,
+      embed: (texts, purpose) => {
+        calls += 1;
+        if (calls > 1) return Promise.reject(new EmbeddingBudgetError("allowance used"));
+        return embedder.embed(texts, purpose);
+      },
+    };
+    const stageInput = {
+      enginePath,
+      cachePath: embeddingCachePath(config.dataDir, "acme__widgets"),
+      log: () => {},
+      heartbeat: () => {},
+    };
+    await expect(runEmbedStage({ ...stageInput, embedder: limited })).rejects.toBeInstanceOf(
+      StageDeferredError,
+    );
+    const resumed = await runEmbedStage({
+      ...stageInput,
+      embedder: { ...embedder, model: "limited" },
+    });
+    expect(resumed).toMatchObject({ cached: 1, embedded: chunkCount - 1 });
     const report = buildReport(enginePath);
     expect(report.repo).toBe("acme/widgets");
     expect(report.topModules.map((module) => module.path).sort()).toEqual(["", "packages/core"]);

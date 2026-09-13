@@ -36,6 +36,15 @@ importers:
         specifier: ^5.0.0
         version: 5.0.0(@types/node@26.5.1)(vite@8.3.0(@types/node@26.5.1)(esbuild@0.28.2)(tsx@4.23.13)(yaml@2.9.1))
 
+  packages/chunk:
+    dependencies:
+      '@everyrepo/core':
+        specifier: workspace:*
+        version: link:../core
+      '@everyrepo/parse':
+        specifier: workspace:*
+        version: link:../parse
+
   packages/cli:
     dependencies:
       '@everyrepo/core':
@@ -59,6 +68,9 @@ importers:
       '@everyrepo/repo':
         specifier: workspace:*
         version: link:../repo
+      '@everyrepo/search':
+        specifier: workspace:*
+        version: link:../search
       commander:
         specifier: ^15.0.0
         version: 15.0.0
@@ -155,6 +167,9 @@ importers:
 
   packages/pipeline:
     dependencies:
+      '@everyrepo/chunk':
+        specifier: workspace:*
+        version: link:../chunk
       '@everyrepo/core':
         specifier: workspace:*
         version: link:../core
@@ -176,6 +191,9 @@ importers:
       '@everyrepo/repo':
         specifier: workspace:*
         version: link:../repo
+      '@everyrepo/search':
+        specifier: workspace:*
+        version: link:../search
 
   packages/queue:
     dependencies:
@@ -191,6 +209,12 @@ importers:
       '@everyrepo/core':
         specifier: workspace:*
         version: link:../core
+
+  packages/search:
+    dependencies:
+      '@everyrepo/db':
+        specifier: workspace:*
+        version: link:../db
 
 packages:
 

@@ -3,6 +3,7 @@ import { dbCommand } from "./commands/db.ts";
 import { indexCommand } from "./commands/index-repo.ts";
 import { reportCommand } from "./commands/report.ts";
 import { reposCommand } from "./commands/repos.ts";
+import { searchCommand } from "./commands/search.ts";
 
 const program = new Command()
   .name("everyrepo")
@@ -13,6 +14,7 @@ program.addCommand(reposCommand());
 program.addCommand(dbCommand());
 program.addCommand(indexCommand());
 program.addCommand(reportCommand());
+program.addCommand(searchCommand());
 
 try {
   await program.parseAsync();

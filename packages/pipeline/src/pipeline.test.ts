@@ -2,7 +2,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { parseRepoRef, type LocalConfig } from "@everyrepo/core";
-import { ensureRepo, findRepo, openAppDb } from "@everyrepo/db";
+import { ensureRepo, findRepo, openAppDb, openEngineDb } from "@everyrepo/db";
+import { searchKeyword } from "@everyrepo/search";
 import { claimNextJob, enqueueJob, runJob } from "@everyrepo/queue";
 import { git } from "@everyrepo/repo";
 import { afterAll, describe, expect, it } from "vitest";
@@ -65,7 +66,21 @@ describe("index pipeline", () => {
     const outputs = appDb.$client
       .prepare("SELECT output FROM job_stage WHERE stage = 'source'")
       .get() as { output: string };
-    const report = buildReport((JSON.parse(outputs.output) as SourceOutput).enginePath);
+    const enginePath = (JSON.parse(outputs.output) as SourceOutput).enginePath;
+    const engine = openEngineDb(enginePath);
+    const hits = searchKeyword(engine, "keeps state store");
+    expect(hits[0]?.path).toBe("packages/core/src/store.ts");
+    expect(hits[0]?.header).toContain("defines Store");
+    expect(searchKeyword(engine, "widgets readme").map((hit) => hit.path)).toContain("README.md");
+    expect(
+      (
+        engine.$client.prepare("SELECT COUNT(*) AS n FROM edge WHERE kind = 'import'").get() as {
+          n: number;
+        }
+      ).n,
+    ).toBeGreaterThanOrEqual(1);
+    engine.$client.close();
+    const report = buildReport(enginePath);
     expect(report.repo).toBe("acme/widgets");
     expect(report.topModules.map((module) => module.path).sort()).toEqual(["", "packages/core"]);
     expect(report.licenses).toEqual([{ license: "MIT", modules: 2 }]);

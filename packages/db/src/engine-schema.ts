@@ -123,3 +123,22 @@ export const symbolRefs = sqliteTable(
   },
   (table) => [index("symbol_ref_file").on(table.fileId), index("symbol_ref_name").on(table.name)],
 );
+
+export const chunks = sqliteTable(
+  "chunk",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    fileId: integer("file_id")
+      .notNull()
+      .references(() => files.id, { onDelete: "cascade" }),
+    // One-based, inclusive line range, matching symbol line numbers
+    startLine: integer("start_line").notNull(),
+    endLine: integer("end_line").notNull(),
+    kind: text("kind", { enum: ["code", "markdown", "text"] }).notNull(),
+    header: text("header").notNull(),
+    content: text("content").notNull(),
+    identifiers: text("identifiers").notNull(),
+    tokens: integer("tokens").notNull(),
+  },
+  (table) => [index("chunk_file").on(table.fileId)],
+);

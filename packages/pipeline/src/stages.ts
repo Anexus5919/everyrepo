@@ -24,10 +24,11 @@ import {
   resolveSnapshot,
 } from "@everyrepo/repo";
 import { createParseWriter, writeDetection, type ParsedFile } from "./engine-writer.ts";
+import { runChunkStage } from "./chunk-stage.ts";
 import { runGraphStage } from "./graph-stage.ts";
 import { estimateIndexCost, type CostEstimate } from "./estimate.ts";
 
-export const INDEX_STAGES = ["source", "detect", "parse", "graph", "estimate"] as const;
+export const INDEX_STAGES = ["source", "detect", "parse", "graph", "chunk", "estimate"] as const;
 export type IndexStage = (typeof INDEX_STAGES)[number];
 
 export interface PipelineOptions {
@@ -216,6 +217,16 @@ export function createIndexHandlers(options: PipelineOptions): Record<IndexStage
     });
   };
 
+  const chunk: StageHandler = async ({ outputs, heartbeat, log }) => {
+    const snapshot = sourceOutput(outputs);
+    return runChunkStage({
+      enginePath: snapshot.enginePath,
+      gitDir: snapshot.gitDir,
+      log,
+      heartbeat,
+    });
+  };
+
   const estimate: StageHandler = async ({ outputs, job, log }) => {
     const snapshot = sourceOutput(outputs);
     const engine = openEngineDb(snapshot.enginePath);
@@ -263,7 +274,7 @@ export function createIndexHandlers(options: PipelineOptions): Record<IndexStage
     }
   };
 
-  return { source, detect, parse, graph, estimate };
+  return { source, detect, parse, graph, chunk, estimate };
 }
 
 export function stagesUntil(stage: string | undefined): IndexStage[] {

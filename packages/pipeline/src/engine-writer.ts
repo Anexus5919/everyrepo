@@ -1,6 +1,7 @@
 import type { RepoRef } from "@everyrepo/core";
 import { formatRepoRef } from "@everyrepo/core";
 import {
+  chunks,
   clusters,
   edges,
   eq,
@@ -18,7 +19,7 @@ import type { ParseResult } from "@everyrepo/parse";
 export const ENGINE_VERSION = "0.1.0";
 const INSERT_CHUNK = 500;
 
-function chunks<T>(items: readonly T[], size: number): T[][] {
+function batches<T>(items: readonly T[], size: number): T[][] {
   const out: T[][] = [];
   for (let index = 0; index < items.length; index += size)
     out.push(items.slice(index, index + size));
@@ -34,6 +35,8 @@ export interface SnapshotInfo {
 // Replaces everything in the engine database with a fresh detection result
 export function writeDetection(engine: EngineDb, info: SnapshotInfo, detection: Detection): void {
   engine.transaction((tx) => {
+    tx.delete(chunks).run();
+    engine.$client.prepare("INSERT INTO chunk_fts(chunk_fts) VALUES('delete-all')").run();
     tx.delete(edges).run();
     tx.delete(fileImports).run();
     tx.delete(symbolRefs).run();
@@ -90,7 +93,7 @@ export function writeDetection(engine: EngineDb, info: SnapshotInfo, detection: 
       }
     }
 
-    for (const batch of chunks(detection.files, INSERT_CHUNK)) {
+    for (const batch of batches(detection.files, INSERT_CHUNK)) {
       tx.insert(files)
         .values(
           batch.map((file) => ({

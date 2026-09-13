@@ -21,8 +21,9 @@ TypeScript source directly and run with tsx. Tests use Vitest.
   - `repos list` shows the test repositories and their upstream heads
   - `db migrate` creates or upgrades `app.sqlite` in `dataDir`
   - `index <owner/repo> [--until <stage>] [--no-fetch]` runs or resumes the index job
-    (stages: source, detect, parse, estimate)
+    (stages: source, detect, parse, graph, chunk, estimate)
   - `report <owner/repo> [--json]` summarizes the latest snapshot
+  - `search <owner/repo> <query...> [--limit <n>]` runs keyword search over indexed chunks
 - `pnpm --filter @everyrepo/db db:generate` regenerates SQL migrations after schema changes.
 
 ## Layout
@@ -38,7 +39,11 @@ TypeScript source directly and run with tsx. Tests use Vitest.
 - `packages/detect`: languages, file kinds, modules (npm, pnpm, Maven, Gradle, Cargo, Go, Python),
   licenses, docs sources, size tier
 - `packages/parse`: tree-sitter parsing with tags queries for TypeScript, TSX, JavaScript, Java,
-  Rust, Python and Go
+  Rust, Python and Go, plus import extraction
+- `packages/graph`: import resolution (JS/TS, Java, Python, Go, Rust), reference and co-change
+  edges, PageRank and size-balanced file clusters
+- `packages/chunk`: syntax-aware code chunks, markdown sections, identifier terms
+- `packages/search`: FTS5 keyword search over chunks
 - `packages/pipeline`: index stage handlers, cost estimate, snapshot report
 - `packages/cli`: the `everyrepo` command
 - `apps/`: web app and worker, added later

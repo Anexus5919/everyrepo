@@ -16,3 +16,4 @@ export {
   PARSEABLE_LANGUAGES,
   type ParseableLanguage,
 } from "./grammars.ts";
+export { withSyntaxTree, type SyntaxNode } from "./tree.ts";

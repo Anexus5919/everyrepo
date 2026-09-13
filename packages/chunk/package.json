@@ -1,0 +1,13 @@
+{
+  "name": "@everyrepo/chunk",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@everyrepo/core": "workspace:*",
+    "@everyrepo/parse": "workspace:*"
+  }
+}

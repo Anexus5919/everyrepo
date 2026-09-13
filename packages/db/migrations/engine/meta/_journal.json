@@ -15,6 +15,20 @@
       "when": 1789335928698,
       "tag": "0001_graph",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1789337688063,
+      "tag": "0002_chunks",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1789337689620,
+      "tag": "0003_chunk_search",
+      "breakpoints": true
     }
   ]
 }

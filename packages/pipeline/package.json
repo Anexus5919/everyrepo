@@ -7,12 +7,14 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@everyrepo/chunk": "workspace:*",
     "@everyrepo/core": "workspace:*",
     "@everyrepo/db": "workspace:*",
     "@everyrepo/detect": "workspace:*",
     "@everyrepo/graph": "workspace:*",
     "@everyrepo/parse": "workspace:*",
     "@everyrepo/queue": "workspace:*",
-    "@everyrepo/repo": "workspace:*"
+    "@everyrepo/repo": "workspace:*",
+    "@everyrepo/search": "workspace:*"
   }
 }

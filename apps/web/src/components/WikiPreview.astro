@@ -117,18 +117,43 @@ const siblings = parent
 
 <script>
   document.querySelectorAll<HTMLElement>("[data-preview]").forEach((preview) => {
+    let current = "";
     const select = (number: string) => {
+      if (number === current) return;
+      current = number;
       preview.querySelectorAll<HTMLElement>("[data-source]").forEach((item) => {
-        item.hidden = item.dataset.source !== number;
+        const active = item.dataset.source === number;
+        item.hidden = !active;
+        item.classList.remove("is-entering");
+        if (active) {
+          void item.offsetWidth;
+          item.classList.add("is-entering");
+        }
       });
       preview.querySelectorAll<HTMLElement>(".cite").forEach((chip) => {
         chip.classList.toggle("is-active", chip.dataset.cite === number);
       });
     };
     const initial = preview.querySelector<HTMLElement>("[data-source]:not([hidden])");
-    if (initial?.dataset.source) select(initial.dataset.source);
+    if (initial?.dataset.source) {
+      current = initial.dataset.source;
+      preview.querySelectorAll<HTMLElement>(".cite").forEach((chip) => {
+        chip.classList.toggle("is-active", chip.dataset.cite === current);
+      });
+    }
+    const chipFrom = (target: EventTarget | null) =>
+      (target as HTMLElement | null)?.closest<HTMLElement>(".cite") ?? null;
+    // Pointing at a citation shows its source; clicking keeps the page in place
+    preview.addEventListener("mouseover", (event) => {
+      const chip = chipFrom(event.target);
+      if (chip?.dataset.cite) select(chip.dataset.cite);
+    });
+    preview.addEventListener("focusin", (event) => {
+      const chip = chipFrom(event.target);
+      if (chip?.dataset.cite) select(chip.dataset.cite);
+    });
     preview.addEventListener("click", (event) => {
-      const chip = (event.target as HTMLElement).closest<HTMLElement>(".cite");
+      const chip = chipFrom(event.target);
       if (!chip?.dataset.cite) return;
       event.preventDefault();
       select(chip.dataset.cite);
@@ -327,10 +352,36 @@ const siblings = parent
   }
 
   .code {
+    position: relative;
     flex-grow: 1;
     padding: 14px 0;
     overflow: auto;
     max-height: 470px;
+  }
+
+  /* A new source is read top to bottom once, then the tint clears */
+  .is-entering .code::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: var(--accent-soft);
+    animation: read-through 560ms var(--ease-out) forwards;
+  }
+
+  @keyframes read-through {
+    0% {
+      clip-path: inset(0 0 100% 0);
+      opacity: 1;
+    }
+    60% {
+      clip-path: inset(0 0 0 0);
+      opacity: 1;
+    }
+    100% {
+      clip-path: inset(0 0 0 0);
+      opacity: 0;
+    }
   }
 
   .code :global(.shiki) {

@@ -1,0 +1,613 @@
+---
+interface Props {
+  items: Array<{ file: string; title: string }>;
+}
+const { items } = Astro.props;
+---
+
+<div class="pipeline" data-pipeline data-items={JSON.stringify(items)}>
+  <canvas aria-hidden="true"></canvas>
+  <p class="sr-only">
+    Files from a repository move along a line through parse, graph, chunk, write and verify
+    stations, and each one is filed into the wiki as a page with its sources.
+  </p>
+</div>
+
+<style>
+  .pipeline {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 600 / 460;
+  }
+
+  canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+</style>
+
+<script>
+  interface Item {
+    file: string;
+    title: string;
+  }
+
+  type Point = [number, number];
+
+  interface Faces {
+    top: string;
+    left: string;
+    right: string;
+  }
+
+  const K = Math.sqrt(3) / 2;
+  const STATIONS = ["parse", "graph", "chunk", "write", "verify"];
+  const SPACING = 1.35;
+  const STEP = 1.8;
+  const MOVE = 0.34;
+  const TILE = 0.8;
+  const TILE_Y = 0.22;
+  const TILE_H = 0.12;
+  const PILE_X = -1.25;
+  const WIKI_X = 8.4;
+  const STATION_TOP = 0.7;
+  const WIKI_TOP = 0.9;
+  const LAST = STATIONS.length + 1;
+
+  const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+  const clamp = (v: number) => Math.max(0, Math.min(1, v));
+  const span = (v: number, a: number, b: number) => clamp((v - a) / (b - a));
+  const seeded = (k: number, n: number) => {
+    const x = Math.sin(k * 127.1 + n * 311.7) * 43758.5453;
+    return x - Math.floor(x);
+  };
+
+  function rgba(color: string, alpha: number): string {
+    const hex = color.trim().replace("#", "");
+    if (hex.length !== 6) return color;
+    const value = parseInt(hex, 16);
+    return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, ${alpha})`;
+  }
+
+  function start(host: HTMLElement) {
+    const canvas = host.querySelector("canvas");
+    const context = canvas?.getContext("2d");
+    if (!canvas || !context) return;
+    const ctx = context;
+    const items = JSON.parse(host.dataset.items ?? "[]") as Item[];
+    if (items.length === 0) return;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+    let width = 0;
+    let height = 0;
+    let ratio = 1;
+    let scale = 40;
+    let ox = 0;
+    let oy = 0;
+    let colors = read();
+    let back: HTMLCanvasElement | null = null;
+    let front: HTMLCanvasElement | null = null;
+    let visible = true;
+    let clock = 0;
+    let last = performance.now();
+
+    function read() {
+      const style = getComputedStyle(document.documentElement);
+      const get = (name: string) => style.getPropertyValue(name).trim();
+      return {
+        floor: get("--line"),
+        trackTop: get("--iso-track-top"),
+        trackLeft: get("--iso-track-left"),
+        trackRight: get("--iso-track-right"),
+        paperTop: get("--iso-paper-top"),
+        paperLeft: get("--iso-paper-left"),
+        paperRight: get("--iso-paper-right"),
+        ink: get("--iso-ink"),
+        stationTop: get("--cube-top-b"),
+        stationLeft: get("--cube-left-b"),
+        stationRight: get("--cube-right-b"),
+        glyph: get("--cube-label"),
+        lit: get("--iso-lit"),
+        blockTop: get("--iso-block-top"),
+        blockLeft: get("--iso-block-left"),
+        blockRight: get("--iso-block-right"),
+        edge: get("--cube-edge"),
+        accent: get("--accent"),
+        accent2: get("--accent-2"),
+        accentInk: get("--accent-ink"),
+        text: get("--text"),
+        text2: get("--text-2"),
+        text3: get("--text-3"),
+        panel: get("--panel"),
+        line: get("--line"),
+      };
+    }
+
+    const project = (x: number, y: number, z: number): Point => [
+      ox + (x - y) * K * scale,
+      oy + (x + y) * 0.5 * scale - z * scale,
+    ];
+
+    function fit() {
+      const rect = canvas!.getBoundingClientRect();
+      ratio = Math.min(window.devicePixelRatio || 1, 2);
+      width = rect.width;
+      height = rect.height;
+      canvas!.width = Math.round(width * ratio);
+      canvas!.height = Math.round(height * ratio);
+      // Scene extents in iso units, projected at scale 1
+      const minX = (PILE_X - 0.3 - 1.5) * K;
+      const maxX = (WIKI_X + 1.3 + 1.5) * K;
+      const minY = (PILE_X - 1.5) * 0.5 - 1.7;
+      const maxY = (WIKI_X + 1.3 + 1.4) * 0.5 + 1.1;
+      scale = Math.min((width - 8) / (maxX - minX), (height - 8) / (maxY - minY));
+      ox = width / 2 - ((minX + maxX) / 2) * scale;
+      oy = height / 2 - ((minY + maxY) / 2) * scale;
+      back = layer(drawBack);
+      front = layer(drawFront);
+    }
+
+    function layer(paint: (target: CanvasRenderingContext2D) => void): HTMLCanvasElement {
+      const element = document.createElement("canvas");
+      element.width = canvas!.width;
+      element.height = canvas!.height;
+      const target = element.getContext("2d")!;
+      target.setTransform(ratio, 0, 0, ratio, 0, 0);
+      paint(target);
+      return element;
+    }
+
+    function quad(target: CanvasRenderingContext2D, points: Point[], fill: string, stroke?: string) {
+      target.beginPath();
+      target.moveTo(points[0]![0], points[0]![1]);
+      for (const point of points.slice(1)) target.lineTo(point[0], point[1]);
+      target.closePath();
+      target.fillStyle = fill;
+      target.fill();
+      if (stroke) {
+        target.strokeStyle = stroke;
+        target.lineWidth = 0.8;
+        target.stroke();
+      }
+    }
+
+    function box(
+      target: CanvasRenderingContext2D,
+      x: number,
+      y: number,
+      z: number,
+      dx: number,
+      dy: number,
+      dz: number,
+      faces: Faces,
+      stroke?: string,
+    ) {
+      const P = project;
+      quad(target, [P(x + dx, y, z), P(x + dx, y + dy, z), P(x + dx, y + dy, z + dz), P(x + dx, y, z + dz)], faces.right, stroke);
+      quad(target, [P(x, y + dy, z), P(x + dx, y + dy, z), P(x + dx, y + dy, z + dz), P(x, y + dy, z + dz)], faces.left, stroke);
+      quad(target, [P(x, y, z + dz), P(x + dx, y, z + dz), P(x + dx, y + dy, z + dz), P(x, y + dy, z + dz)], faces.top, stroke);
+    }
+
+    // Text lying flat on a horizontal plane, running along the x axis
+    function flatText(target: CanvasRenderingContext2D, text: string, x: number, y: number, z: number, size: number, color: string) {
+      const [px, py] = project(x, y, z);
+      target.save();
+      target.translate(px, py);
+      target.transform(K, 0.5, -K, 0.5, 0, 0);
+      target.font = `${size}px "IBM Plex Mono", monospace`;
+      target.fillStyle = color;
+      target.textBaseline = "middle";
+      target.fillText(text, 0, 0);
+      target.restore();
+    }
+
+    // Text printed on the face of a block that looks toward the line
+    function faceText(target: CanvasRenderingContext2D, text: string, x: number, y: number, z: number, size: number, color: string) {
+      const [px, py] = project(x, y, z);
+      target.save();
+      target.translate(px, py);
+      target.transform(K, 0.5, 0, 1, 0, 0);
+      target.font = `500 ${size}px "IBM Plex Mono", monospace`;
+      target.fillStyle = color;
+      target.textBaseline = "middle";
+      target.fillText(text, 0, 0);
+      target.restore();
+    }
+
+    function segment(target: CanvasRenderingContext2D, a: Point, b: Point, color: string, lineWidth: number) {
+      target.beginPath();
+      target.moveTo(a[0], a[1]);
+      target.lineTo(b[0], b[1]);
+      target.strokeStyle = color;
+      target.lineWidth = lineWidth;
+      target.lineCap = "round";
+      target.stroke();
+    }
+
+    const stationX = (index: number) => (index + 1) * SPACING;
+    const stationTop = (index: number, u: number, v: number): Point =>
+      project(stationX(index) - 0.05 + u * 0.9, -1.45 + v * 0.9, STATION_TOP);
+
+    function drawGlyph(target: CanvasRenderingContext2D, index: number, color: string) {
+      const S = (u: number, v: number) => stationTop(index, u, v);
+      const width = Math.max(1.2, scale * 0.035);
+      const name = STATIONS[index];
+      if (name === "parse") {
+        segment(target, S(0.3, 0.25), S(0.2, 0.5), color, width);
+        segment(target, S(0.2, 0.5), S(0.3, 0.75), color, width);
+        segment(target, S(0.7, 0.25), S(0.8, 0.5), color, width);
+        segment(target, S(0.8, 0.5), S(0.7, 0.75), color, width);
+      } else if (name === "graph") {
+        const nodes: Point[] = [S(0.25, 0.3), S(0.72, 0.25), S(0.4, 0.74), S(0.76, 0.7)];
+        segment(target, nodes[0]!, nodes[1]!, color, width * 0.8);
+        segment(target, nodes[0]!, nodes[2]!, color, width * 0.8);
+        segment(target, nodes[1]!, nodes[3]!, color, width * 0.8);
+        segment(target, nodes[2]!, nodes[3]!, color, width * 0.8);
+        for (const node of nodes) {
+          target.beginPath();
+          target.arc(node[0], node[1], Math.max(2, scale * 0.05), 0, Math.PI * 2);
+          target.fillStyle = color;
+          target.fill();
+        }
+      } else if (name === "chunk") {
+        for (const v of [0.28, 0.5, 0.72]) segment(target, S(0.22, v), S(0.78, v), color, width * 1.6);
+      } else if (name === "write") {
+        segment(target, S(0.2, 0.32), S(0.8, 0.32), color, width);
+        segment(target, S(0.2, 0.5), S(0.66, 0.5), color, width);
+        segment(target, S(0.2, 0.68), S(0.52, 0.68), color, width);
+        segment(target, S(0.6, 0.68), S(0.72, 0.68), color, width * 2);
+      } else if (name === "verify") {
+        segment(target, S(0.28, 0.5), S(0.45, 0.72), color, width * 1.4);
+        segment(target, S(0.45, 0.72), S(0.78, 0.26), color, width * 1.4);
+      }
+    }
+
+    function drawBack(target: CanvasRenderingContext2D) {
+      // Floor grid the line stands on, faded toward the edges
+      const grid = document.createElement("canvas");
+      grid.width = canvas!.width;
+      grid.height = canvas!.height;
+      const g = grid.getContext("2d")!;
+      g.setTransform(ratio, 0, 0, ratio, 0, 0);
+      g.strokeStyle = colors.floor;
+      g.lineWidth = 1;
+      for (let n = -6; n <= 14; n += 1) {
+        const a = project(n, -5, -0.3);
+        const b = project(n, 6, -0.3);
+        const c = project(-6, n - 4, -0.3);
+        const d = project(14, n - 4, -0.3);
+        g.beginPath();
+        g.moveTo(a[0], a[1]);
+        g.lineTo(b[0], b[1]);
+        g.moveTo(c[0], c[1]);
+        g.lineTo(d[0], d[1]);
+        g.stroke();
+      }
+      const center = project(3.2, 0, 0);
+      const fade = g.createRadialGradient(center[0], center[1], 0, center[0], center[1], width * 0.62);
+      fade.addColorStop(0, "rgba(0,0,0,0.9)");
+      fade.addColorStop(1, "rgba(0,0,0,0)");
+      g.globalCompositeOperation = "destination-in";
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      g.fillStyle = fade;
+      g.save();
+      g.scale(ratio, ratio);
+      g.fillRect(0, 0, width, height);
+      g.restore();
+      target.save();
+      target.setTransform(1, 0, 0, 1, 0, 0);
+      target.drawImage(grid, 0, 0);
+      target.restore();
+
+      const station: Faces = { top: colors.stationTop, left: colors.stationLeft, right: colors.stationRight };
+      STATIONS.forEach((name, index) => {
+        box(target, stationX(index) - 0.05, -1.45, -0.3, 0.9, 0.9, STATION_TOP + 0.3, station, colors.edge);
+        drawGlyph(target, index, colors.glyph);
+        faceText(target, name, stationX(index) + 0.06, -0.55, 0.12, Math.max(9, scale * 0.21), colors.glyph);
+      });
+
+      const track: Faces = { top: colors.trackTop, left: colors.trackLeft, right: colors.trackRight };
+      box(target, PILE_X - 0.2, -0.45, -0.3, WIKI_X - PILE_X + 0.3, 1.75, 0.3, track, colors.edge);
+
+      // Direction of travel along the middle of the line
+      target.save();
+      target.setLineDash([3, 5]);
+      segment(target, project(0.9, TILE_Y + TILE / 2, 0), project(WIKI_X - 0.1, TILE_Y + TILE / 2, 0), rgba(colors.text3, 0.35), 1);
+      target.restore();
+
+
+      const paper: Faces = { top: colors.paperTop, left: colors.paperLeft, right: colors.paperRight };
+      for (let level = 0; level < 3; level += 1) {
+        box(target, PILE_X, TILE_Y, level * 0.15, TILE, TILE, TILE_H, paper, colors.edge);
+      }
+    }
+
+    function drawFront(target: CanvasRenderingContext2D) {
+      const block: Faces = { top: colors.blockTop, left: colors.blockLeft, right: colors.blockRight };
+      box(target, WIKI_X, -0.35, -0.3, 1.3, 1.75, WIKI_TOP + 0.3, block, colors.edge);
+      const T = (u: number, v: number) => project(WIKI_X + u * 1.3, -0.35 + v * 1.75, WIKI_TOP);
+      const width = Math.max(1.3, scale * 0.04);
+      const pageLeft = [T(0.2, 0.28), T(0.5, 0.36), T(0.5, 0.78), T(0.2, 0.7)];
+      const pageRight = [T(0.5, 0.36), T(0.8, 0.28), T(0.8, 0.7), T(0.5, 0.78)];
+      for (const page of [pageLeft, pageRight]) {
+        target.beginPath();
+        target.moveTo(page[0]![0], page[0]![1]);
+        for (const point of page.slice(1)) target.lineTo(point[0], point[1]);
+        target.closePath();
+        target.strokeStyle = colors.accent;
+        target.lineWidth = width;
+        target.lineJoin = "round";
+        target.stroke();
+      }
+      flatText(target, "wiki", WIKI_X + 0.12, -0.2, WIKI_TOP + 0.001, Math.max(9, scale * 0.22), colors.text2);
+    }
+
+    // Lines of code on a tile, grouped by the slices the chunk station cuts
+    function codeLines(target: CanvasRenderingContext2D, key: number, x: number, z: number, gap: number, alpha: number, reveal: number, marks: number) {
+      const rows = [0.14, 0.3, 0.46, 0.62, 0.84];
+      rows.forEach((v, row) => {
+        const shown = span(reveal, row * 0.14, row * 0.14 + 0.3);
+        if (shown <= 0 || alpha <= 0) return;
+        const indent = row === 1 || row === 2 ? 0.2 : 0.1;
+        const length = (0.3 + seeded(key, row) * 0.4) * shown;
+        const slice = v < 0.4 ? -1 : v < 0.72 ? 0 : 1;
+        const y = TILE_Y + v * TILE + slice * gap;
+        const top = z + TILE_H;
+        segment(target, project(x + indent * TILE, y, top), project(x + (indent + length) * TILE, y, top), rgba(colors.ink, 0.55 * alpha), Math.max(1.1, scale * 0.03));
+        if (marks > 0 && (row === 0 || row === 2)) {
+          segment(target, project(x + indent * TILE, y, top), project(x + (indent + 0.1) * TILE, y, top), rgba(colors.accent, marks * alpha), Math.max(1.8, scale * 0.05));
+        }
+      });
+    }
+
+    function drawItem(key: number, x: number, z: number, state: Record<string, number>) {
+      const paper: Faces = { top: colors.paperTop, left: colors.paperLeft, right: colors.paperRight };
+      const gap = state.gap ?? 0;
+      if (gap > 0.001) {
+        const slices = [
+          [0, 0.4],
+          [0.4, 0.72],
+          [0.72, 1],
+        ];
+        slices.forEach(([from, to], index) => {
+          box(ctx, x, TILE_Y + from! * TILE + (index - 1) * gap, z, TILE, (to! - from!) * TILE, TILE_H, paper, colors.edge);
+        });
+      } else {
+        box(ctx, x, TILE_Y, z, TILE, TILE, TILE_H, paper, colors.edge);
+      }
+
+      codeLines(ctx, key, x, z, gap, 1 - (state.rewrite ?? 0), state.parse ?? 0, state.marks ?? 0);
+
+      const prose = state.prose ?? 0;
+      if (prose > 0) {
+        const top = z + TILE_H;
+        const rows = [
+          { v: 0.18, length: 0.62, cite: true },
+          { v: 0.38, length: 0.72, cite: false },
+          { v: 0.58, length: 0.56, cite: true },
+          { v: 0.78, length: 0.44, cite: true },
+        ];
+        rows.forEach((row, index) => {
+          const y = TILE_Y + row.v * TILE;
+          const fade = !row.cite ? 1 - 0.85 * (state.removed ?? 0) : 1;
+          segment(ctx, project(x + 0.1 * TILE, y, top), project(x + (0.1 + row.length) * TILE, y, top), rgba(colors.ink, 0.6 * prose * fade), Math.max(1.1, scale * 0.03));
+          if (row.cite && (state.cites ?? 0) > 0) {
+            const at = 0.1 + row.length + 0.06;
+            segment(ctx, project(x + at * TILE, y, top), project(x + (at + 0.08) * TILE, y, top), rgba(colors.accent, state.cites!), Math.max(2.2, scale * 0.07));
+          }
+          if (!row.cite && (state.strike ?? 0) > 0) {
+            const reach = 0.06 + (row.length + 0.08) * state.strike!;
+            segment(ctx, project(x + 0.06 * TILE, y, top), project(x + reach * TILE, y, top), rgba(colors.accent, 0.9), Math.max(1.1, scale * 0.03));
+          }
+          if (index === 0 && (state.scan ?? -1) >= 0) {
+            const u = state.scan!;
+            segment(ctx, project(x + u * TILE, TILE_Y, top), project(x + u * TILE, TILE_Y + TILE, top), rgba(colors.accent2, 0.9), Math.max(1.4, scale * 0.04));
+          }
+        });
+      }
+
+      const check = state.check ?? 0;
+      if (check > 0) {
+        const [cx, cy] = project(x + TILE, TILE_Y, z + TILE_H + 0.35);
+        const radius = Math.max(7, scale * 0.17);
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        ctx.fillStyle = rgba(colors.accent, check);
+        ctx.fill();
+        const a: Point = [cx - radius * 0.45, cy + radius * 0.02];
+        const b: Point = [cx - radius * 0.1, cy + radius * 0.38];
+        const c: Point = [cx + radius * 0.5, cy - radius * 0.35];
+        const draw = span(check, 0.3, 1);
+        ctx.beginPath();
+        ctx.moveTo(a[0], a[1]);
+        if (draw < 0.4) {
+          const t = draw / 0.4;
+          ctx.lineTo(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t);
+        } else {
+          const t = (draw - 0.4) / 0.6;
+          ctx.lineTo(b[0], b[1]);
+          ctx.lineTo(b[0] + (c[0] - b[0]) * t, b[1] + (c[1] - b[1]) * t);
+        }
+        ctx.strokeStyle = rgba(colors.accentInk, check);
+        ctx.lineWidth = Math.max(1.6, scale * 0.045);
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.stroke();
+      }
+    }
+
+    function tag(anchor: Point, offset: Point, label: string, value: string, alpha: number) {
+      ctx.font = `11px "IBM Plex Mono", monospace`;
+      const labelWidth = ctx.measureText(label).width;
+      const valueWidth = ctx.measureText(value).width;
+      const boxWidth = labelWidth + valueWidth + 30;
+      const boxHeight = 24;
+      let bx = anchor[0] + offset[0];
+      const by = anchor[1] + offset[1];
+      bx = Math.max(4, Math.min(width - boxWidth - 4, bx));
+      ctx.save();
+      ctx.setLineDash([2, 3]);
+      ctx.beginPath();
+      ctx.moveTo(anchor[0], anchor[1]);
+      ctx.lineTo(anchor[0], by + boxHeight / 2);
+      ctx.lineTo(offset[0] < 0 ? bx + boxWidth : bx, by + boxHeight / 2);
+      ctx.strokeStyle = rgba(colors.text3, 0.8);
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.restore();
+      ctx.beginPath();
+      ctx.arc(anchor[0], anchor[1], 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = colors.accent;
+      ctx.fill();
+      ctx.beginPath();
+      ctx.roundRect(bx, by, boxWidth, boxHeight, 4);
+      ctx.fillStyle = colors.panel;
+      ctx.fill();
+      ctx.strokeStyle = colors.line;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = colors.text3;
+      ctx.fillText(label, bx + 10, by + boxHeight / 2 + 0.5);
+      ctx.fillStyle = rgba(colors.text, alpha);
+      ctx.fillText(value, bx + 20 + labelWidth, by + boxHeight / 2 + 0.5);
+    }
+
+    function render(time: number) {
+      const step = Math.floor(time / STEP);
+      const phase = time / STEP - step;
+      const moving = phase < MOVE;
+      const travel = ease(phase / MOVE);
+      const dwell = moving ? 0 : (phase - MOVE) / (1 - MOVE);
+
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, canvas!.width, canvas!.height);
+      if (back) ctx.drawImage(back, 0, 0);
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+
+      // Stations light up while they work on the file in front of them
+      STATIONS.forEach((_, index) => {
+        if (moving) return;
+        const glow = Math.sin(Math.PI * dwell);
+        drawGlyph(ctx, index, rgba(colors.lit, 0.9 * glow));
+      });
+
+      const graphLinks: Array<{ from: Point; to: Point; progress: number; node: number }> = [];
+
+      for (let key = step - LAST; key <= step; key += 1) {
+        const station = step - key;
+        if (station < 0 || station > LAST) continue;
+        if (station === LAST && !moving) continue;
+        const done = (index: number) => (station > index ? 1 : station === index && !moving ? dwell : 0);
+        const parse = done(1);
+        const graph = done(2);
+        const chunk = done(3);
+        const write = done(4);
+        const verify = done(5);
+
+        const at = (index: number) => (index === 0 ? 0 : index === LAST ? WIKI_X + 0.5 : stationX(index - 1));
+        let x = at(station);
+        let z = 0;
+        if (moving) {
+          if (station === 0) {
+            x = PILE_X + (0 - PILE_X) * travel;
+            z = 0.3 * (1 - travel) + Math.sin(travel * Math.PI) * 0.12;
+          } else {
+            x = at(station - 1) + (at(station) - at(station - 1)) * travel;
+          }
+        }
+
+        const state: Record<string, number> = {
+          parse: span(parse, 0.05, 0.7),
+          marks: span(parse, 0.7, 0.95),
+          gap: 0.09 * ease(span(chunk, 0.1, 0.55)) * (1 - ease(span(write, 0, 0.35))),
+          rewrite: span(write, 0.3, 0.55),
+          prose: span(write, 0.45, 0.8),
+          cites: span(write, 0.78, 0.95),
+          strike: span(verify, 0.3, 0.55),
+          removed: span(verify, 0.55, 0.8),
+          check: span(verify, 0.75, 1),
+          scan: station === 5 && !moving ? Math.min(1, dwell * 1.05) : -1,
+        };
+        drawItem(key, x, z, state);
+
+        if (station === 2 && !moving) {
+          graphLinks.push({
+            from: project(x + 0.18 * TILE, TILE_Y + 0.14 * TILE, TILE_H),
+            to: stationTop(1, [0.25, 0.72, 0.4, 0.76][key % 4]!, [0.3, 0.25, 0.74, 0.7][key % 4]!),
+            progress: graph,
+            node: key % 4,
+          });
+        }
+      }
+
+      for (const link of graphLinks) {
+        const reach = ease(span(link.progress, 0.05, 0.45));
+        const fade = 1 - span(link.progress, 0.8, 1);
+        const end: Point = [link.from[0] + (link.to[0] - link.from[0]) * reach, link.from[1] + (link.to[1] - link.from[1]) * reach];
+        segment(ctx, link.from, end, rgba(colors.accent, 0.9 * fade), 1.4);
+        if (reach >= 1) {
+          ctx.beginPath();
+          ctx.arc(link.to[0], link.to[1], Math.max(3, scale * 0.07), 0, Math.PI * 2);
+          ctx.fillStyle = rgba(colors.accent, fade);
+          ctx.fill();
+        }
+      }
+
+      if (front) {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.drawImage(front, 0, 0);
+        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      }
+
+      const reading = items[((step % items.length) + items.length) % items.length]!;
+      const filed = items[(((step - LAST) % items.length) + items.length) % items.length]!;
+      const fresh = span(phase, 0, 0.2);
+      const arrived = moving ? 0 : span(dwell, 0, 0.25);
+      tag(project(PILE_X + 0.4, TILE_Y + 0.4, 0.62), [-30, -scale * 1.7], "reading", reading.file, fresh);
+      const below = project(WIKI_X + 1.3, 0.9, -0.3);
+      if (arrived > 0) {
+        tag(below, [-230, scale * 0.3], "filed", filed.title, arrived);
+      } else {
+        const previous = items[(((step - LAST - 1) % items.length) + items.length) % items.length]!;
+        tag(below, [-230, scale * 0.3], "filed", previous.title, 1);
+      }
+    }
+
+    function frame(now: number) {
+      const delta = Math.min(now - last, 64) / 1000;
+      last = now;
+      if (visible && !document.hidden && !reduced.matches) {
+        clock += delta;
+        render(clock);
+      }
+      requestAnimationFrame(frame);
+    }
+
+    // A still frame shows every station mid-task when motion is reduced
+    const still = STEP * 12 + STEP * (MOVE + (1 - MOVE) * 0.62);
+
+    function refresh() {
+      fit();
+      render(reduced.matches ? still : clock);
+    }
+
+    clock = STEP * 8;
+    void document.fonts.ready.then(refresh);
+    refresh();
+    requestAnimationFrame(frame);
+
+    new ResizeObserver(refresh).observe(host);
+    new IntersectionObserver(([entry]) => {
+      visible = entry?.isIntersecting ?? true;
+    }).observe(host);
+    new MutationObserver(() => {
+      colors = read();
+      refresh();
+    }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  }
+
+  document.querySelectorAll<HTMLElement>("[data-pipeline]").forEach(start);
+</script>

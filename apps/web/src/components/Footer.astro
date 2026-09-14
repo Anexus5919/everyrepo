@@ -1,0 +1,104 @@
+---
+import Logo from "./Logo.astro";
+---
+
+<footer class="section site-footer">
+  <div class="frame">
+    <span class="cross l"></span><span class="cross r"></span>
+    <div class="cols">
+      <div class="about">
+        <a class="brand" href="/"><Logo /> EveryRepo</a>
+        <p>
+          A wiki for public GitHub repositories. Every sentence links to the lines of code it was
+          written from.
+        </p>
+      </div>
+      <nav class="links" aria-label="Footer">
+        <a href="/#guide">Repositories</a>
+        <a href="/#wiki">A wiki page</a>
+        <a href="/#method">Method</a>
+        <a href="/#open">Open a repository</a>
+      </nav>
+    </div>
+    <div class="wordmark" aria-hidden="true">EveryRepo</div>
+    <div class="legal">
+      <span>Pages are written from public code at the commit shown on each page.</span>
+      <span class="mono">everyrepo.me</span>
+    </div>
+  </div>
+</footer>
+
+<style>
+  .site-footer {
+    overflow: hidden;
+  }
+
+  .cols {
+    display: flex;
+    justify-content: space-between;
+    gap: 48px;
+    padding: 56px 24px 40px;
+  }
+
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--font-serif);
+    font-size: 21px;
+    font-weight: 600;
+  }
+
+  .about p {
+    margin-top: 14px;
+    max-width: 380px;
+    font-size: var(--t-small);
+    color: var(--text-2);
+  }
+
+  .links {
+    display: grid;
+    grid-template-columns: repeat(2, auto);
+    gap: 10px 48px;
+    align-content: start;
+    font-size: var(--t-ui);
+    color: var(--text-2);
+  }
+
+  .links a:hover {
+    color: var(--text);
+  }
+
+  .wordmark {
+    padding: 0 16px;
+    font-family: var(--font-serif);
+    font-size: clamp(88px, 17.5vw, 232px);
+    line-height: 0.78;
+    font-weight: 500;
+    letter-spacing: -0.045em;
+    color: transparent;
+    -webkit-text-stroke: 1px var(--line);
+    user-select: none;
+    white-space: nowrap;
+  }
+
+  .legal {
+    position: relative;
+    display: flex;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 20px 24px 28px;
+    border-top: 1px solid var(--line-soft);
+    background: var(--bg);
+    font-size: var(--t-caption);
+    color: var(--text-3);
+  }
+
+  @media (max-width: 720px) {
+    .cols,
+    .legal {
+      flex-direction: column;
+      padding-inline: 0;
+    }
+  }
+</style>

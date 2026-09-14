@@ -31,6 +31,9 @@ TypeScript source directly and run with tsx. Tests use Vitest.
   - `wiki <owner/repo> [--until <stage>]` generates wiki content for the indexed snapshot (stages:
     summarize, plan, write, glossary); a used-up model allowance pauses the job and a rerun resumes it
   - `export <owner/repo> [--out <dir>]` writes the generated pages as Markdown files for review
+  - `site [--out <dir>]` writes the JSON the website is built from (`site` in dataDir by default)
+- `pnpm --filter @everyrepo/web dev` runs the website; it reads the site JSON from `EVERYREPO_SITE_DATA`
+  or from `dataDir/site`
 - `pnpm --filter @everyrepo/db db:generate` regenerates SQL migrations after schema changes.
 
 ## Layout
@@ -67,7 +70,9 @@ TypeScript source directly and run with tsx. Tests use Vitest.
 - `packages/eval`: gold question sets and retrieval metrics
 - `packages/pipeline`: index stage handlers, cost estimate, snapshot report
 - `packages/cli`: the `everyrepo` command
-- `apps/`: web app and worker, added later
+- `apps/web`: the Astro website. Pages are static and built from the site JSON; styles are plain CSS with
+  theme tokens in `src/styles/global.css` (dark by default, light on request), and the hero visuals are a
+  canvas line bundle, an SVG block assembly and SVG traces
 
 ## Rules
 

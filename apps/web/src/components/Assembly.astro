@@ -1,0 +1,364 @@
+---
+interface Props {
+  files: string;
+  packages: string;
+  pages: string;
+}
+const { files, packages, pages } = Astro.props;
+
+const S = 56;
+const K = (S * Math.sqrt(3)) / 2;
+const H = S / 2;
+const CX = 300;
+const CY = 292;
+
+type Point = [number, number, number];
+const project = ([x, y, z]: Point) => [CX + (x - y) * K, CY + (x + y) * H - z * S] as const;
+const polygon = (points: Point[]) =>
+  points
+    .map(project)
+    .map(([px, py]) => `${px.toFixed(1)},${py.toFixed(1)}`)
+    .join(" ");
+
+interface Cube {
+  x: number;
+  y: number;
+  z: number;
+  label?: string;
+  mover?: "x" | "y";
+}
+
+// A stepped block of pipeline stages rising toward the back corner
+const cubes: Cube[] = [
+  { x: 0, y: 0, z: 0 },
+  { x: 1, y: 0, z: 0 },
+  { x: 0, y: 1, z: 0 },
+  { x: 2, y: 0, z: 0 },
+  { x: 1, y: 1, z: 0 },
+  { x: 0, y: 2, z: 0 },
+  { x: 2, y: 1, z: 0, label: "parse" },
+  { x: 1, y: 2, z: 0, label: "graph" },
+  { x: 2, y: 2, z: 0, label: "source" },
+  { x: 0, y: 0, z: 1 },
+  { x: 1, y: 0, z: 1 },
+  { x: 0, y: 1, z: 1 },
+  { x: 2, y: 0, z: 1, label: "chunk", mover: "x" },
+  { x: 1, y: 1, z: 1, label: "embed" },
+  { x: 0, y: 2, z: 1, label: "plan", mover: "y" },
+  { x: 0, y: 0, z: 2 },
+  { x: 1, y: 0, z: 2, label: "write" },
+  { x: 0, y: 1, z: 2, label: "verify" },
+  { x: 0, y: 0, z: 3 },
+];
+
+const faces = (x: number, y: number, z: number, size = 1) => ({
+  top: polygon([
+    [x, y, z + size],
+    [x + size, y, z + size],
+    [x + size, y + size, z + size],
+    [x, y + size, z + size],
+  ]),
+  left: polygon([
+    [x, y + size, z],
+    [x + size, y + size, z],
+    [x + size, y + size, z + size],
+    [x, y + size, z + size],
+  ]),
+  right: polygon([
+    [x + size, y, z],
+    [x + size, y + size, z],
+    [x + size, y + size, z + size],
+    [x + size, y, z + size],
+  ]),
+});
+
+const shift = (axis: "x" | "y", units: number) =>
+  axis === "x"
+    ? { dx: (units * K).toFixed(1), dy: (units * H).toFixed(1) }
+    : { dx: (-units * K).toFixed(1), dy: (units * H).toFixed(1) };
+
+const rendered = cubes.map((cube, index) => {
+  const axis = (cube.x + cube.y + cube.z) % 2 === 0 ? "x" : "y";
+  const enter = shift(axis, 2.4);
+  const move = cube.mover ? shift(cube.mover, 1.15) : undefined;
+  const [lx, ly] = project([cube.x + 0.5, cube.y + 0.5, cube.z + 1]);
+  return {
+    ...cube,
+    faces: faces(cube.x, cube.y, cube.z),
+    style: [
+      `--fx:${enter.dx}px`,
+      `--fy:${enter.dy}px`,
+      `--i:${index}`,
+      move ? `--mx:${move.dx}px` : "",
+      move ? `--my:${move.dy}px` : "",
+    ]
+      .filter(Boolean)
+      .join(";"),
+    labelTransform: `matrix(0.866 0.5 -0.866 0.5 ${lx.toFixed(1)} ${ly.toFixed(1)})`,
+  };
+});
+
+const token = faces(0.33, 0.33, 4, 0.34);
+const hop = shift("x", 0.3);
+
+const floor: string[] = [];
+for (let n = -4; n <= 7; n += 1) {
+  floor.push(`M${polygon([[n, -4, 0]])} L${polygon([[n, 7, 0]])}`);
+  floor.push(`M${polygon([[-4, n, 0]])} L${polygon([[7, n, 0]])}`);
+}
+
+const [topX, topY] = project([0.5, 0.5, 4.34]);
+const [baseX, baseY] = project([0, 2.6, 0.5]);
+const [sideX, sideY] = project([3, 2.4, 0.5]);
+---
+
+<svg
+  class="assembly"
+  viewBox="0 0 600 560"
+  role="img"
+  aria-label="Blocks for each stage of reading a repository slide into place"
+>
+  <defs>
+    <linearGradient id="cube-top" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" style="stop-color: var(--cube-top-a)"></stop>
+      <stop offset="1" style="stop-color: var(--cube-top-b)"></stop>
+    </linearGradient>
+    <linearGradient id="cube-left" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" style="stop-color: var(--cube-left-a)"></stop>
+      <stop offset="1" style="stop-color: var(--cube-left-b)"></stop>
+    </linearGradient>
+    <linearGradient id="cube-right" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" style="stop-color: var(--cube-right-a)"></stop>
+      <stop offset="1" style="stop-color: var(--cube-right-b)"></stop>
+    </linearGradient>
+    <radialGradient id="floor-fade" cx="0.5" cy="0.62" r="0.5">
+      <stop offset="0" stop-color="#fff" stop-opacity="1"></stop>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"></stop>
+    </radialGradient>
+    <mask id="floor-mask">
+      <rect width="600" height="560" fill="url(#floor-fade)"></rect>
+    </mask>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" style="stop-color: var(--accent); stop-opacity: 0.32"></stop>
+      <stop offset="1" style="stop-color: var(--accent); stop-opacity: 0"></stop>
+    </radialGradient>
+  </defs>
+
+  <g class="floor" mask="url(#floor-mask)">
+    <path d={floor.join(" ")}></path>
+  </g>
+  <ellipse class="glow" cx="300" cy="360" rx="260" ry="150" fill="url(#glow)"></ellipse>
+
+  <g class="cubes">
+    {
+      rendered.map((cube) => (
+        <g class:list={["cube", cube.mover && `mover mover-${cube.mover}`]} style={cube.style}>
+          <polygon class="face right" points={cube.faces.right} />
+          <polygon class="face left" points={cube.faces.left} />
+          <polygon class="face top" points={cube.faces.top} />
+          {cube.label && (
+            <text class="label" transform={cube.labelTransform}>
+              {cube.label}
+            </text>
+          )}
+        </g>
+      ))
+    }
+    <g class="token" style={`--hx:${hop.dx}px;--hy:${hop.dy}px`}>
+      <polygon class="token-right" points={token.right}></polygon>
+      <polygon class="token-left" points={token.left}></polygon>
+      <polygon class="token-top" points={token.top}></polygon>
+    </g>
+  </g>
+
+  <g class="callouts">
+    <g class="callout" style="--d: 0">
+      <circle cx={topX} cy={topY - 4} r="2.5"></circle>
+      <path d={`M${topX + 4} ${topY - 4} H ${topX + 118} V 44 H 452`}></path>
+      <rect x="452" y="31" width="132" height="26" rx="4"></rect>
+      <text x="518" y="48.5">{pages}</text>
+    </g>
+    <g class="callout" style="--d: 1">
+      <circle cx={baseX} cy={baseY} r="2.5"></circle>
+      <path d={`M${baseX - 4} ${baseY} H 150 V 452 H 138`}></path>
+      <rect x="6" y="439" width="132" height="26" rx="4"></rect>
+      <text x="72" y="456.5">{files}</text>
+    </g>
+    <g class="callout" style="--d: 2">
+      <circle cx={sideX} cy={sideY} r="2.5"></circle>
+      <path d={`M${sideX + 4} ${sideY} H 440 V 470 H 452`}></path>
+      <rect x="452" y="457" width="132" height="26" rx="4"></rect>
+      <text x="518" y="474.5">{packages}</text>
+    </g>
+  </g>
+</svg>
+
+<style>
+  .assembly {
+    width: 100%;
+    height: auto;
+    overflow: visible;
+  }
+
+  .floor path {
+    fill: none;
+    stroke: var(--line);
+    stroke-width: 1;
+  }
+
+  .face {
+    stroke: var(--cube-edge);
+    stroke-width: 0.8;
+    stroke-linejoin: round;
+  }
+
+  .top {
+    fill: url(#cube-top);
+  }
+
+  .left {
+    fill: url(#cube-left);
+  }
+
+  .right {
+    fill: url(#cube-right);
+  }
+
+  .label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    fill: var(--cube-label);
+    text-anchor: middle;
+    dominant-baseline: middle;
+  }
+
+  .cube {
+    animation: enter 950ms var(--ease-out) both;
+    animation-delay: calc(200ms + var(--i) * 60ms);
+  }
+
+  .mover-x {
+    animation:
+      enter 950ms var(--ease-out) both,
+      shuttle 6.4s var(--ease) 3s infinite;
+    animation-delay: calc(200ms + var(--i) * 60ms), 3s;
+  }
+
+  .mover-y {
+    animation:
+      enter 950ms var(--ease-out) both,
+      shuttle 6.4s var(--ease) 6.2s infinite;
+    animation-delay: calc(200ms + var(--i) * 60ms), 6.2s;
+  }
+
+  .token {
+    animation:
+      token-in 700ms var(--ease-out) 1.6s both,
+      hop 5.2s var(--ease) 3.8s infinite;
+  }
+
+  .token-top {
+    fill: #3a3631;
+  }
+
+  .token-left {
+    fill: var(--cube-dark);
+  }
+
+  .token-right {
+    fill: #0f0e0c;
+  }
+
+  .callout {
+    animation: fade 600ms ease both;
+    animation-delay: calc(2s + var(--d) * 180ms);
+  }
+
+  .callout circle {
+    fill: var(--accent);
+  }
+
+  .callout path {
+    fill: none;
+    stroke: var(--text-3);
+    stroke-width: 1;
+    stroke-dasharray: 2 3;
+  }
+
+  .callout rect {
+    fill: var(--panel);
+    stroke: var(--line);
+  }
+
+  .callout text {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    fill: var(--text-2);
+    text-anchor: middle;
+  }
+
+  @keyframes enter {
+    from {
+      opacity: 0;
+      transform: translate(var(--fx), var(--fy));
+    }
+    35% {
+      opacity: 1;
+    }
+    to {
+      opacity: 1;
+      transform: translate(0, 0);
+    }
+  }
+
+  @keyframes shuttle {
+    0%,
+    42% {
+      transform: translate(0, 0);
+    }
+    58%,
+    72% {
+      transform: translate(var(--mx), var(--my));
+    }
+    88%,
+    100% {
+      transform: translate(0, 0);
+    }
+  }
+
+  @keyframes token-in {
+    from {
+      opacity: 0;
+      transform: translateY(-40px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes hop {
+    0%,
+    40% {
+      transform: translate(0, 0);
+    }
+    52%,
+    70% {
+      transform: translate(var(--hx), var(--hy));
+    }
+    82%,
+    100% {
+      transform: translate(0, 0);
+    }
+  }
+
+  @keyframes fade {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+</style>

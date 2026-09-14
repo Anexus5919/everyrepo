@@ -8,3 +8,11 @@ export {
 } from "./local-config.ts";
 export { testRepos, type TestRepo } from "./test-repos.ts";
 export * from "./vocabulary.ts";
+export type {
+  SiteCitation,
+  SiteGlossaryTerm,
+  SitePage,
+  SiteReadingItem,
+  SiteRepo,
+  SiteWiki,
+} from "./site.ts";

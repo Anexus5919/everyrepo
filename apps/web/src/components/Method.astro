@@ -1,0 +1,391 @@
+---
+const steps = [
+  {
+    number: "01",
+    title: "Read the code",
+    text: "Every file is parsed and linked by its imports, then grouped into areas, so pages follow how the code is organized rather than how folders are named.",
+  },
+  {
+    number: "02",
+    title: "Write from sources",
+    text: "Each paragraph is written from numbered excerpts of the code and has to name the excerpts it relies on.",
+  },
+  {
+    number: "03",
+    title: "Check every sentence",
+    text: "Sentences without a source, names the cited code does not contain and snippets not copied from it are removed before a page goes live.",
+  },
+];
+---
+
+<div class="method" data-reveal>
+  {
+    steps.map((step, index) => (
+      <div class="step">
+        <div class="art" aria-hidden="true">
+          {index === 0 && (
+            <svg viewBox="0 0 320 180" class="read">
+              <g class="files">
+                <rect x="20" y="26" width="92" height="14" rx="3" />
+                <rect x="20" y="58" width="72" height="14" rx="3" />
+                <rect x="20" y="90" width="100" height="14" rx="3" />
+                <rect x="20" y="122" width="80" height="14" rx="3" />
+              </g>
+              <g class="edges">
+                <path d="M112 33 C 170 33 170 52 222 52" style="--n:0" />
+                <path d="M92 65 C 160 65 160 52 222 52" style="--n:1" />
+                <path d="M120 97 C 170 97 180 118 250 118" style="--n:2" />
+                <path d="M100 129 C 170 129 180 118 250 118" style="--n:3" />
+                <path d="M222 52 C 260 52 262 84 290 90" style="--n:4" />
+                <path d="M250 118 C 272 118 276 98 290 90" style="--n:5" />
+              </g>
+              <g class="nodes">
+                <circle cx="222" cy="52" r="6" style="--n:1" />
+                <circle cx="250" cy="118" r="6" style="--n:3" />
+                <circle cx="290" cy="90" r="8" class="root" style="--n:5" />
+              </g>
+            </svg>
+          )}
+          {index === 1 && (
+            <svg viewBox="0 0 320 180" class="write">
+              <g class="sources">
+                <rect x="20" y="20" width="54" height="24" rx="4" />
+                <text x="47" y="36">S1</text>
+                <rect x="94" y="20" width="54" height="24" rx="4" />
+                <text x="121" y="36">S2</text>
+                <rect x="168" y="20" width="54" height="24" rx="4" />
+                <text x="195" y="36">S3</text>
+              </g>
+              <g class="text-lines">
+                <rect x="20" y="84" width="226" height="8" rx="4" style="--n:0" />
+                <rect x="20" y="108" width="196" height="8" rx="4" style="--n:1" />
+                <rect x="20" y="132" width="236" height="8" rx="4" style="--n:2" />
+              </g>
+              <g class="links">
+                <path d="M47 44 V 64 Q 47 72 55 72 H 256 Q 264 72 264 80 V 82" style="--n:0" />
+                <path d="M195 44 V 56 Q 195 62 201 62 H 290 Q 298 62 298 70 V 128" style="--n:2" />
+              </g>
+              <g class="chips">
+                <rect x="254" y="80" width="20" height="16" rx="3" style="--n:0" />
+                <rect x="226" y="104" width="20" height="16" rx="3" style="--n:1" />
+                <rect x="266" y="128" width="20" height="16" rx="3" style="--n:2" />
+              </g>
+            </svg>
+          )}
+          {index === 2 && (
+            <svg viewBox="0 0 320 180" class="check">
+              <g class="rows">
+                <rect x="20" y="30" width="210" height="8" rx="4" />
+                <rect x="20" y="66" width="236" height="8" rx="4" class="struck" />
+                <rect x="20" y="102" width="190" height="8" rx="4" />
+                <rect x="20" y="138" width="222" height="8" rx="4" />
+              </g>
+              <path class="strike" d="M14 70 H 262" />
+              <g class="ticks">
+                <path d="M270 30 l6 6 l12 -12" style="--n:0" />
+                <path d="M270 102 l6 6 l12 -12" style="--n:1" />
+                <path d="M270 138 l6 6 l12 -12" style="--n:2" />
+              </g>
+              <text class="removed" x="270" y="74">
+                no source
+              </text>
+            </svg>
+          )}
+        </div>
+        <span class="number mono">{step.number}</span>
+        <h3>{step.title}</h3>
+        <p>{step.text}</p>
+      </div>
+    ))
+  }
+</div>
+
+<script>
+  const observer = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        entry.target.classList.toggle("is-playing", entry.isIntersecting);
+      }
+    },
+    { threshold: 0.3 },
+  );
+  document.querySelectorAll("[data-reveal]").forEach((element) => observer.observe(element));
+</script>
+
+<style>
+  .method {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    border-block: 1px solid var(--line-soft);
+  }
+
+  .step {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 28px 28px 36px;
+  }
+
+  .step + .step {
+    border-left: 1px solid var(--line-soft);
+  }
+
+  .art {
+    height: 180px;
+    margin: -4px -4px 18px;
+    border: 1px solid var(--line-soft);
+    border-radius: 8px;
+    background:
+      linear-gradient(var(--line-soft) 1px, transparent 1px) 0 0 / 20px 20px,
+      linear-gradient(90deg, var(--line-soft) 1px, transparent 1px) 0 0 / 20px 20px,
+      var(--bg-raise);
+    overflow: hidden;
+  }
+
+  .art svg {
+    width: 100%;
+    height: 100%;
+  }
+
+  .number {
+    font-size: var(--t-caption);
+    color: var(--accent);
+  }
+
+  h3 {
+    font-size: var(--t-h3);
+    line-height: 1.25;
+  }
+
+  p {
+    font-size: var(--t-small);
+    line-height: 1.6;
+    color: var(--text-2);
+  }
+
+  svg rect,
+  svg path,
+  svg circle {
+    vector-effect: non-scaling-stroke;
+  }
+
+  .files rect,
+  .sources rect,
+  .rows rect,
+  .text-lines rect {
+    fill: var(--panel-2);
+    stroke: var(--line);
+  }
+
+  .sources text,
+  .removed {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    fill: var(--text-2);
+    text-anchor: middle;
+  }
+
+  .removed {
+    text-anchor: start;
+    fill: var(--accent);
+    opacity: 0;
+  }
+
+  .edges path,
+  .links path {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 1.2;
+    stroke-dasharray: 300;
+    stroke-dashoffset: 300;
+  }
+
+  .nodes circle {
+    fill: var(--bg);
+    stroke: var(--accent);
+    stroke-width: 1.2;
+    transform-box: fill-box;
+    transform-origin: center;
+    transform: scale(0);
+  }
+
+  .nodes .root {
+    fill: var(--accent);
+  }
+
+  .chips rect {
+    fill: var(--accent);
+    opacity: 0;
+  }
+
+  .strike {
+    stroke: var(--accent);
+    stroke-width: 1.4;
+    stroke-dasharray: 260;
+    stroke-dashoffset: 260;
+  }
+
+  .ticks path {
+    fill: none;
+    stroke: var(--accent-2);
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-dasharray: 30;
+    stroke-dashoffset: 30;
+  }
+
+  .is-playing .edges path {
+    animation: draw 5s var(--ease) infinite;
+    animation-delay: calc(var(--n) * 160ms);
+  }
+
+  .is-playing .nodes circle {
+    animation: pop 5s var(--ease-out) infinite;
+    animation-delay: calc(var(--n) * 160ms + 300ms);
+  }
+
+  .is-playing .links path {
+    animation: draw 5s var(--ease) infinite;
+    animation-delay: calc(var(--n) * 300ms + 200ms);
+  }
+
+  .is-playing .chips rect {
+    animation: chip 5s var(--ease-out) infinite;
+    animation-delay: calc(var(--n) * 300ms + 700ms);
+  }
+
+  .is-playing .strike {
+    animation: draw 5s var(--ease) 600ms infinite;
+  }
+
+  .is-playing .struck {
+    animation: fade-row 5s ease 600ms infinite;
+  }
+
+  .is-playing .removed {
+    animation: label 5s ease 600ms infinite;
+  }
+
+  .is-playing .ticks path {
+    animation: draw-short 5s var(--ease) infinite;
+    animation-delay: calc(var(--n) * 220ms + 1400ms);
+  }
+
+  @keyframes draw {
+    0% {
+      stroke-dashoffset: 300;
+    }
+    30%,
+    80% {
+      stroke-dashoffset: 0;
+    }
+    100% {
+      stroke-dashoffset: -300;
+    }
+  }
+
+  @keyframes draw-short {
+    0% {
+      stroke-dashoffset: 30;
+    }
+    20%,
+    80% {
+      stroke-dashoffset: 0;
+    }
+    100% {
+      stroke-dashoffset: 30;
+    }
+  }
+
+  @keyframes pop {
+    0% {
+      transform: scale(0);
+    }
+    20%,
+    80% {
+      transform: scale(1);
+    }
+    100% {
+      transform: scale(0);
+    }
+  }
+
+  @keyframes chip {
+    0% {
+      opacity: 0;
+    }
+    18%,
+    80% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+
+  @keyframes fade-row {
+    0%,
+    25% {
+      opacity: 1;
+    }
+    45%,
+    85% {
+      opacity: 0.25;
+    }
+    100% {
+      opacity: 1;
+    }
+  }
+
+  @keyframes label {
+    0%,
+    30% {
+      opacity: 0;
+    }
+    45%,
+    85% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .edges path,
+    .links path,
+    .strike,
+    .ticks path {
+      animation: none !important;
+      stroke-dashoffset: 0;
+    }
+
+    .nodes circle {
+      animation: none !important;
+      transform: scale(1);
+    }
+
+    .chips rect,
+    .removed {
+      animation: none !important;
+      opacity: 1;
+    }
+
+    .struck {
+      animation: none !important;
+      opacity: 0.25;
+    }
+  }
+
+  @media (max-width: 900px) {
+    .method {
+      grid-template-columns: 1fr;
+    }
+
+    .step + .step {
+      border-left: 0;
+      border-top: 1px solid var(--line-soft);
+    }
+  }
+</style>

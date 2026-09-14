@@ -1,0 +1,595 @@
+---
+import Arrow from "../components/Arrow.astro";
+import Assembly from "../components/Assembly.astro";
+import HeroFlow from "../components/HeroFlow.astro";
+import Method from "../components/Method.astro";
+import RepoGrid from "../components/RepoGrid.astro";
+import Traces from "../components/Traces.astro";
+import WikiPreview from "../components/WikiPreview.astro";
+import Base from "../layouts/Base.astro";
+import { formatCount } from "../lib/format.ts";
+import { loadRepos, loadWiki } from "../lib/site-data.ts";
+
+const repos = loadRepos();
+const ready = repos.filter((repo) => repo.status === "ready");
+const featured = ready.find((repo) => repo.repo === "mui/mui-x") ?? ready[0];
+if (!featured) throw new Error("No written wiki to feature; run the site command");
+const wiki = loadWiki(featured.repo);
+const next = repos.find((repo) => repo.status !== "ready");
+
+const totalFiles = repos.reduce((sum, repo) => sum + repo.files, 0);
+const totalPages = ready.reduce((sum, repo) => sum + repo.pages, 0);
+const totalCitations = ready
+  .map((repo) => loadWiki(repo.repo))
+  .reduce(
+    (sum, item) => sum + item.wikiPages.reduce((count, page) => count + page.citations.length, 0),
+    0,
+  );
+
+const knownRepos = repos.map((repo) => ({ repo: repo.repo, status: repo.status }));
+const examples = ready.slice(0, 3).map((repo) => repo.repo);
+---
+
+<Base
+  title="EveryRepo: a wiki for any public GitHub repository"
+  description="EveryRepo writes a wiki for public GitHub repositories. Every sentence links to the lines of code it was written from."
+  status={`${repos.length} repositories · ${formatCount(totalFiles)} files read`}
+>
+  <section class="hero" data-flow-host>
+    <div class="hero-bg" aria-hidden="true">
+      <div class="hero-grid"></div>
+      <Traces />
+      <HeroFlow />
+    </div>
+
+    <div class="frame hero-inner">
+      <div class="hero-copy">
+        {
+          next && (
+            <a class="live-chip" href="#guide">
+              <span class="chip-state">
+                <span class="dot" />
+                {next.status === "indexing" ? "Reading now" : "Next in the guide"}
+              </span>
+              <span class="chip-repo mono">{next.repo}</span>
+              <span class="chip-meta mono">{formatCount(next.files)} files</span>
+              <Arrow />
+            </a>
+          )
+        }
+        <h1 class="display">Read any codebase like you <em>already work there.</em></h1>
+        <p class="lead">
+          EveryRepo writes a wiki for public GitHub repositories: how the code is organized, which
+          files to open first, and a source for every sentence, linked to the exact lines.
+        </p>
+        <form class="open-form" id="open" data-open-form>
+          <label class="field">
+            <span class="sr-only">Repository</span>
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              aria-hidden="true"
+              ><circle cx="11" cy="11" r="6.5"></circle><path d="M16 16l4.5 4.5"></path></svg
+            >
+            <input
+              name="repo"
+              placeholder="owner/repo or a GitHub link"
+              autocomplete="off"
+              spellcheck="false"
+              data-open-input
+            />
+            <kbd class="mono">/</kbd>
+          </label>
+          <button class="btn btn-solid btn-lg" type="submit">Open the wiki <Arrow /></button>
+        </form>
+        <p class="form-note" data-open-note aria-live="polite"></p>
+        <div class="try">
+          <span>Try</span>
+          {
+            examples.map((repo) => (
+              <a class="pill mono" href={`/${repo}`}>
+                {repo}
+              </a>
+            ))
+          }
+        </div>
+      </div>
+
+      <div class="hero-art" data-flow-target>
+        <Assembly
+          files={`${formatCount(featured.files)} files read`}
+          packages={`${featured.packages} packages`}
+          pages={`${featured.pages} pages written`}
+        />
+      </div>
+    </div>
+
+    <div class="frame hero-stats">
+      <div class="stat">
+        <span class="value">{repos.length}</span><span class="label">repositories read</span>
+      </div>
+      <div class="stat">
+        <span class="value">{formatCount(totalFiles)}</span><span class="label">files parsed</span>
+      </div>
+      <div class="stat">
+        <span class="value">{totalPages}</span><span class="label">wiki pages written</span>
+      </div>
+      <div class="stat">
+        <span class="value">{formatCount(totalCitations)}</span><span class="label"
+          >citations to exact lines</span
+        >
+      </div>
+    </div>
+  </section>
+
+  <section class="section block" id="wiki">
+    <div class="frame">
+      <span class="cross l"></span><span class="cross r"></span>
+      <div class="block-head">
+        <div>
+          <span class="eyebrow"><span class="num">01</span> A wiki page</span>
+          <h2 class="title">Every sentence points at the code it came from.</h2>
+        </div>
+        <p class="block-text">
+          This is a real page from the {featured.name} wiki. Click a number to open the lines it cites.
+          Nothing on a page is written without a source.
+        </p>
+      </div>
+      <WikiPreview wiki={wiki} slug="data-grid-premium" focus="formula" />
+    </div>
+  </section>
+
+  <section class="section block" id="guide">
+    <div class="frame">
+      <span class="cross l"></span><span class="cross r"></span>
+      <div class="block-head">
+        <div>
+          <span class="eyebrow"><span class="num">02</span> In the guide</span>
+          <h2 class="title">Wikis are built once and shared with everyone.</h2>
+        </div>
+        <p class="block-text">
+          Anyone can request a public repository. The first request starts the reading; everyone
+          after gets the finished wiki.
+        </p>
+      </div>
+    </div>
+    <div class="frame grid-frame">
+      <RepoGrid repos={repos} />
+    </div>
+  </section>
+
+  <section class="section block" id="method">
+    <div class="frame">
+      <span class="cross l"></span><span class="cross r"></span>
+      <div class="block-head">
+        <div>
+          <span class="eyebrow"><span class="num">03</span> Method</span>
+          <h2 class="title">How a page is made.</h2>
+        </div>
+        <p class="block-text">
+          Pages come from the code itself at a pinned commit, not from what the project says about
+          itself.
+        </p>
+      </div>
+    </div>
+    <div class="frame grid-frame">
+      <Method />
+    </div>
+  </section>
+
+  <section class="section closing">
+    <div class="frame">
+      <span class="cross l"></span><span class="cross r"></span>
+      <div class="closing-inner">
+        <h2 class="title">Open any public repository.</h2>
+        <p class="block-text">Paste a link. If its wiki is written, you are reading it in a second.</p>
+        <a class="btn btn-solid btn-lg" href="#open">Open a repository <Arrow /></a>
+      </div>
+    </div>
+  </section>
+
+  <script is:inline type="application/json" id="known-repos" set:html={JSON.stringify(knownRepos)} />
+</Base>
+
+<script>
+  const form = document.querySelector<HTMLFormElement>("[data-open-form]");
+  const input = document.querySelector<HTMLInputElement>("[data-open-input]");
+  const note = document.querySelector<HTMLElement>("[data-open-note]");
+  const known = JSON.parse(document.getElementById("known-repos")?.textContent ?? "[]") as Array<{
+    repo: string;
+    status: string;
+  }>;
+
+  form?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (!input || !note) return;
+    const value = input.value.trim().replace(/\.git$/, "");
+    const match = /(?:github\.com[/:])?([\w.-]+)\/([\w.-]+)\/?(?:[#?].*)?$/i.exec(value);
+    if (!match) {
+      note.textContent = "Enter a repository as owner/repo or paste its GitHub link.";
+      return;
+    }
+    const name = `${match[1]}/${match[2]}`;
+    const entry = known.find((item) => item.repo.toLowerCase() === name.toLowerCase());
+    if (entry?.status === "ready") {
+      window.location.href = `/${entry.repo}`;
+    } else if (entry) {
+      note.textContent = `${entry.repo} is already in the queue. Its wiki is being prepared.`;
+    } else {
+      note.textContent = `${name} is not in the guide yet. Requests open soon.`;
+    }
+  });
+
+  document.addEventListener("keydown", (event) => {
+    const target = event.target as HTMLElement;
+    if (event.key !== "/" || target.closest("input, textarea")) return;
+    event.preventDefault();
+    input?.focus();
+  });
+</script>
+
+<style>
+  .hero {
+    position: relative;
+    z-index: 2;
+    overflow: hidden;
+  }
+
+  .hero-bg {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  .hero-grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(var(--line-soft) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line-soft) 1px, transparent 1px);
+    background-size: 64px 64px;
+    background-position: center -1px;
+    mask-image: radial-gradient(ellipse 75% 70% at 65% 45%, #000 10%, transparent 72%);
+    opacity: 0.7;
+  }
+
+  .hero-inner {
+    display: grid;
+    grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr);
+    align-items: center;
+    gap: 24px;
+    min-height: 700px;
+    padding: 72px 24px 56px;
+  }
+
+  .hero-copy {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 26px;
+  }
+
+  .live-chip {
+    display: inline-flex;
+    align-items: stretch;
+    height: 34px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: color-mix(in oklab, var(--bg) 70%, transparent);
+    font-size: var(--t-caption);
+    color: var(--text-2);
+    transition: border-color 160ms ease;
+  }
+
+  .live-chip:hover {
+    border-color: var(--text-3);
+  }
+
+  .live-chip > * {
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+  }
+
+  .live-chip > * + * {
+    border-left: 1px solid var(--line);
+  }
+
+  .live-chip :global(svg) {
+    padding: 0 10px;
+    box-sizing: content-box;
+    height: 100%;
+    color: var(--text-3);
+  }
+
+  .chip-state {
+    gap: 8px;
+    color: var(--text);
+    white-space: nowrap;
+  }
+
+  .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+    animation: blink 2.4s ease-in-out infinite;
+  }
+
+  .chip-repo {
+    color: var(--text);
+    font-size: var(--t-label);
+  }
+
+  .chip-meta {
+    font-size: var(--t-label);
+    color: var(--accent);
+  }
+
+  .display {
+    font-size: var(--t-display);
+    line-height: 1.02;
+    letter-spacing: -0.02em;
+    max-width: 640px;
+  }
+
+  .display em {
+    font-style: italic;
+    color: var(--accent-2);
+  }
+
+  .lead {
+    max-width: 560px;
+    font-size: var(--t-lead);
+    line-height: 1.55;
+    color: var(--text-2);
+  }
+
+  .open-form {
+    display: flex;
+    gap: 10px;
+    width: 100%;
+    max-width: 580px;
+  }
+
+  .field {
+    flex-grow: 1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 52px;
+    padding: 0 12px 0 16px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: color-mix(in oklab, var(--panel) 88%, transparent);
+    color: var(--text-3);
+    transition: border-color 160ms ease;
+  }
+
+  .field:focus-within {
+    border-color: var(--accent);
+  }
+
+  .field input {
+    flex-grow: 1;
+    min-width: 0;
+    height: 100%;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    font-size: var(--t-small);
+    color: var(--text);
+  }
+
+  .field input::placeholder {
+    color: var(--text-3);
+  }
+
+  kbd {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    font-size: var(--t-label);
+    color: var(--text-3);
+  }
+
+  .form-note {
+    min-height: 0;
+    margin-top: -14px;
+    font-size: var(--t-caption);
+    color: var(--accent-2);
+  }
+
+  .form-note:empty {
+    display: none;
+  }
+
+  .try {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    font-size: var(--t-ui);
+    color: var(--text-3);
+  }
+
+  .pill {
+    padding: 3px 10px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    font-size: var(--t-caption);
+    color: var(--text-2);
+    background: color-mix(in oklab, var(--bg) 70%, transparent);
+    transition:
+      border-color 160ms ease,
+      color 160ms ease;
+  }
+
+  .pill:hover {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+
+  .hero-art {
+    position: relative;
+    width: 100%;
+    max-width: 600px;
+    justify-self: end;
+  }
+
+  .hero-stats {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    border-top: 1px solid var(--line-soft);
+    background: color-mix(in oklab, var(--bg) 60%, transparent);
+    backdrop-filter: blur(6px);
+  }
+
+  .stat {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 22px 24px 26px;
+  }
+
+  .stat + .stat {
+    border-left: 1px solid var(--line-soft);
+  }
+
+  .value {
+    font-family: var(--font-serif);
+    font-size: var(--t-h2);
+    line-height: 1.1;
+  }
+
+  .label {
+    font-size: var(--t-caption);
+    color: var(--text-3);
+  }
+
+  .block {
+    padding-top: 88px;
+  }
+
+  .block > .frame:first-child {
+    padding: 0 24px;
+  }
+
+  .block-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+    align-items: end;
+    gap: 48px;
+    margin-bottom: 44px;
+  }
+
+  .title {
+    margin-top: 16px;
+    font-size: var(--t-title);
+    line-height: 1.08;
+    letter-spacing: -0.015em;
+    max-width: 680px;
+  }
+
+  .block-text {
+    font-size: var(--t-small);
+    line-height: 1.65;
+    color: var(--text-2);
+    max-width: 420px;
+  }
+
+  #wiki .frame {
+    padding-bottom: 88px;
+  }
+
+  .grid-frame {
+    padding-bottom: 88px;
+  }
+
+  .closing {
+    background:
+      radial-gradient(ellipse 60% 90% at 50% 100%, var(--accent-soft), transparent 70%),
+      var(--bg);
+  }
+
+  .closing-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 18px;
+    padding: 112px 24px;
+    text-align: center;
+  }
+
+  .closing-inner .title {
+    margin-top: 0;
+  }
+
+  @keyframes blink {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.35;
+    }
+  }
+
+  @media (max-width: 1000px) {
+    .hero-inner {
+      grid-template-columns: 1fr;
+      padding-top: 56px;
+    }
+
+    .hero-art {
+      justify-self: center;
+      max-width: 520px;
+    }
+
+    .block-head {
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+
+    .hero-stats {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .stat:nth-child(3) {
+      border-left: 0;
+    }
+
+    .stat:nth-child(n + 3) {
+      border-top: 1px solid var(--line-soft);
+    }
+  }
+
+  @media (max-width: 560px) {
+    .open-form {
+      flex-direction: column;
+    }
+
+    .live-chip .chip-meta {
+      display: none;
+    }
+
+    .block {
+      padding-top: 64px;
+    }
+
+    .block > .frame:first-child {
+      padding: 0;
+    }
+  }
+</style>

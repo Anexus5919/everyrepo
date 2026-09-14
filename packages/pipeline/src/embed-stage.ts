@@ -116,7 +116,7 @@ export async function runEmbedStage(input: EmbedInput): Promise<EmbedOutput> {
         `embedded ${embedded}/${missing.length} before the budget ran out; the rest resumes from cache`,
       );
       throw new StageDeferredError(
-        `${stopped.message}; run again after the daily reset (00:00 UTC)`,
+        `${stopped.message}; run again later, the allowance refills as usage from the past 24 hours ages out`,
         {
           cause: stopped,
         },

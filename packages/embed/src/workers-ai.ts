@@ -4,7 +4,7 @@ import { normalize } from "./vector.ts";
 export const WORKERS_AI_PROVIDER = "workers-ai";
 export const WORKERS_AI_MAX_BATCH = 32;
 
-// The daily allowance is used up; work can resume once it resets
+// The allowance is used up; work can resume once past usage ages out
 export class EmbeddingBudgetError extends Error {
   override readonly name = "EmbeddingBudgetError";
 }
@@ -48,7 +48,7 @@ export function createWorkersAiEmbedder(options: WorkersAiEmbedderOptions): Embe
   async function run(body: object): Promise<number[][]> {
     for (let attempt = 1; ; attempt += 1) {
       if (options.canSpend && !options.canSpend()) {
-        throw new EmbeddingBudgetError("the daily embedding budget is used up");
+        throw new EmbeddingBudgetError("the embedding budget for the past 24 hours is used up");
       }
       const response = await doFetch(url, {
         method: "POST",

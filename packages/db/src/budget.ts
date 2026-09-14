@@ -1,5 +1,5 @@
-import { and, eq, sql, sum } from "drizzle-orm";
-import { budgetCounters } from "./app-schema.ts";
+import { and, eq, gte, sql, sum } from "drizzle-orm";
+import { usageCounters } from "./app-schema.ts";
 import type { AppDb } from "./open.ts";
 
 export interface UsageRecord {
@@ -9,30 +9,34 @@ export interface UsageRecord {
   neurons: number;
 }
 
-export function utcDay(date = new Date()): string {
-  return date.toISOString().slice(0, 10);
+const HOUR_MS = 3_600_000;
+
+// UTC hour bucket, for example 2026-09-14T07
+export function hourBucket(date = new Date()): string {
+  return date.toISOString().slice(0, 13);
 }
 
-export function recordUsage(db: AppDb, usage: UsageRecord, day = utcDay()): void {
-  db.insert(budgetCounters)
-    .values({ day, ...usage, requests: 1 })
+export function recordUsage(db: AppDb, usage: UsageRecord, at = new Date()): void {
+  db.insert(usageCounters)
+    .values({ hour: hourBucket(at), ...usage, requests: 1 })
     .onConflictDoUpdate({
-      target: [budgetCounters.day, budgetCounters.provider, budgetCounters.model],
+      target: [usageCounters.hour, usageCounters.provider, usageCounters.model],
       set: {
-        requests: sql`${budgetCounters.requests} + 1`,
-        tokens: sql`${budgetCounters.tokens} + ${usage.tokens}`,
-        neurons: sql`${budgetCounters.neurons} + ${usage.neurons}`,
+        requests: sql`${usageCounters.requests} + 1`,
+        tokens: sql`${usageCounters.tokens} + ${usage.tokens}`,
+        neurons: sql`${usageCounters.neurons} + ${usage.neurons}`,
       },
     })
     .run();
 }
 
-// Free allowances are per account, so usage adds up across models
-export function neuronsUsed(db: AppDb, provider: string, day = utcDay()): number {
+// Neurons across all models in the current hour and the 23 before it; the allowance is per account over a rolling day
+export function neuronsUsedLastDay(db: AppDb, provider: string, now = new Date()): number {
+  const since = hourBucket(new Date(now.getTime() - 23 * HOUR_MS));
   const row = db
-    .select({ neurons: sum(budgetCounters.neurons) })
-    .from(budgetCounters)
-    .where(and(eq(budgetCounters.day, day), eq(budgetCounters.provider, provider)))
+    .select({ neurons: sum(usageCounters.neurons) })
+    .from(usageCounters)
+    .where(and(eq(usageCounters.provider, provider), gte(usageCounters.hour, since)))
     .get();
   return Number(row?.neurons ?? 0);
 }

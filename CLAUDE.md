@@ -48,8 +48,8 @@ TypeScript source directly and run with tsx. Tests use Vitest.
 - `packages/chunk`: syntax-aware code chunks, markdown sections, identifier terms
 - `packages/embed`: embedding providers (Cloudflare Workers AI by default, an optional local server
   exposing /v1/embeddings, a hashing embedder for tests) and vector helpers; vectors are cached per
-  repository by content hash, and Workers AI usage is counted per UTC day against
-  `dailyNeuronBudget`, pausing the job when it is used up
+  repository by content hash, and Workers AI usage is counted in hourly buckets against
+  `dailyNeuronBudget` over a rolling 24 hours, pausing the job when it is used up
 - `packages/search`: FTS5 keyword, vector and hybrid (reciprocal rank fusion) search over chunks
 - `packages/eval`: gold question sets and retrieval metrics
 - `packages/pipeline`: index stage handlers, cost estimate, snapshot report

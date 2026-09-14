@@ -15,6 +15,20 @@
       "when": 1789341681245,
       "tag": "0001_budget_counter",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1789370241164,
+      "tag": "0002_usage_counter",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1789370261919,
+      "tag": "0003_drop_budget_counter",
+      "breakpoints": true
     }
   ]
 }

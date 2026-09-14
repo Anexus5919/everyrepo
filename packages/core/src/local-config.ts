@@ -24,7 +24,7 @@ const workersAiEmbeddingsSchema = z.object({
   dimensions: z.number().int().positive().default(1024),
   batchSize: z.number().int().min(1).max(32).default(32),
   concurrency: z.number().int().min(1).max(16).default(4),
-  // The free allowance is 10,000 neurons per day; the rest is kept for live queries
+  // The free allowance is 10,000 neurons over a rolling 24 hours; the rest is kept for live queries
   dailyNeuronBudget: z.number().positive().default(9_000),
 });
 

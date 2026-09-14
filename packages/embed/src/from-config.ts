@@ -12,8 +12,8 @@ export interface ConfiguredEmbedder {
 export interface EmbedderHooks {
   env?: NodeJS.ProcessEnv;
   onUsage?: (usage: EmbeddingUsage) => void;
-  // Neurons already used today, for providers with a daily allowance
-  neuronsUsedToday?: () => number;
+  // Neurons used over the past 24 hours, for providers with a rolling daily allowance
+  neuronsUsedLastDay?: () => number;
 }
 
 const noServer: LocalServer = { started: false, stop: () => {} };
@@ -32,7 +32,7 @@ export async function openConfiguredEmbedder(
         "Workers AI embeddings need CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN in .env",
       );
     }
-    const { neuronsUsedToday } = hooks;
+    const { neuronsUsedLastDay } = hooks;
     const embedder = createWorkersAiEmbedder({
       accountId,
       apiToken,
@@ -41,8 +41,8 @@ export async function openConfiguredEmbedder(
       batchSize: config.batchSize,
       concurrency: config.concurrency,
       ...(hooks.onUsage ? { onUsage: hooks.onUsage } : {}),
-      ...(neuronsUsedToday
-        ? { canSpend: () => neuronsUsedToday() < config.dailyNeuronBudget }
+      ...(neuronsUsedLastDay
+        ? { canSpend: () => neuronsUsedLastDay() < config.dailyNeuronBudget }
         : {}),
     });
     return { embedder, provider: config.provider, server: noServer };

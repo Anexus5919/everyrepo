@@ -1,6 +1,6 @@
 import { hostname } from "node:os";
 import { formatRepoRef, parseRepoRef } from "@everyrepo/core";
-import { ensureRepo, neuronsUsed } from "@everyrepo/db";
+import { ensureRepo, neuronsUsedLastDay } from "@everyrepo/db";
 import { createIndexHandlers, stagesUntil } from "@everyrepo/pipeline";
 import { claimJob, enqueueJob, findOpenJob, runJob } from "@everyrepo/queue";
 import { Command } from "commander";
@@ -53,7 +53,7 @@ export function indexCommand(): Command {
         const seconds = ((Date.now() - started) / 1000).toFixed(1);
         if (configured?.provider === "workers-ai") {
           log(
-            `Workers AI neurons used today: ${neuronsUsed(context.appDb, configured.provider).toFixed(0)}`,
+            `Workers AI neurons used in the last 24 hours: ${neuronsUsedLastDay(context.appDb, configured.provider).toFixed(0)}`,
           );
         }
         if (result.status !== "succeeded") {

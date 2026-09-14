@@ -73,16 +73,16 @@ export const jobStages = sqliteTable(
   (table) => [primaryKey({ columns: [table.jobId, table.stage] })],
 );
 
-// Paid-service usage per UTC day, checked against free allowances before each call
-export const budgetCounters = sqliteTable(
-  "budget_counter",
+// Provider usage per UTC hour; allowances such as Workers AI's are enforced over a rolling day
+export const usageCounters = sqliteTable(
+  "usage_counter",
   {
-    day: text("day").notNull(),
+    hour: text("hour").notNull(),
     provider: text("provider").notNull(),
     model: text("model").notNull(),
     requests: integer("requests").notNull().default(0),
     tokens: integer("tokens").notNull().default(0),
     neurons: real("neurons").notNull().default(0),
   },
-  (table) => [primaryKey({ columns: [table.day, table.provider, table.model] })],
+  (table) => [primaryKey({ columns: [table.hour, table.provider, table.model] })],
 );

@@ -73,9 +73,10 @@ TypeScript source directly and run with tsx. Tests use Vitest.
 - `apps/web`: the Astro website. Pages are static and built from the site JSON; styles are plain CSS with
   theme tokens in `src/styles/global.css` (dark by default, light on request). On large screens each
   section fills the viewport and scrolling snaps to it. The home page shows every written wiki: the hero
-  canvas takes pages from each repository in turn, the preview has a tab per wiki with a page chosen by
-  `src/lib/showcase.ts`, and the footer wordmark is filled with a moving line texture. Other motion plays
-  on hover or focus
+  canvas takes pages from each repository in turn, and the reader preview has a tab per wiki with a
+  filterable page tree; each written page is also emitted as `/preview/<owner>__<repo>/<slug>.json` and
+  loaded when opened. The footer wordmark is filled with a moving line texture. Other motion plays on
+  hover or focus
 
 ## Rules
 

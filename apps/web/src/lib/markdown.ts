@@ -37,7 +37,12 @@ export async function renderMarkdown(markdown: string): Promise<string> {
       },
     },
   });
-  return await marked.parse(markdown);
+  const html = await marked.parse(markdown);
+  // Neighbouring citations read as one compact group
+  return html.replace(
+    /(?:<a class="cite"[^>]*>\d+<\/a>){2,}/g,
+    (group) => `<span class="cite-group">${group}</span>`,
+  );
 }
 
 // Splits page markdown into its opening paragraphs and its ## sections

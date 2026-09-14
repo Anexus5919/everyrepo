@@ -182,14 +182,15 @@
       ctx.strokeText(TEXT, left, baseline);
     }
 
+    // The next frame is booked first so a failed draw can never stop the loop
     function frame(now: number) {
-      const delta = Math.min(now - last, 64) / 1000;
+      requestAnimationFrame(frame);
+      const delta = Math.min(Math.max(0, now - last), 64) / 1000;
       last = now;
       if (visible && !document.hidden && !reduced.matches) {
         clock += delta;
         draw(clock);
       }
-      requestAnimationFrame(frame);
     }
 
     const refresh = () => {

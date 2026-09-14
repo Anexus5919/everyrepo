@@ -592,11 +592,12 @@ const names = [...new Set(items.map((item) => item.repo))].join(", ");
       ctx.restore();
     }
 
-    const itemFor = (key: number) => items[(key - 1) % items.length]!;
+    const itemFor = (key: number) =>
+      items[(((Math.max(1, key) - 1) % items.length) + items.length) % items.length]!;
 
     function render(time: number) {
-      const step = Math.floor(time / STEP);
-      const phase = time / STEP - step;
+      const step = Math.floor(Math.max(0, time) / STEP);
+      const phase = Math.max(0, time) / STEP - step;
       const moving = phase < MOVE;
       const travel = ease(moving ? phase / MOVE : 1);
       const dwell = moving ? 0 : (phase - MOVE) / (1 - MOVE);
@@ -678,14 +679,15 @@ const names = [...new Set(items.map((item) => item.repo))].join(", ");
       }
     }
 
+    // The next frame is booked first so a failed draw can never stop the loop
     function frame(now: number) {
-      const delta = Math.min(now - last, 64) / 1000;
+      requestAnimationFrame(frame);
+      const delta = Math.min(Math.max(0, now - last), 64) / 1000;
       last = now;
       if (!document.hidden && !reduced.matches) {
         clock += delta;
         if (visible) render(clock);
       }
-      requestAnimationFrame(frame);
     }
 
     // With reduced motion a single frame shows every station in use

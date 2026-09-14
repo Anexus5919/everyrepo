@@ -45,6 +45,11 @@ export class EmbeddingCache {
   }
 }
 
+// Question vectors are shared by all repositories
+export function queryCachePath(dataDir: string): string {
+  return join(dataDir, "cache", "queries.sqlite");
+}
+
 export function embeddingCachePath(dataDir: string, repoDir: string): string {
   return join(dataDir, "engine", repoDir, "embeddings.sqlite");
 }

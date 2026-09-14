@@ -13,5 +13,5 @@ export {
   type EngineDb,
   type EngineExecutor,
 } from "./open.ts";
-export { EmbeddingCache, embeddingCachePath } from "./embedding-cache.ts";
+export { EmbeddingCache, embeddingCachePath, queryCachePath } from "./embedding-cache.ts";
 export { ensureRepo, findRepo, type RepoRow } from "./registry.ts";

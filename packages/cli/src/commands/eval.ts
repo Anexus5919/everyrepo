@@ -1,6 +1,14 @@
+import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { formatRepoRef, parseRepoRef, repoDirName } from "@everyrepo/core";
-import { engineDbPath, findRepo, openEngineDb } from "@everyrepo/db";
+import {
+  EmbeddingCache,
+  engineDbPath,
+  findRepo,
+  openEngineDb,
+  queryCachePath,
+} from "@everyrepo/db";
+import { fromBlob, toBlob, type Embedder } from "@everyrepo/embed";
 import {
   distinctPaths,
   loadGoldSets,
@@ -40,6 +48,31 @@ interface QuestionResult {
   top: string[];
 }
 
+// Re-running the eval reuses question vectors instead of paying for them again
+async function embedQueries(
+  embedder: Embedder,
+  cache: EmbeddingCache,
+  texts: readonly string[],
+): Promise<Float32Array[]> {
+  const hashes = texts.map((text) =>
+    createHash("sha256").update(`query\n${text}`).digest().subarray(0, 16),
+  );
+  const found = cache.getMany(embedder.model, hashes);
+  const missing = hashes.flatMap((hash, index) => (found.has(hash.toString("hex")) ? [] : [index]));
+  if (missing.length > 0) {
+    const vectors = await embedder.embed(
+      missing.map((index) => texts[index]!),
+      "query",
+    );
+    const entries = missing.map(
+      (index, position) => [hashes[index]!, toBlob(vectors[position]!)] as const,
+    );
+    cache.putMany(embedder.model, entries);
+    for (const [hash, blob] of entries) found.set(hash.toString("hex"), blob);
+  }
+  return hashes.map((hash) => fromBlob(found.get(hash.toString("hex"))!));
+}
+
 function formatRow(cells: Array<string | number>): string {
   const widths = [36, 8, 5, 6, 6, 7, 6];
   return cells
@@ -71,6 +104,9 @@ export function evalCommand(): Command {
       const context = await openContext();
       const needsVectors = modes.some((mode) => mode !== "keyword");
       const configured = needsVectors ? await openEmbedder(context) : undefined;
+      const queryCache = configured
+        ? new EmbeddingCache(queryCachePath(context.config.dataDir))
+        : undefined;
       if (needsVectors && !configured)
         throw new Error("Vector modes need embeddings in the config");
       const results: QuestionResult[] = [];
@@ -100,10 +136,11 @@ export function evalCommand(): Command {
               continue;
             }
             const queries =
-              configured && needsVectors
-                ? await configured.embedder.embed(
+              configured && queryCache
+                ? await embedQueries(
+                    configured.embedder,
+                    queryCache,
                     set.questions.map((question) => question.question),
-                    "query",
                   )
                 : [];
             for (const mode of modes) {
@@ -178,6 +215,7 @@ export function evalCommand(): Command {
         if (options.out) await writeFile(options.out, JSON.stringify(results, null, 2));
       } finally {
         configured?.server.stop();
+        queryCache?.close();
         context.close();
       }
     });

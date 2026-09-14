@@ -2,9 +2,9 @@ import { formatRepoRef, repoDirName, type LocalConfig, type RepoRef } from "@eve
 import { engineDbPath, eq, repos, type AppDb } from "@everyrepo/db";
 import { ModelUnavailableError, type LlmRouter } from "@everyrepo/llm";
 import { StageDeferredError, type StageHandler } from "@everyrepo/queue";
-import { planWiki, summarizeRepository } from "@everyrepo/wiki";
+import { planWiki, summarizeRepository, writePages } from "@everyrepo/wiki";
 
-export const WIKI_STAGES = ["summarize", "plan"] as const;
+export const WIKI_STAGES = ["summarize", "plan", "write"] as const;
 export type WikiStage = (typeof WIKI_STAGES)[number];
 
 export interface WikiOptions {
@@ -57,7 +57,16 @@ export function createWikiHandlers(options: WikiOptions): Record<WikiStage, Stag
         log,
       }),
     );
-  return { summarize, plan };
+  const write: StageHandler = async ({ heartbeat, log }) =>
+    deferWhenUnavailable(() =>
+      writePages({
+        enginePath: enginePathFor(options),
+        router: options.router,
+        log,
+        heartbeat,
+      }),
+    );
+  return { summarize, plan, write };
 }
 
 export function wikiStagesUntil(stage: string | undefined): WikiStage[] {

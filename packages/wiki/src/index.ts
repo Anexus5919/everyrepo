@@ -47,4 +47,22 @@ export {
   type SummarizeInput,
   type SummarizeOutput,
 } from "./summarize.ts";
+export { clusterDiagram, moduleDiagram } from "./diagrams.ts";
+export { candidateFiles, formatSources, selectSources, type Source } from "./sources.ts";
 export { plainText } from "./text.ts";
+export {
+  githubLink,
+  isGroundedName,
+  splitBlocks,
+  verifyPage,
+  type Citation,
+  type VerifiedPage,
+  type VerifyStats,
+} from "./verify.ts";
+export {
+  PAGE_PROMPT_VERSION,
+  pageMessages,
+  writePages,
+  type WriteInput,
+  type WriteOutput,
+} from "./write.ts";

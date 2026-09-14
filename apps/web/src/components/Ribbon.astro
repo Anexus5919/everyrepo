@@ -7,19 +7,40 @@
     width: 100%;
     height: 100%;
     pointer-events: none;
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 90px), transparent calc(100% - 60px));
   }
 </style>
 
 <script>
-  const LINES = 44;
-  const SAMPLES = 72;
+  // The band is laid out in a fixed design space and scaled to cover the canvas
+  const DESIGN_W = 1920;
+  const DESIGN_H = 900;
+  const STRANDS = 26;
+  const SAMPLES = 120;
+  const GAP = 5;
+  const AMPLITUDE = 180;
+  const BULGE = 0.7;
+  const CYCLES = 0.75;
+  const PHASE_STEP = 0.14;
+  const COUNTER = 0.42;
+  const ANGLE = (-33 * Math.PI) / 180;
+  const LENGTH = 2400;
+  const CENTER_X = 1240;
+  const CENTER_Y = 500;
+  const STREAKS = 6;
+  const STREAK_LENGTH = 90;
 
-  function rgba(color: string, alpha: number): string {
-    const hex = color.trim().replace("#", "");
-    if (hex.length !== 6) return color;
-    const value = parseInt(hex, 16);
-    return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, ${alpha})`;
+  interface Palette {
+    from: [number, number, number];
+    to: [number, number, number];
+    streak: string[];
+    alpha: number;
   }
+
+  const hexToRgb = (hex: string): [number, number, number] => {
+    const value = parseInt(hex.trim().replace("#", ""), 16);
+    return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
+  };
 
   function start(canvas: HTMLCanvasElement) {
     const context = canvas.getContext("2d");
@@ -28,95 +49,130 @@
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
     let width = 0;
     let height = 0;
+    let ratio = 1;
     let visible = false;
     let clock = 0;
     let last = performance.now();
-    let colors = read();
+    let palette = read();
+    const strands: Array<Array<[number, number]>> = Array.from({ length: STRANDS }, () =>
+      Array.from({ length: SAMPLES + 1 }, () => [0, 0] as [number, number]),
+    );
+    const lengths = new Float32Array(STRANDS);
 
-    function read() {
-      const style = getComputedStyle(document.documentElement);
-      return {
-        accent: style.getPropertyValue("--accent").trim(),
-        glow: style.getPropertyValue("--accent-2").trim(),
-        line: style.getPropertyValue("--flow-line").trim(),
-        light: document.documentElement.dataset.theme === "light",
-      };
+    function read(): Palette {
+      const light = document.documentElement.dataset.theme === "light";
+      return light
+        ? { from: hexToRgb("#b8532f"), to: hexToRgb("#d9823f"), streak: ["#b8532f", "#d9823f", "#1c1a16"], alpha: 0.75 }
+        : { from: hexToRgb("#e8692f"), to: hexToRgb("#f7c47e"), streak: ["#ee7a43", "#f6b16c", "#fff4e6"], alpha: 0.85 };
     }
 
     function fit() {
       const rect = canvas.getBoundingClientRect();
-      const ratio = Math.min(window.devicePixelRatio || 1, 2);
+      ratio = Math.min(window.devicePixelRatio || 1, 2);
       width = rect.width;
       height = rect.height;
       canvas.width = Math.round(width * ratio);
       canvas.height = Math.round(height * ratio);
-      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
     }
 
-    // Center of the ribbon: enters low on the left and leaves high on the right
-    function center(s: number): [number, number, number, number] {
-      const p0 = [0.02 * width, 1.12 * height];
-      const p1 = [0.46 * width, 0.98 * height];
-      const p2 = [0.6 * width, 0.26 * height];
-      const p3 = [1.08 * width, 0.1 * height];
-      const u = 1 - s;
-      const x = u * u * u * p0[0]! + 3 * u * u * s * p1[0]! + 3 * u * s * s * p2[0]! + s * s * s * p3[0]!;
-      const y = u * u * u * p0[1]! + 3 * u * u * s * p1[1]! + 3 * u * s * s * p2[1]! + s * s * s * p3[1]!;
-      const dx = 3 * u * u * (p1[0]! - p0[0]!) + 6 * u * s * (p2[0]! - p1[0]!) + 3 * s * s * (p3[0]! - p2[0]!);
-      const dy = 3 * u * u * (p1[1]! - p0[1]!) + 6 * u * s * (p2[1]! - p1[1]!) + 3 * s * s * (p3[1]! - p2[1]!);
-      const length = Math.hypot(dx, dy) || 1;
-      return [x, y, -dy / length, dx / length];
+    // Each strand is a sine wave whose phase is shifted from its neighbours, so strands weave across each other
+    function build(time: number) {
+      const scale = Math.max(width / DESIGN_W, height / DESIGN_H);
+      const offsetX = (width - DESIGN_W * scale) / 2;
+      const offsetY = (height - DESIGN_H * scale) / 2;
+      const cos = Math.cos(ANGLE);
+      const sin = Math.sin(ANGLE);
+      const wave = 2 * Math.PI * CYCLES;
+      for (let k = 0; k < STRANDS; k += 1) {
+        const index = k - (STRANDS - 1) / 2;
+        const points = strands[k]!;
+        let total = 0;
+        let previousX = 0;
+        let previousY = 0;
+        for (let j = 0; j <= SAMPLES; j += 1) {
+          const s = j / SAMPLES;
+          const envelope = 1 + BULGE * Math.sin(Math.PI * s);
+          const primary = Math.sin(wave * s + PHASE_STEP * index + time * 0.12);
+          const counter = Math.sin(0.5 * wave * s - 2 * PHASE_STEP * index + time * 0.45);
+          const y = index * GAP + (primary + COUNTER * counter) * 0.5 * envelope * AMPLITUDE;
+          const x = (s - 0.5) * LENGTH;
+          const point = points[j]!;
+          const px = offsetX + (CENTER_X + x * cos - y * sin) * scale;
+          const py = offsetY + (CENTER_Y + x * sin + y * cos) * scale;
+          if (j > 0) total += Math.hypot(px - previousX, py - previousY);
+          previousX = px;
+          previousY = py;
+          point[0] = px;
+          point[1] = py;
+        }
+        lengths[k] = total;
+      }
     }
 
-    // Each strand sits at a fixed offset across the ribbon; the twist travels along it over time
-    function strand(offset: number, s: number, phase: number): [number, number] {
-      const [x, y, nx, ny] = center(s);
-      const spread = height * 0.2 * (0.35 + 0.65 * Math.sin(Math.PI * Math.min(1, s * 1.1)));
-      const twist = phase + s * Math.PI * 2.4;
-      const across = offset * spread * Math.cos(twist);
-      const depth = offset * spread * 0.22 * Math.sin(twist);
-      return [x + nx * across, y + ny * across - depth];
+    function at(points: Array<[number, number]>, s: number): [number, number] {
+      const position = Math.max(0, Math.min(1, s)) * SAMPLES;
+      const index = Math.min(SAMPLES - 1, Math.floor(position));
+      const t = position - index;
+      const a = points[index]!;
+      const b = points[index + 1]!;
+      return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
     }
 
     function draw(time: number) {
+      build(time);
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
       ctx.clearRect(0, 0, width, height);
-      const phase = -time * 0.28;
-      const gradient = ctx.createLinearGradient(0, height, width, 0);
-      gradient.addColorStop(0, rgba(colors.line, 0));
-      gradient.addColorStop(0.3, rgba(colors.accent, colors.light ? 0.4 : 0.34));
-      gradient.addColorStop(0.62, rgba(colors.glow, colors.light ? 0.5 : 0.42));
-      gradient.addColorStop(1, rgba(colors.line, 0.04));
-      ctx.strokeStyle = gradient;
       ctx.lineWidth = 1;
-      ctx.beginPath();
-      for (let index = 0; index < LINES; index += 1) {
-        const offset = index / (LINES - 1) - 0.5;
-        for (let sample = 0; sample <= SAMPLES; sample += 1) {
-          const [px, py] = strand(offset, sample / SAMPLES, phase);
-          if (sample === 0) ctx.moveTo(px, py);
-          else ctx.lineTo(px, py);
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      for (let k = 0; k < STRANDS; k += 1) {
+        const points = strands[k]!;
+        const mix = k / (STRANDS - 1);
+        const rgb = palette.from.map((value, channel) => Math.round(value + (palette.to[channel]! - value) * mix));
+        const color = `${rgb[0]}, ${rgb[1]}, ${rgb[2]}`;
+        const first = points[0]!;
+        const end = points[SAMPLES]!;
+        const gradient = ctx.createLinearGradient(first[0], first[1], end[0], end[1]);
+        gradient.addColorStop(0, `rgba(${color}, 0)`);
+        gradient.addColorStop(0.3, `rgba(${color}, ${palette.alpha})`);
+        gradient.addColorStop(1, `rgba(${color}, ${palette.alpha})`);
+        ctx.strokeStyle = gradient;
+        ctx.beginPath();
+        ctx.moveTo(first[0], first[1]);
+        for (let j = 1; j < SAMPLES; j += 1) {
+          const a = points[j]!;
+          const b = points[j + 1]!;
+          ctx.quadraticCurveTo(a[0], a[1], (a[0] + b[0]) / 2, (a[1] + b[1]) / 2);
         }
+        ctx.lineTo(end[0], end[1]);
+        ctx.stroke();
       }
-      ctx.stroke();
 
       if (reduced.matches) return;
-      // Light travels along a few strands in the direction of the flow
-      ctx.lineCap = "round";
-      for (let n = 0; n < 3; n += 1) {
-        const offset = ((n * 0.37 + 0.12) % 1) - 0.5;
-        const head = (time * 0.06 + n / 3) % 1;
-        let previous = strand(offset, Math.max(0, head - 0.08), phase);
-        for (let k = 1; k <= 10; k += 1) {
-          const s = Math.max(0, head - 0.08 + (0.08 * k) / 10);
-          const next = strand(offset, s, phase);
-          ctx.strokeStyle = rgba(colors.glow, (k / 10) * (k / 10) * 0.9);
-          ctx.lineWidth = 0.8 + (k / 10) * 1.2;
-          ctx.beginPath();
-          ctx.moveTo(previous[0], previous[1]);
-          ctx.lineTo(next[0], next[1]);
-          ctx.stroke();
-          previous = next;
+      // Short streaks of light travel along the strands toward the upper right
+      for (let n = 0; n < STREAKS; n += 1) {
+        const strand = (n * 7 + 3) % STRANDS;
+        const cycle = 4.2 + (n % 3) * 0.7;
+        const progress = ((time + n * 1.37) % (cycle + 1.6)) / cycle;
+        if (progress > 1) continue;
+        const points = strands[strand]!;
+        const span = STREAK_LENGTH / Math.max(1, lengths[strand]!);
+        const fade = progress < 0.2 ? progress / 0.2 : progress > 0.75 ? (1 - progress) / 0.25 : 1;
+        const head = at(points, progress);
+        const tail = at(points, progress - span);
+        const color = hexToRgb(palette.streak[n % palette.streak.length]!);
+        const gradient = ctx.createLinearGradient(tail[0], tail[1], head[0], head[1]);
+        gradient.addColorStop(0, `rgba(${color.join(", ")}, 0)`);
+        gradient.addColorStop(1, `rgba(${color.join(", ")}, ${0.95 * fade})`);
+        ctx.strokeStyle = gradient;
+        ctx.lineWidth = 2.4;
+        ctx.beginPath();
+        ctx.moveTo(tail[0], tail[1]);
+        for (let step = 1; step <= 8; step += 1) {
+          const point = at(points, progress - span + (span * step) / 8);
+          ctx.lineTo(point[0], point[1]);
         }
+        ctx.stroke();
       }
     }
 
@@ -141,7 +197,7 @@
       visible = entry?.isIntersecting ?? false;
     }).observe(canvas);
     new MutationObserver(() => {
-      colors = read();
+      palette = read();
       draw(clock);
     }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
   }

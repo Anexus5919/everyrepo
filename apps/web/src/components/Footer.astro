@@ -15,31 +15,22 @@ import Ribbon from "./Ribbon.astro";
     </div>
 
     <div class="bottom">
-      <div class="cols">
-        <div class="about">
-          <a class="brand" href="/"><Logo /> EveryRepo</a>
-          <p>
-            A wiki for public GitHub repositories. Every sentence links to the lines of code it was
-            written from.
-          </p>
-        </div>
-        <nav class="links" aria-label="Footer">
-          <div class="group">
-            <span class="group-title">Read</span>
-            <a href="/#wiki">A wiki page</a>
-            <a href="/#guide">Repositories</a>
-          </div>
-          <div class="group">
-            <span class="group-title">Product</span>
-            <a href="/#method">Method</a>
-            <a href="/#open">Open a repository</a>
-          </div>
-        </nav>
+      <div class="about">
+        <a class="brand" href="/"><Logo /> EveryRepo</a>
+        <p>
+          A wiki for public GitHub repositories. Every sentence links to the lines of code it was
+          written from.
+        </p>
       </div>
       <div class="wordmark" aria-hidden="true">EveryRepo</div>
       <div class="legal">
         <span>Pages are written from public code at the commit shown on each page.</span>
-        <span class="mono">everyrepo.me</span>
+        <nav class="links" aria-label="Footer">
+          <a href="/#wiki">A wiki page</a>
+          <a href="/#guide">Repositories</a>
+          <a href="/#method">Method</a>
+          <span class="mono">everyrepo.me</span>
+        </nav>
       </div>
     </div>
   </div>
@@ -89,11 +80,8 @@ import Ribbon from "./Ribbon.astro";
     flex-direction: column;
   }
 
-  .cols {
-    display: flex;
-    justify-content: space-between;
-    gap: 48px;
-    padding-bottom: 32px;
+  .about {
+    padding-bottom: 28px;
   }
 
   .brand {
@@ -114,29 +102,16 @@ import Ribbon from "./Ribbon.astro";
 
   .links {
     display: flex;
-    gap: 72px;
+    align-items: center;
+    gap: 28px;
   }
 
-  .group {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    font-size: var(--t-ui);
-  }
-
-  .group-title {
-    font-size: var(--t-label);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--text-3);
-  }
-
-  .group a {
+  .links a {
     color: var(--text-2);
     transition: color 140ms ease;
   }
 
-  .group a:hover {
+  .links a:hover {
     color: var(--text);
   }
 
@@ -170,13 +145,14 @@ import Ribbon from "./Ribbon.astro";
       padding: 64px 0 0;
     }
 
-    .cols,
-    .legal {
+    .legal,
+    .links {
       flex-direction: column;
+      align-items: flex-start;
     }
 
     .links {
-      gap: 40px;
+      gap: 10px;
     }
   }
 </style>

@@ -82,9 +82,13 @@ export function createOpenAiCompatibleModel(options: OpenAiCompatibleOptions): C
         }
         throw new ModelUnavailableError(`${options.id}: still rate limited after ${attempt} tries`);
       }
-      if (response.status >= 500 && attempt < MAX_TRIES) {
-        await sleep((options.retryDelayMs ?? 2_000) * 2 ** (attempt - 1));
-        continue;
+      if (response.status >= 500) {
+        if (attempt < MAX_TRIES) {
+          await sleep((options.retryDelayMs ?? 2_000) * 2 ** (attempt - 1));
+          continue;
+        }
+        // A provider that stays overloaded is skipped so the next configured model can answer
+        throw new ModelUnavailableError(`${options.id} returned ${response.status}: ${message}`);
       }
       throw new Error(`${options.id} returned ${response.status}: ${message}`);
     }

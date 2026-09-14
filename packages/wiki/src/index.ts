@@ -27,6 +27,19 @@ export {
   repoSummarySchema,
   type RepoSummary,
 } from "./repo-summary.ts";
+export {
+  buildPlanContext,
+  detectTopics,
+  PLAN_PROMPT_VERSION,
+  planMessages,
+  planSchema,
+  planWiki,
+  validatePlan,
+  type PlanAnswer,
+  type PlannedPage,
+  type PlanOutput,
+  type RepoTopics,
+} from "./plan.ts";
 export { loadSummaries, pruneSummaries, saveSummary, type SummaryLevel } from "./store.ts";
 export {
   summarizeRepository,

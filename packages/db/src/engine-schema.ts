@@ -181,3 +181,29 @@ export const summaries = sqliteTable(
   },
   (table) => [uniqueIndex("summary_target").on(table.level, table.target)],
 );
+
+export const WIKI_PAGE_STATUSES = ["planned", "written", "failed"] as const;
+
+// Planned wiki pages for the snapshot; the write stage fills in markdown and citations
+export const wikiPages = sqliteTable("wiki_page", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  slug: text("slug").notNull().unique(),
+  parentSlug: text("parent_slug"),
+  position: integer("position").notNull(),
+  title: text("title").notNull(),
+  purpose: text("purpose").notNull(),
+  clusters: text("clusters", { mode: "json" }).$type<string[]>().notNull(),
+  files: text("files", { mode: "json" }).$type<string[]>().notNull(),
+  status: text("status", { enum: WIKI_PAGE_STATUSES }).notNull(),
+  markdown: text("markdown"),
+  citations: text("citations", { mode: "json" }).$type<unknown[]>(),
+  model: text("model"),
+  inputHash: text("input_hash"),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+});
+
+// Small key-value facts about generated content, such as the hash of the plan input
+export const wikiMeta = sqliteTable("wiki_meta", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+});

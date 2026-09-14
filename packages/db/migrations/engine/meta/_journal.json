@@ -43,6 +43,13 @@
       "when": 1789378898686,
       "tag": "0005_summaries",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1789381195910,
+      "tag": "0006_wiki_pages",
+      "breakpoints": true
     }
   ]
 }

@@ -73,6 +73,14 @@ describe("OpenAI-compatible model", () => {
     ).rejects.toBeInstanceOf(ModelUnavailableError);
   });
 
+  it("reports a provider that stays overloaded as unavailable", async () => {
+    const overloaded = () => reply(503, { error: { message: "high demand" } });
+    const { fetchImpl } = scripted([overloaded(), overloaded(), overloaded(), overloaded()]);
+    await expect(
+      model(fetchImpl).complete({ messages: [{ role: "user", content: "a" }] }),
+    ).rejects.toBeInstanceOf(ModelUnavailableError);
+  });
+
   it("reads retry hints from headers and messages", () => {
     expect(retryAfterMs(new Response(null, { headers: { "retry-after": "3" } }), "")).toBe(3000);
     expect(retryAfterMs(new Response(null), "Please retry in 17.5s.")).toBe(17_500);

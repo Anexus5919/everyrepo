@@ -93,6 +93,12 @@ export function pageMessages(
     `Write the page "${page.title}".`,
     `Purpose: ${page.purpose}`,
     parent ? `It sits under the page "${parent.title}".` : "",
+    pages.some((other) => other.parentSlug === page.slug)
+      ? `Its child pages, which go into detail, are: ${pages
+          .filter((other) => other.parentSlug === page.slug)
+          .map((other) => `${other.title} (${other.purpose})`)
+          .join("; ")}. Introduce them and how they relate instead of repeating their details.`
+      : "",
     summaries ? `Descriptions of the code this page covers:\n${summaries}` : "",
     page.slug === "overview"
       ? `Repository overview: ${repoSummary.overview}\nArchitecture: ${repoSummary.architecture}`
@@ -146,7 +152,8 @@ export async function writePages(input: WriteInput): Promise<WriteOutput> {
 
     for (const page of pages) {
       if (input.only && !input.only.includes(page.slug)) continue;
-      const files = candidateFiles(sql, page, clusterSummaries);
+      const children = pages.filter((other) => other.parentSlug === page.slug);
+      const files = candidateFiles(sql, page, clusterSummaries, children);
       const sources = selectSources(sql, files, input.maxSourceChars ?? DEFAULT_SOURCE_CHARS);
       const messages = pageMessages(
         snapshot.repo,
@@ -164,19 +171,50 @@ export async function writePages(input: WriteInput): Promise<WriteOutput> {
         output.reused += 1;
         continue;
       }
-      const result = await input.router.complete(
+      let result = await input.router.complete(
         "page",
         { messages, maxTokens: 4_000, temperature: 0.3 },
         { promptVersion: PAGE_PROMPT_VERSION },
       );
       output.inputTokens += result.inputTokens;
       output.outputTokens += result.outputTokens;
-      const verified = verifyPage(result.text, sources, link);
+      let verified = verifyPage(result.text, sources, link);
+      if (!passes(verified.stats)) {
+        // One rewrite with the verifier's findings; the better of the two versions is kept
+        const repair = await input.router.complete(
+          "page",
+          {
+            messages: [
+              ...messages,
+              { role: "assistant", content: result.text },
+              { role: "user", content: repairInstructions(verified.stats) },
+            ],
+            maxTokens: 4_000,
+            temperature: 0.2,
+          },
+          { promptVersion: PAGE_PROMPT_VERSION },
+        );
+        output.inputTokens += repair.inputTokens;
+        output.outputTokens += repair.outputTokens;
+        const repaired = verifyPage(repair.text, sources, link);
+        input.log(
+          `rewrote ${page.slug} after verification: kept ${verified.stats.kept}, then ${repaired.stats.kept}`,
+        );
+        if (passes(repaired.stats) || repaired.stats.kept > verified.stats.kept) {
+          verified = repaired;
+          result = repair;
+        }
+      }
       const diagram =
-        page.slug === "overview" ? moduleDiagram(sql) : clusterDiagram(sql, page.clusters);
-      const ok =
-        verified.stats.kept >= 2 &&
-        verified.stats.kept / Math.max(1, verified.stats.blocks) >= MIN_KEPT_SHARE;
+        page.slug === "overview"
+          ? moduleDiagram(sql)
+          : clusterDiagram(
+              sql,
+              page.clusters.length > 0
+                ? page.clusters
+                : children.flatMap((child) => child.clusters),
+            );
+      const ok = passes(verified.stats);
       const markdown = diagram ? insertDiagram(verified.markdown, diagram) : verified.markdown;
       update.run(
         ok ? "written" : "failed",
@@ -198,6 +236,27 @@ export async function writePages(input: WriteInput): Promise<WriteOutput> {
   } finally {
     sql.close();
   }
+}
+
+function passes(stats: VerifyStats): boolean {
+  return stats.kept >= 2 && stats.kept / Math.max(1, stats.blocks) >= MIN_KEPT_SHARE;
+}
+
+function repairInstructions(stats: VerifyStats): string {
+  const problems = [
+    stats.uncited > 0 ? `${stats.uncited} paragraphs or list items had no citation` : "",
+    stats.unknownNames > 0
+      ? `${stats.unknownNames} used names in backticks that their cited sources do not contain (${stats.missingNames.join(", ")})`
+      : "",
+    stats.unmatchedCode > 0
+      ? `${stats.unmatchedCode} code blocks were not copied from a source`
+      : "",
+  ].filter(Boolean);
+  return [
+    `Your page was checked against the sources and these parts were removed: ${problems.join("; ")}.`,
+    "Rewrite the whole page. End every paragraph and list item with citations like [S3] to the sources that support it,",
+    "put names in backticks only when the cited source contains them, copy code excerpts exactly, and leave out anything the sources do not show.",
+  ].join(" ");
 }
 
 function describe(stats: VerifyStats): string {

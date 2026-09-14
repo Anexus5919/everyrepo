@@ -33,10 +33,18 @@ export function candidateFiles(
   sql: Sql,
   page: PageRef,
   clusterSummaries: ReadonlyMap<string, ClusterSummary>,
+  children: readonly PageRef[] = [],
 ): string[] {
   const ordered: string[] = [...page.files];
   for (const key of page.clusters) {
     for (const file of clusterSummaries.get(key)?.keyFiles ?? []) ordered.push(file.path);
+  }
+  // A parent page introduces its children, so it reads the first files each child starts from
+  for (const child of children) {
+    ordered.push(...child.files.slice(0, 2));
+    const firstCluster = child.clusters[0];
+    const keyFile = firstCluster ? clusterSummaries.get(firstCluster)?.keyFiles[0] : undefined;
+    if (keyFile) ordered.push(keyFile.path);
   }
   if (page.clusters.length > 0) {
     const placeholders = page.clusters.map(() => "?").join(",");

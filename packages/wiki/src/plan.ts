@@ -10,9 +10,10 @@ import { plainText } from "./text.ts";
 
 type Sql = EngineDb["$client"];
 
-export const PLAN_PROMPT_VERSION = "plan-1";
+export const PLAN_PROMPT_VERSION = "plan-2";
 
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const MAX_PAGE_FILES = 10;
 
 export const planSchema = z.object({
   pages: z
@@ -22,8 +23,8 @@ export const planSchema = z.object({
         title: z.string().min(2).max(80),
         parent: z.string().nullable(),
         purpose: z.string().min(10).max(500),
-        clusters: z.array(z.string()).max(20),
-        files: z.array(z.string()).max(12),
+        clusters: z.array(z.string()).max(300),
+        files: z.array(z.string()).max(40),
       }),
     )
     .min(2)
@@ -219,11 +220,13 @@ export function validatePlan(
       else placed.add(key);
       return ok;
     });
-    const files = [...new Set(page.files)].filter((path) => {
-      const ok = knownFiles.has(path);
-      if (!ok) dropped.files += 1;
-      return ok;
-    });
+    const files = [...new Set(page.files)]
+      .filter((path) => {
+        const ok = knownFiles.has(path);
+        if (!ok) dropped.files += 1;
+        return ok;
+      })
+      .slice(0, MAX_PAGE_FILES);
     pages.push({
       slug,
       parentSlug: page.parent,
@@ -349,9 +352,10 @@ export async function planWiki(input: PlanInput): Promise<PlanOutput> {
       };
     }
 
-    const { value, result } = await input.router.completeJson(
+    const messages = planMessages(context);
+    const first = await input.router.completeJson(
       "plan",
-      { messages: planMessages(context), maxTokens: 16_000, temperature: 0.3 },
+      { messages, maxTokens: 16_000, temperature: 0.3 },
       planSchema,
       { promptVersion: PLAN_PROMPT_VERSION },
     );
@@ -363,7 +367,43 @@ export async function planWiki(input: PlanInput): Promise<PlanOutput> {
         (row) => row.path,
       ),
     );
-    const plan = validatePlan(value, clusterModules, knownFiles);
+    let plan = validatePlan(first.value, clusterModules, knownFiles);
+    let result = first.result;
+
+    // Plans that are too coarse for the repository get one request to split their largest pages
+    const [low, high] = PAGE_RANGE[topics.sizeTier] ?? PAGE_RANGE["M"]!;
+    if (plan.pages.length < low) {
+      const largest = [...plan.pages]
+        .sort((a, b) => b.clusters.length - a.clusters.length)
+        .slice(0, 5)
+        .map((page) => `${page.slug} (${page.clusters.length} clusters)`)
+        .join(", ");
+      const retry = await input.router.completeJson(
+        "plan",
+        {
+          messages: [
+            ...messages,
+            { role: "assistant", content: JSON.stringify(first.value) },
+            {
+              role: "user",
+              content: `This plan has ${plan.pages.length} pages, but a repository of this size needs between ${low} and ${high}. Split the pages that cover many clusters, such as ${largest}, into focused child pages whose parent is the original page, for example one child page per package or feature. Keep every cluster in exactly one page and reply with the complete corrected JSON.`,
+            },
+          ],
+          maxTokens: 16_000,
+          temperature: 0.3,
+        },
+        planSchema,
+        { promptVersion: PLAN_PROMPT_VERSION },
+      );
+      const retried = validatePlan(retry.value, clusterModules, knownFiles);
+      input.log(
+        `plan had ${plan.pages.length} pages, the revised plan has ${retried.pages.length}`,
+      );
+      if (retried.pages.length > plan.pages.length) {
+        plan = retried;
+        result = retry.result;
+      }
+    }
 
     const insert = sql.prepare(
       `INSERT INTO wiki_page (slug, parent_slug, position, title, purpose, clusters, files, status, model, updated_at)

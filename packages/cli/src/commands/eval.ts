@@ -18,6 +18,7 @@ import {
 } from "@everyrepo/eval";
 import {
   loadVectorIndex,
+  rankFiles,
   searchHybrid,
   searchKeyword,
   searchVector,
@@ -26,7 +27,7 @@ import {
 import { Command } from "commander";
 import { openContext, openEmbedder } from "../context.ts";
 
-const MODES = ["keyword", "vector", "hybrid"] as const;
+const MODES = ["keyword", "vector", "hybrid", "files"] as const;
 type Mode = (typeof MODES)[number];
 const CANDIDATE_CHUNKS = 50;
 
@@ -35,6 +36,12 @@ interface EvalOptions {
   dims?: string;
   candidates: string;
   vectorWeight: string;
+  decay: string;
+  centrality: string;
+  docsWeight: string;
+  neighbors: string;
+  neighborSources: string;
+  dampen: boolean;
   details: boolean;
   out?: string;
 }
@@ -92,10 +99,20 @@ export function evalCommand(): Command {
   return new Command("eval")
     .description("Measure retrieval quality against the gold question sets")
     .argument("[repos...]", "limit to these repositories")
-    .option("--modes <list>", "comma separated: keyword, vector, hybrid", MODES.join(","))
+    .option(
+      "--modes <list>",
+      "comma separated: keyword, vector, hybrid, files",
+      "keyword,hybrid,files",
+    )
     .option("--dims <n>", "truncate vectors to this many dimensions")
     .option("--candidates <n>", "chunks taken from each list before fusion", "100")
     .option("--vector-weight <w>", "weight of the vector list in hybrid fusion", "2")
+    .option("--decay <list>", "files mode: weights of a file's best chunks", "1")
+    .option("--centrality <w>", "files mode: boost for central files", "0.25")
+    .option("--docs-weight <w>", "files mode: multiplier for documentation files", "0.9")
+    .option("--neighbors <w>", "files mode: share of score passed to imported files", "0.25")
+    .option("--neighbor-sources <n>", "files mode: top files that pass score", "10")
+    .option("--no-dampen", "files mode: do not dampen widely imported files")
     .option("--details", "print the rank of every question", false)
     .option("--out <file>", "write per-question results as JSON")
     .action(async (repoArgs: string[], options: EvalOptions) => {
@@ -160,8 +177,20 @@ export function evalCommand(): Command {
             for (const mode of modes) {
               const scores: QuestionScore[] = [];
               for (const [position, question] of set.questions.entries()) {
-                let hits: SearchHit[];
-                if (mode === "keyword") {
+                let hits: Array<Pick<SearchHit, "path">>;
+                if (mode === "files") {
+                  hits = rankFiles(engine, index!, question.question, queries[position]!, {
+                    limit: CANDIDATE_CHUNKS,
+                    candidates: Number(options.candidates),
+                    vectorWeight: Number(options.vectorWeight),
+                    chunkDecay: options.decay.split(",").map(Number),
+                    centralityWeight: Number(options.centrality),
+                    docsWeight: Number(options.docsWeight),
+                    neighborWeight: Number(options.neighbors),
+                    neighborSources: Number(options.neighborSources),
+                    dampenPopular: options.dampen,
+                  });
+                } else if (mode === "keyword") {
                   hits = searchKeyword(engine, question.question, CANDIDATE_CHUNKS);
                 } else if (mode === "vector") {
                   hits = searchVector(engine, index!, queries[position]!, CANDIDATE_CHUNKS);

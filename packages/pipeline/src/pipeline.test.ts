@@ -4,7 +4,13 @@ import { dirname, join } from "node:path";
 import { parseRepoRef, type LocalConfig } from "@everyrepo/core";
 import { embeddingCachePath, ensureRepo, findRepo, openAppDb, openEngineDb } from "@everyrepo/db";
 import { createHashingEmbedder, EmbeddingBudgetError, type Embedder } from "@everyrepo/embed";
-import { loadVectorIndex, searchHybrid, searchKeyword, searchVector } from "@everyrepo/search";
+import {
+  loadVectorIndex,
+  rankFiles,
+  searchHybrid,
+  searchKeyword,
+  searchVector,
+} from "@everyrepo/search";
 import { claimNextJob, enqueueJob, runJob, StageDeferredError } from "@everyrepo/queue";
 import { git } from "@everyrepo/repo";
 import { afterAll, describe, expect, it } from "vitest";
@@ -99,6 +105,9 @@ describe("index pipeline", () => {
     expect(searchHybrid(engine, index, "keeps state store", query!, { limit: 5 })[0]?.path).toBe(
       "packages/core/src/store.ts",
     );
+    const files = rankFiles(engine, index, "keeps state store", query!, { limit: 5 });
+    expect(files[0]?.path).toBe("packages/core/src/store.ts");
+    expect(files[0]?.chunkIds.length).toBeGreaterThan(0);
     engine.$client.close();
 
     const again = await runEmbedStage({

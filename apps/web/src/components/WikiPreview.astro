@@ -204,10 +204,11 @@ const siblings = parent
     white-space: nowrap;
   }
 
+  /* The window takes the room left in the viewport so the section fits on one screen */
   .window-body {
     display: grid;
     grid-template-columns: 210px minmax(0, 1fr) 400px;
-    min-height: 540px;
+    height: clamp(400px, calc(100svh - var(--header) - 332px), 600px);
   }
 
   .tree {
@@ -254,7 +255,10 @@ const siblings = parent
     display: flex;
     flex-direction: column;
     gap: 14px;
+    min-height: 0;
     padding: 30px 40px 36px;
+    overflow: hidden;
+    mask-image: linear-gradient(to bottom, #000 84%, transparent);
   }
 
   .crumbs {
@@ -288,6 +292,8 @@ const siblings = parent
     border-left: 1px solid var(--line-soft);
     background: var(--bg-raise);
     min-width: 0;
+    min-height: 0;
+    overflow: hidden;
   }
 
   .source-item {
@@ -356,7 +362,7 @@ const siblings = parent
     flex-grow: 1;
     padding: 14px 0;
     overflow: auto;
-    max-height: 470px;
+    min-height: 0;
   }
 
   /* A new source is read top to bottom once, then the tint clears */
@@ -431,6 +437,11 @@ const siblings = parent
 
     .window-body {
       grid-template-columns: 1fr;
+      height: auto;
+    }
+
+    .code {
+      max-height: 360px;
     }
 
     .source {

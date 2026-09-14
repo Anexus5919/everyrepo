@@ -10,7 +10,7 @@ interface Props {
 const { repos, outlines } = Astro.props;
 
 const SHADES = ["var(--accent)", "var(--accent-2)", "var(--text-3)", "var(--line)"];
-const PEEK = 4;
+const PEEK = 3;
 
 const cards = repos.map((repo) => {
   const total = repo.languages.reduce((sum, language) => sum + language.files, 0) || 1;
@@ -120,9 +120,9 @@ cards.sort((a, b) => order[a.status] - order[b.status]);
     position: relative;
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    min-height: 300px;
-    padding: 26px 24px 22px;
+    gap: 8px;
+    min-height: clamp(220px, calc((100svh - var(--header) - 380px) / 2), 300px);
+    padding: 20px 24px 18px;
     background: var(--bg);
     transition: background-color 200ms ease;
   }
@@ -225,7 +225,7 @@ cards.sort((a, b) => order[a.status] - order[b.status]);
     display: flex;
     align-items: center;
     gap: 16px;
-    padding-top: 14px;
+    padding-top: 12px;
     border-top: 1px solid var(--line-soft);
     font-size: var(--t-caption);
     color: var(--text-2);
@@ -277,6 +277,13 @@ cards.sort((a, b) => order[a.status] - order[b.status]);
   .is-cta .stats span:first-child {
     color: var(--text);
     font-weight: 500;
+  }
+
+  /* Short screens drop the language line so both rows still fit on one screen */
+  @media (max-height: 860px) and (min-width: 1000px) {
+    .languages {
+      display: none;
+    }
   }
 
   @media (max-width: 1100px) {

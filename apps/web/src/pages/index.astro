@@ -15,20 +15,33 @@ if (!featured) throw new Error("No written wiki to feature; run the site command
 const wikis = new Map(ready.map((repo) => [repo.repo, loadWiki(repo.repo)]));
 const wiki = wikis.get(featured.repo)!;
 
-const totalFiles = repos.reduce((sum, repo) => sum + repo.files, 0);
-const totalPages = ready.reduce((sum, repo) => sum + repo.pages, 0);
-const totalCitations = [...wikis.values()].reduce(
-  (sum, item) => sum + item.wikiPages.reduce((count, page) => count + page.citations.length, 0),
+// What reading the featured wiki takes, measured from its text at 230 words a minute
+const prose = (markdown: string) =>
+  markdown
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/\[\[\d+\]\]\([^)]*\)/g, " ")
+    .split(/\s+/)
+    .filter((word) => /\w/.test(word)).length;
+const readingMinutes = Math.max(
+  1,
+  Math.round(wiki.wikiPages.reduce((sum, page) => sum + prose(page.markdown ?? ""), 0) / 230),
+);
+const citationLinks = wiki.wikiPages.reduce(
+  (sum, page) => sum + (page.markdown?.match(/\[\[\d+\]\]\(/g)?.length ?? 0),
   0,
 );
 
-// Each file the line reads becomes the page it is filed under
+// Pages of the featured wiki, each with the first lines of code it cites
 const pipelineItems = wiki.wikiPages
-  .filter((page) => page.status === "written" && !page.section && page.readingOrder.length > 0)
-  .map((page) => ({
-    file: page.readingOrder[0]!.path.split("/").pop() ?? page.readingOrder[0]!.path,
-    title: page.title,
-  }));
+  .filter((page) => page.status === "written" && !page.section && page.citations.length > 0)
+  .map((page) => {
+    const source = page.citations[0]!;
+    return {
+      title: page.title,
+      file: source.path.split("/").pop() ?? source.path,
+      lines: `lines ${source.startLine}-${source.endLine}`,
+    };
+  });
 
 const outlines = Object.fromEntries(
   [...wikis.entries()].map(([repo, item]) => [
@@ -45,7 +58,7 @@ const examples = ready.slice(0, 3).map((repo) => repo.repo);
   title="EveryRepo: a wiki for any public GitHub repository"
   description="EveryRepo writes a wiki for public GitHub repositories. Every sentence links to the lines of code it was written from."
 >
-  <section class="hero">
+  <section class="hero snap">
     <div class="frame hero-inner">
       <div class="hero-copy">
         <span class="eyebrow">Codebase wikis, cited to the line</span>
@@ -108,29 +121,35 @@ const examples = ready.slice(0, 3).map((repo) => repo.repo);
       </div>
 
       <div class="hero-art">
-        <Pipeline items={pipelineItems} />
+        <Pipeline
+          repo={featured.repo}
+          files={`${formatCount(featured.files)} files`}
+          items={pipelineItems}
+        />
       </div>
     </div>
 
     <div class="frame hero-stats">
       <div class="stat">
-        <span class="value">{repos.length}</span><span class="label">repositories read</span>
+        <span class="value">{formatCount(featured.files)}</span>
+        <span class="label">files in {featured.repo}</span>
       </div>
       <div class="stat">
-        <span class="value">{formatCount(totalFiles)}</span><span class="label">files parsed</span>
+        <span class="value">{featured.pages}</span>
+        <span class="label">wiki pages explain them</span>
       </div>
       <div class="stat">
-        <span class="value">{totalPages}</span><span class="label">wiki pages written</span>
+        <span class="value">{readingMinutes} min</span>
+        <span class="label">to read the whole wiki</span>
       </div>
       <div class="stat">
-        <span class="value">{formatCount(totalCitations)}</span><span class="label"
-          >citations to exact lines</span
-        >
+        <span class="value">{formatCount(citationLinks)}</span>
+        <span class="label">citations open the exact lines</span>
       </div>
     </div>
   </section>
 
-  <section class="section block" id="wiki">
+  <section class="section block snap" id="wiki">
     <div class="frame">
       <div class="block-head">
         <div>
@@ -146,7 +165,7 @@ const examples = ready.slice(0, 3).map((repo) => repo.repo);
     </div>
   </section>
 
-  <section class="section block" id="guide">
+  <section class="section block snap" id="guide">
     <div class="frame">
       <div class="block-head">
         <div>
@@ -164,7 +183,7 @@ const examples = ready.slice(0, 3).map((repo) => repo.repo);
     </div>
   </section>
 
-  <section class="section block" id="method">
+  <section class="section block snap" id="method">
     <div class="frame">
       <div class="block-head">
         <div>
@@ -178,16 +197,6 @@ const examples = ready.slice(0, 3).map((repo) => repo.repo);
     </div>
     <div class="frame grid-frame">
       <Method />
-    </div>
-  </section>
-
-  <section class="section closing">
-    <div class="frame">
-      <div class="closing-inner">
-        <h2 class="title">Open any public repository.</h2>
-        <p class="block-text">Paste a link. If its wiki is written, you are reading it in a second.</p>
-        <a class="btn btn-solid btn-lg book-trigger" href="#open">Open a repository <BookIcon /></a>
-      </div>
     </div>
   </section>
 
@@ -250,16 +259,18 @@ const examples = ready.slice(0, 3).map((repo) => repo.repo);
   .hero {
     position: relative;
     z-index: 2;
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
   }
 
   .hero-inner {
+    flex-grow: 1;
     display: grid;
-    grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+    grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
     align-items: center;
     gap: 16px;
-    min-height: 660px;
-    padding: 64px 24px 48px;
+    padding: 40px 24px 32px;
   }
 
   .hero-copy {
@@ -446,7 +457,10 @@ const examples = ready.slice(0, 3).map((repo) => repo.repo);
   }
 
   .block {
-    padding-top: 88px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding-block: 40px;
   }
 
   .block > .frame:first-child {
@@ -458,7 +472,7 @@ const examples = ready.slice(0, 3).map((repo) => repo.repo);
     grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
     align-items: end;
     gap: 48px;
-    margin-bottom: 44px;
+    margin-bottom: 28px;
   }
 
   .title {
@@ -476,32 +490,6 @@ const examples = ready.slice(0, 3).map((repo) => repo.repo);
     max-width: 420px;
   }
 
-  #wiki .frame {
-    padding-bottom: 88px;
-  }
-
-  .grid-frame {
-    padding-bottom: 88px;
-  }
-
-  .closing {
-    background:
-      radial-gradient(ellipse 60% 90% at 50% 100%, var(--accent-soft), transparent 70%),
-      var(--bg);
-  }
-
-  .closing-inner {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 18px;
-    padding: 112px 24px;
-    text-align: center;
-  }
-
-  .closing-inner .title {
-    margin-top: 0;
-  }
 
   @media (max-width: 1000px) {
     .hero-inner {
@@ -533,7 +521,7 @@ const examples = ready.slice(0, 3).map((repo) => repo.repo);
     }
 
     .block {
-      padding-top: 64px;
+      padding-block: 48px;
     }
 
     .block > .frame:first-child {

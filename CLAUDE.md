@@ -71,9 +71,11 @@ TypeScript source directly and run with tsx. Tests use Vitest.
 - `packages/pipeline`: index stage handlers, cost estimate, snapshot report
 - `packages/cli`: the `everyrepo` command
 - `apps/web`: the Astro website. Pages are static and built from the site JSON; styles are plain CSS with
-  theme tokens in `src/styles/global.css` (dark by default, light on request). The hero is a canvas
-  illustration of files moving through the pipeline stations into the wiki; motion elsewhere only plays on
-  hover or focus and shows what the element does
+  theme tokens in `src/styles/global.css` (dark by default, light on request). On large screens each
+  section fills the viewport and scrolling snaps to it. The hero canvas numbers pages from the moment the
+  site opens and shows each one organized, explained, linked to its source lines, checked and filed; the
+  footer carries a canvas line ribbon; other motion plays on hover or focus and continues from the resting
+  state
 
 ## Rules
 

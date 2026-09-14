@@ -1,0 +1,150 @@
+<canvas class="ribbon" data-ribbon aria-hidden="true"></canvas>
+
+<style>
+  .ribbon {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+</style>
+
+<script>
+  const LINES = 44;
+  const SAMPLES = 72;
+
+  function rgba(color: string, alpha: number): string {
+    const hex = color.trim().replace("#", "");
+    if (hex.length !== 6) return color;
+    const value = parseInt(hex, 16);
+    return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, ${alpha})`;
+  }
+
+  function start(canvas: HTMLCanvasElement) {
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    const ctx = context;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let width = 0;
+    let height = 0;
+    let visible = false;
+    let clock = 0;
+    let last = performance.now();
+    let colors = read();
+
+    function read() {
+      const style = getComputedStyle(document.documentElement);
+      return {
+        accent: style.getPropertyValue("--accent").trim(),
+        glow: style.getPropertyValue("--accent-2").trim(),
+        line: style.getPropertyValue("--flow-line").trim(),
+        light: document.documentElement.dataset.theme === "light",
+      };
+    }
+
+    function fit() {
+      const rect = canvas.getBoundingClientRect();
+      const ratio = Math.min(window.devicePixelRatio || 1, 2);
+      width = rect.width;
+      height = rect.height;
+      canvas.width = Math.round(width * ratio);
+      canvas.height = Math.round(height * ratio);
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    }
+
+    // Center of the ribbon: enters low on the left and leaves high on the right
+    function center(s: number): [number, number, number, number] {
+      const p0 = [0.02 * width, 1.12 * height];
+      const p1 = [0.46 * width, 0.98 * height];
+      const p2 = [0.6 * width, 0.26 * height];
+      const p3 = [1.08 * width, 0.1 * height];
+      const u = 1 - s;
+      const x = u * u * u * p0[0]! + 3 * u * u * s * p1[0]! + 3 * u * s * s * p2[0]! + s * s * s * p3[0]!;
+      const y = u * u * u * p0[1]! + 3 * u * u * s * p1[1]! + 3 * u * s * s * p2[1]! + s * s * s * p3[1]!;
+      const dx = 3 * u * u * (p1[0]! - p0[0]!) + 6 * u * s * (p2[0]! - p1[0]!) + 3 * s * s * (p3[0]! - p2[0]!);
+      const dy = 3 * u * u * (p1[1]! - p0[1]!) + 6 * u * s * (p2[1]! - p1[1]!) + 3 * s * s * (p3[1]! - p2[1]!);
+      const length = Math.hypot(dx, dy) || 1;
+      return [x, y, -dy / length, dx / length];
+    }
+
+    // Each strand sits at a fixed offset across the ribbon; the twist travels along it over time
+    function strand(offset: number, s: number, phase: number): [number, number] {
+      const [x, y, nx, ny] = center(s);
+      const spread = height * 0.2 * (0.35 + 0.65 * Math.sin(Math.PI * Math.min(1, s * 1.1)));
+      const twist = phase + s * Math.PI * 2.4;
+      const across = offset * spread * Math.cos(twist);
+      const depth = offset * spread * 0.22 * Math.sin(twist);
+      return [x + nx * across, y + ny * across - depth];
+    }
+
+    function draw(time: number) {
+      ctx.clearRect(0, 0, width, height);
+      const phase = -time * 0.28;
+      const gradient = ctx.createLinearGradient(0, height, width, 0);
+      gradient.addColorStop(0, rgba(colors.line, 0));
+      gradient.addColorStop(0.3, rgba(colors.accent, colors.light ? 0.4 : 0.34));
+      gradient.addColorStop(0.62, rgba(colors.glow, colors.light ? 0.5 : 0.42));
+      gradient.addColorStop(1, rgba(colors.line, 0.04));
+      ctx.strokeStyle = gradient;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let index = 0; index < LINES; index += 1) {
+        const offset = index / (LINES - 1) - 0.5;
+        for (let sample = 0; sample <= SAMPLES; sample += 1) {
+          const [px, py] = strand(offset, sample / SAMPLES, phase);
+          if (sample === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+      }
+      ctx.stroke();
+
+      if (reduced.matches) return;
+      // Light travels along a few strands in the direction of the flow
+      ctx.lineCap = "round";
+      for (let n = 0; n < 3; n += 1) {
+        const offset = ((n * 0.37 + 0.12) % 1) - 0.5;
+        const head = (time * 0.06 + n / 3) % 1;
+        let previous = strand(offset, Math.max(0, head - 0.08), phase);
+        for (let k = 1; k <= 10; k += 1) {
+          const s = Math.max(0, head - 0.08 + (0.08 * k) / 10);
+          const next = strand(offset, s, phase);
+          ctx.strokeStyle = rgba(colors.glow, (k / 10) * (k / 10) * 0.9);
+          ctx.lineWidth = 0.8 + (k / 10) * 1.2;
+          ctx.beginPath();
+          ctx.moveTo(previous[0], previous[1]);
+          ctx.lineTo(next[0], next[1]);
+          ctx.stroke();
+          previous = next;
+        }
+      }
+    }
+
+    function frame(now: number) {
+      const delta = Math.min(now - last, 64) / 1000;
+      last = now;
+      if (visible && !document.hidden && !reduced.matches) {
+        clock += delta;
+        draw(clock);
+      }
+      requestAnimationFrame(frame);
+    }
+
+    fit();
+    draw(0);
+    requestAnimationFrame(frame);
+    new ResizeObserver(() => {
+      fit();
+      draw(clock);
+    }).observe(canvas);
+    new IntersectionObserver(([entry]) => {
+      visible = entry?.isIntersecting ?? false;
+    }).observe(canvas);
+    new MutationObserver(() => {
+      colors = read();
+      draw(clock);
+    }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  }
+
+  document.querySelectorAll<HTMLCanvasElement>("[data-ribbon]").forEach(start);
+</script>

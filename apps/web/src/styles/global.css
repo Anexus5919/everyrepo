@@ -64,6 +64,10 @@
   --iso-block-top: #2b2824;
   --iso-block-left: #201e1a;
   --iso-block-right: #181613;
+  --iso-face-ink: rgba(36, 14, 2, 0.82);
+  --iso-stack-top: #ddd6c8;
+  --iso-stack-left: #b6ae9c;
+  --iso-stack-right: #978f7e;
 
   --code-foreground: #d9d3c7;
   --code-background: transparent;
@@ -109,6 +113,9 @@
   --iso-paper-right: #d6cdbb;
   --iso-ink: #3a362f;
   --iso-lit: #fff7ec;
+  --iso-stack-top: #f3eee3;
+  --iso-stack-left: #ded5c4;
+  --iso-stack-right: #cdc3b0;
 
   --code-foreground: #3a362f;
   --code-token-constant: #9c4a22;
@@ -131,7 +138,7 @@
 html {
   -webkit-text-size-adjust: 100%;
   scroll-behavior: smooth;
-  scroll-padding-top: calc(var(--header) + 24px);
+  scroll-padding-top: var(--header);
 }
 
 body {
@@ -357,6 +364,18 @@ pre code {
   font-size: 12.5px;
   line-height: 1.65;
   background: transparent !important;
+}
+
+/* On large screens every section fills the viewport below the header and scrolling settles on it */
+@media (min-width: 1000px) and (min-height: 680px) {
+  html {
+    scroll-snap-type: y mandatory;
+  }
+
+  .snap {
+    min-height: calc(100svh - var(--header));
+    scroll-snap-align: start;
+  }
 }
 
 @media (max-width: 720px) {

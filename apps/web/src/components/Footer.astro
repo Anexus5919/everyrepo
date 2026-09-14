@@ -1,42 +1,99 @@
 ---
+import BookIcon from "./BookIcon.astro";
 import Logo from "./Logo.astro";
+import Ribbon from "./Ribbon.astro";
 ---
 
-<footer class="section site-footer">
-  <div class="frame">
-    <div class="cols">
-      <div class="about">
-        <a class="brand" href="/"><Logo /> EveryRepo</a>
-        <p>
-          A wiki for public GitHub repositories. Every sentence links to the lines of code it was
-          written from.
-        </p>
-      </div>
-      <nav class="links" aria-label="Footer">
-        <a href="/#guide">Repositories</a>
-        <a href="/#wiki">A wiki page</a>
-        <a href="/#method">Method</a>
-        <a href="/#open">Open a repository</a>
-      </nav>
+<footer class="site-footer snap">
+  <Ribbon />
+  <div class="frame footer-inner">
+    <div class="cta">
+      <span class="eyebrow">Start reading</span>
+      <h2 class="cta-title">Open any public repository.</h2>
+      <p class="cta-text">Paste a link. If its wiki is written, you are reading it in a second.</p>
+      <a class="btn btn-solid btn-lg book-trigger" href="/#open">Open a repository <BookIcon /></a>
     </div>
-    <div class="wordmark" aria-hidden="true">EveryRepo</div>
-    <div class="legal">
-      <span>Pages are written from public code at the commit shown on each page.</span>
-      <span class="mono">everyrepo.me</span>
+
+    <div class="bottom">
+      <div class="cols">
+        <div class="about">
+          <a class="brand" href="/"><Logo /> EveryRepo</a>
+          <p>
+            A wiki for public GitHub repositories. Every sentence links to the lines of code it was
+            written from.
+          </p>
+        </div>
+        <nav class="links" aria-label="Footer">
+          <div class="group">
+            <span class="group-title">Read</span>
+            <a href="/#wiki">A wiki page</a>
+            <a href="/#guide">Repositories</a>
+          </div>
+          <div class="group">
+            <span class="group-title">Product</span>
+            <a href="/#method">Method</a>
+            <a href="/#open">Open a repository</a>
+          </div>
+        </nav>
+      </div>
+      <div class="wordmark" aria-hidden="true">EveryRepo</div>
+      <div class="legal">
+        <span>Pages are written from public code at the commit shown on each page.</span>
+        <span class="mono">everyrepo.me</span>
+      </div>
     </div>
   </div>
 </footer>
 
 <style>
   .site-footer {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid var(--line-soft);
     overflow: hidden;
+  }
+
+  .footer-inner {
+    position: relative;
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 56px;
+    padding: 96px 24px 0;
+  }
+
+  .cta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 18px;
+    max-width: 560px;
+  }
+
+  .cta-title {
+    font-size: var(--t-title);
+    line-height: 1.08;
+    letter-spacing: -0.015em;
+  }
+
+  .cta-text {
+    font-size: var(--t-small);
+    color: var(--text-2);
+  }
+
+  .bottom {
+    display: flex;
+    flex-direction: column;
   }
 
   .cols {
     display: flex;
     justify-content: space-between;
     gap: 48px;
-    padding: 56px 24px 40px;
+    padding-bottom: 32px;
   }
 
   .brand {
@@ -49,27 +106,41 @@ import Logo from "./Logo.astro";
   }
 
   .about p {
-    margin-top: 14px;
-    max-width: 380px;
+    margin-top: 12px;
+    max-width: 360px;
     font-size: var(--t-small);
     color: var(--text-2);
   }
 
   .links {
-    display: grid;
-    grid-template-columns: repeat(2, auto);
-    gap: 10px 48px;
-    align-content: start;
-    font-size: var(--t-ui);
-    color: var(--text-2);
+    display: flex;
+    gap: 72px;
   }
 
-  .links a:hover {
+  .group {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    font-size: var(--t-ui);
+  }
+
+  .group-title {
+    font-size: var(--t-label);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-3);
+  }
+
+  .group a {
+    color: var(--text-2);
+    transition: color 140ms ease;
+  }
+
+  .group a:hover {
     color: var(--text);
   }
 
   .wordmark {
-    padding: 0 16px;
     font-family: var(--font-serif);
     font-size: clamp(88px, 17.5vw, 232px);
     line-height: 0.78;
@@ -79,6 +150,7 @@ import Logo from "./Logo.astro";
     -webkit-text-stroke: 1px var(--line);
     user-select: none;
     white-space: nowrap;
+    margin-left: -6px;
   }
 
   .legal {
@@ -86,7 +158,7 @@ import Logo from "./Logo.astro";
     display: flex;
     justify-content: space-between;
     gap: 24px;
-    padding: 20px 24px 28px;
+    padding: 18px 0 24px;
     border-top: 1px solid var(--line-soft);
     background: var(--bg);
     font-size: var(--t-caption);
@@ -94,10 +166,17 @@ import Logo from "./Logo.astro";
   }
 
   @media (max-width: 720px) {
+    .footer-inner {
+      padding: 64px 0 0;
+    }
+
     .cols,
     .legal {
       flex-direction: column;
-      padding-inline: 0;
+    }
+
+    .links {
+      gap: 40px;
     }
   }
 </style>

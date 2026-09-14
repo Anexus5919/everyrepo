@@ -1,15 +1,24 @@
 ---
 interface Props {
-  items: Array<{ file: string; title: string }>;
+  repo: string;
+  files: string;
+  items: Array<{ title: string; file: string; lines: string }>;
 }
-const { items } = Astro.props;
+const { repo, files, items } = Astro.props;
 ---
 
-<div class="pipeline" data-pipeline data-items={JSON.stringify(items)}>
+<div
+  class="pipeline"
+  data-pipeline
+  data-repo={repo}
+  data-files={files}
+  data-items={JSON.stringify(items)}
+>
   <canvas aria-hidden="true"></canvas>
   <p class="sr-only">
-    Files from a repository move along a line through parse, graph, chunk, write and verify
-    stations, and each one is filed into the wiki as a page with its sources.
+    Pages come off the {repo} repository one at a time. Each page is organized into a section,
+    explained in plain English, linked to the exact lines of code it came from, checked against that
+    code, and filed into the wiki.
   </p>
 </div>
 
@@ -17,7 +26,7 @@ const { items } = Astro.props;
   .pipeline {
     position: relative;
     width: 100%;
-    aspect-ratio: 600 / 460;
+    aspect-ratio: 640 / 470;
   }
 
   canvas {
@@ -30,11 +39,10 @@ const { items } = Astro.props;
 
 <script>
   interface Item {
-    file: string;
     title: string;
+    file: string;
+    lines: string;
   }
-
-  type Point = [number, number];
 
   interface Faces {
     top: string;
@@ -42,19 +50,40 @@ const { items } = Astro.props;
     right: string;
   }
 
+  type Point = [number, number];
+
   const K = Math.sqrt(3) / 2;
-  const STATIONS = ["parse", "graph", "chunk", "write", "verify"];
-  const SPACING = 1.35;
-  const STEP = 1.8;
-  const MOVE = 0.34;
+  const STATIONS = ["organized", "explained", "linked", "checked"];
+  const LAST = STATIONS.length;
+  const STEP = 2;
+  const MOVE = 0.3;
   const TILE = 0.8;
   const TILE_Y = 0.22;
-  const TILE_H = 0.12;
-  const PILE_X = -1.25;
-  const WIKI_X = 8.4;
-  const STATION_TOP = 0.7;
+  const TILE_H = 0.1;
+  const STACK_W = 1.1;
+  const STACK_X = -2.75;
+  const STACK_Y = TILE_Y + TILE / 2 - STACK_W / 2;
+  const SLABS = 12;
+  const SLAB = 0.09;
+  const STACK_TOP = SLABS * SLAB;
+  const SPACING = 1.6;
+  const STATION_W = 1.15;
+  const STATION_Y = -1.45;
+  const STATION_D = 0.9;
+  const STATION_TOP = 0.75;
+  const WIKI_X = SPACING * LAST;
+  const WIKI_W = 1.3;
   const WIKI_TOP = 0.9;
-  const LAST = STATIONS.length + 1;
+  const TRACK_X0 = STACK_X - 0.25;
+  const TRACK_X1 = WIKI_X + WIKI_W + 0.1;
+
+  // Rows of a page: evenly spaced raw code first, grouped into paragraphs once organized
+  const EVEN = [0.14, 0.29, 0.44, 0.59, 0.74];
+  const GROUPED = [0.14, 0.28, 0.47, 0.66, 0.8];
+  const INDENT = [0.08, 0.16, 0.24, 0.16, 0.08];
+  const PROSE = [0.8, 0.5, 0.74, 0.8, 0.46];
+  const CITED = [1, 4];
+  const UNSUPPORTED = 2;
 
   const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
   const clamp = (v: number) => Math.max(0, Math.min(1, v));
@@ -78,6 +107,8 @@ const { items } = Astro.props;
     const ctx = context;
     const items = JSON.parse(host.dataset.items ?? "[]") as Item[];
     if (items.length === 0) return;
+    const repoName = host.dataset.repo ?? "";
+    const fileCount = host.dataset.files ?? "";
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
 
     let width = 0;
@@ -104,11 +135,15 @@ const { items } = Astro.props;
         paperTop: get("--iso-paper-top"),
         paperLeft: get("--iso-paper-left"),
         paperRight: get("--iso-paper-right"),
+        stackTop: get("--iso-stack-top"),
+        stackLeft: get("--iso-stack-left"),
+        stackRight: get("--iso-stack-right"),
         ink: get("--iso-ink"),
         stationTop: get("--cube-top-b"),
         stationLeft: get("--cube-left-b"),
         stationRight: get("--cube-right-b"),
         glyph: get("--cube-label"),
+        faceInk: get("--iso-face-ink"),
         lit: get("--iso-lit"),
         blockTop: get("--iso-block-top"),
         blockLeft: get("--iso-block-left"),
@@ -137,14 +172,36 @@ const { items } = Astro.props;
       height = rect.height;
       canvas!.width = Math.round(width * ratio);
       canvas!.height = Math.round(height * ratio);
-      // Scene extents in iso units, projected at scale 1
-      const minX = (PILE_X - 0.3 - 1.5) * K;
-      const maxX = (WIKI_X + 1.3 + 1.5) * K;
-      const minY = (PILE_X - 1.5) * 0.5 - 1.7;
-      const maxY = (WIKI_X + 1.3 + 1.4) * 0.5 + 1.1;
-      scale = Math.min((width - 8) / (maxX - minX), (height - 8) / (maxY - minY));
-      ox = width / 2 - ((minX + maxX) / 2) * scale;
-      oy = height / 2 - ((minY + maxY) / 2) * scale;
+      const corners: Array<[number, number, number]> = [];
+      const addBox = (x: number, y: number, z: number, dx: number, dy: number, dz: number) => {
+        for (const cx of [x, x + dx])
+          for (const cy of [y, y + dy]) for (const cz of [z, z + dz]) corners.push([cx, cy, cz]);
+      };
+      addBox(TRACK_X0, -0.45, -0.3, TRACK_X1 - TRACK_X0, 1.75, 0.3);
+      addBox(STACK_X, STACK_Y, 0, STACK_W, STACK_W, STACK_TOP + 0.4);
+      addBox(-0.175, STATION_Y, -0.3, SPACING * (LAST - 1) + STATION_W, STATION_D, STATION_TOP + 0.3);
+      addBox(WIKI_X, -0.35, -0.3, WIKI_W, 1.75, WIKI_TOP + 0.3);
+      let minX = Infinity;
+      let maxX = -Infinity;
+      let minY = Infinity;
+      let maxY = -Infinity;
+      for (const [x, y, z] of corners) {
+        const sx = (x - y) * K;
+        const sy = (x + y) * 0.5 - z;
+        minX = Math.min(minX, sx);
+        maxX = Math.max(maxX, sx);
+        minY = Math.min(minY, sy);
+        maxY = Math.max(maxY, sy);
+      }
+      const side = 8;
+      const topPad = 52;
+      const bottomPad = 50;
+      scale = Math.min(
+        (width - side * 2) / (maxX - minX),
+        (height - topPad - bottomPad) / (maxY - minY),
+      );
+      ox = side + (width - side * 2 - (maxX - minX) * scale) / 2 - minX * scale;
+      oy = topPad + (height - topPad - bottomPad - (maxY - minY) * scale) / 2 - minY * scale;
       back = layer(drawBack);
       front = layer(drawFront);
     }
@@ -190,32 +247,6 @@ const { items } = Astro.props;
       quad(target, [P(x, y, z + dz), P(x + dx, y, z + dz), P(x + dx, y + dy, z + dz), P(x, y + dy, z + dz)], faces.top, stroke);
     }
 
-    // Text lying flat on a horizontal plane, running along the x axis
-    function flatText(target: CanvasRenderingContext2D, text: string, x: number, y: number, z: number, size: number, color: string) {
-      const [px, py] = project(x, y, z);
-      target.save();
-      target.translate(px, py);
-      target.transform(K, 0.5, -K, 0.5, 0, 0);
-      target.font = `${size}px "IBM Plex Mono", monospace`;
-      target.fillStyle = color;
-      target.textBaseline = "middle";
-      target.fillText(text, 0, 0);
-      target.restore();
-    }
-
-    // Text printed on the face of a block that looks toward the line
-    function faceText(target: CanvasRenderingContext2D, text: string, x: number, y: number, z: number, size: number, color: string) {
-      const [px, py] = project(x, y, z);
-      target.save();
-      target.translate(px, py);
-      target.transform(K, 0.5, 0, 1, 0, 0);
-      target.font = `500 ${size}px "IBM Plex Mono", monospace`;
-      target.fillStyle = color;
-      target.textBaseline = "middle";
-      target.fillText(text, 0, 0);
-      target.restore();
-    }
-
     function segment(target: CanvasRenderingContext2D, a: Point, b: Point, color: string, lineWidth: number) {
       target.beginPath();
       target.moveTo(a[0], a[1]);
@@ -226,46 +257,71 @@ const { items } = Astro.props;
       target.stroke();
     }
 
-    const stationX = (index: number) => (index + 1) * SPACING;
+    // Text lying on a horizontal surface, running along the x axis
+    function flatText(target: CanvasRenderingContext2D, text: string, x: number, y: number, z: number, size: number, color: string, weight = 400) {
+      const [px, py] = project(x, y, z);
+      target.save();
+      target.translate(px, py);
+      target.transform(K, 0.5, -K, 0.5, 0, 0);
+      target.font = `${weight} ${size}px "IBM Plex Mono", monospace`;
+      target.fillStyle = color;
+      target.textBaseline = "middle";
+      target.fillText(text, 0, 0);
+      target.restore();
+    }
+
+    // Text printed on the side of a block that faces the line
+    function faceText(target: CanvasRenderingContext2D, text: string, x: number, y: number, z: number, size: number, color: string) {
+      const [px, py] = project(x, y, z);
+      target.save();
+      target.translate(px, py);
+      target.transform(K, 0.5, 0, 1, 0, 0);
+      target.font = `600 ${size}px "IBM Plex Sans", sans-serif`;
+      target.fillStyle = color;
+      target.textBaseline = "middle";
+      target.fillText(text, 0, 0);
+      target.restore();
+    }
+
+    const stationX = (index: number) => index * SPACING;
     const stationTop = (index: number, u: number, v: number): Point =>
-      project(stationX(index) - 0.05 + u * 0.9, -1.45 + v * 0.9, STATION_TOP);
+      project(stationX(index) - 0.175 + u * STATION_W, STATION_Y + v * STATION_D, STATION_TOP);
 
     function drawGlyph(target: CanvasRenderingContext2D, index: number, color: string) {
       const S = (u: number, v: number) => stationTop(index, u, v);
-      const width = Math.max(1.2, scale * 0.035);
-      const name = STATIONS[index];
-      if (name === "parse") {
-        segment(target, S(0.3, 0.25), S(0.2, 0.5), color, width);
-        segment(target, S(0.2, 0.5), S(0.3, 0.75), color, width);
-        segment(target, S(0.7, 0.25), S(0.8, 0.5), color, width);
-        segment(target, S(0.8, 0.5), S(0.7, 0.75), color, width);
-      } else if (name === "graph") {
-        const nodes: Point[] = [S(0.25, 0.3), S(0.72, 0.25), S(0.4, 0.74), S(0.76, 0.7)];
-        segment(target, nodes[0]!, nodes[1]!, color, width * 0.8);
-        segment(target, nodes[0]!, nodes[2]!, color, width * 0.8);
-        segment(target, nodes[1]!, nodes[3]!, color, width * 0.8);
-        segment(target, nodes[2]!, nodes[3]!, color, width * 0.8);
-        for (const node of nodes) {
+      const width = Math.max(1.3, scale * 0.036);
+      if (index === 0) {
+        segment(target, S(0.2, 0.26), S(0.78, 0.26), color, width * 1.3);
+        segment(target, S(0.28, 0.36), S(0.28, 0.74), color, width);
+        segment(target, S(0.28, 0.52), S(0.72, 0.52), color, width);
+        segment(target, S(0.28, 0.74), S(0.62, 0.74), color, width);
+      } else if (index === 1) {
+        segment(target, S(0.2, 0.26), S(0.8, 0.26), color, width);
+        segment(target, S(0.2, 0.42), S(0.8, 0.42), color, width);
+        segment(target, S(0.2, 0.58), S(0.74, 0.58), color, width);
+        segment(target, S(0.2, 0.74), S(0.5, 0.74), color, width);
+      } else if (index === 2) {
+        for (const [u0, v0] of [
+          [0.16, 0.26],
+          [0.44, 0.44],
+        ] as const) {
+          const corners = [S(u0, v0), S(u0 + 0.4, v0), S(u0 + 0.4, v0 + 0.3), S(u0, v0 + 0.3)];
           target.beginPath();
-          target.arc(node[0], node[1], Math.max(2, scale * 0.05), 0, Math.PI * 2);
-          target.fillStyle = color;
-          target.fill();
+          target.moveTo(corners[0]![0], corners[0]![1]);
+          for (const corner of corners.slice(1)) target.lineTo(corner[0], corner[1]);
+          target.closePath();
+          target.strokeStyle = color;
+          target.lineWidth = width;
+          target.lineJoin = "round";
+          target.stroke();
         }
-      } else if (name === "chunk") {
-        for (const v of [0.28, 0.5, 0.72]) segment(target, S(0.22, v), S(0.78, v), color, width * 1.6);
-      } else if (name === "write") {
-        segment(target, S(0.2, 0.32), S(0.8, 0.32), color, width);
-        segment(target, S(0.2, 0.5), S(0.66, 0.5), color, width);
-        segment(target, S(0.2, 0.68), S(0.52, 0.68), color, width);
-        segment(target, S(0.6, 0.68), S(0.72, 0.68), color, width * 2);
-      } else if (name === "verify") {
-        segment(target, S(0.28, 0.5), S(0.45, 0.72), color, width * 1.4);
-        segment(target, S(0.45, 0.72), S(0.78, 0.26), color, width * 1.4);
+      } else {
+        segment(target, S(0.24, 0.5), S(0.42, 0.72), color, width * 1.4);
+        segment(target, S(0.42, 0.72), S(0.8, 0.26), color, width * 1.4);
       }
     }
 
     function drawBack(target: CanvasRenderingContext2D) {
-      // Floor grid the line stands on, faded toward the edges
       const grid = document.createElement("canvas");
       grid.width = canvas!.width;
       grid.height = canvas!.height;
@@ -273,11 +329,11 @@ const { items } = Astro.props;
       g.setTransform(ratio, 0, 0, ratio, 0, 0);
       g.strokeStyle = colors.floor;
       g.lineWidth = 1;
-      for (let n = -6; n <= 14; n += 1) {
+      for (let n = -8; n <= 12; n += 1) {
         const a = project(n, -5, -0.3);
         const b = project(n, 6, -0.3);
-        const c = project(-6, n - 4, -0.3);
-        const d = project(14, n - 4, -0.3);
+        const c = project(-8, n - 3, -0.3);
+        const d = project(12, n - 3, -0.3);
         g.beginPath();
         g.moveTo(a[0], a[1]);
         g.lineTo(b[0], b[1]);
@@ -285,17 +341,14 @@ const { items } = Astro.props;
         g.lineTo(d[0], d[1]);
         g.stroke();
       }
-      const center = project(3.2, 0, 0);
-      const fade = g.createRadialGradient(center[0], center[1], 0, center[0], center[1], width * 0.62);
+      const center = project(2.2, 0, 0);
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      const fade = g.createRadialGradient(center[0] * ratio, center[1] * ratio, 0, center[0] * ratio, center[1] * ratio, width * 0.6 * ratio);
       fade.addColorStop(0, "rgba(0,0,0,0.9)");
       fade.addColorStop(1, "rgba(0,0,0,0)");
       g.globalCompositeOperation = "destination-in";
-      g.setTransform(1, 0, 0, 1, 0, 0);
       g.fillStyle = fade;
-      g.save();
-      g.scale(ratio, ratio);
-      g.fillRect(0, 0, width, height);
-      g.restore();
+      g.fillRect(0, 0, grid.width, grid.height);
       target.save();
       target.setTransform(1, 0, 0, 1, 0, 0);
       target.drawImage(grid, 0, 0);
@@ -303,123 +356,147 @@ const { items } = Astro.props;
 
       const station: Faces = { top: colors.stationTop, left: colors.stationLeft, right: colors.stationRight };
       STATIONS.forEach((name, index) => {
-        box(target, stationX(index) - 0.05, -1.45, -0.3, 0.9, 0.9, STATION_TOP + 0.3, station, colors.edge);
+        box(target, stationX(index) - 0.175, STATION_Y, -0.3, STATION_W, STATION_D, STATION_TOP + 0.3, station, colors.edge);
         drawGlyph(target, index, colors.glyph);
-        faceText(target, name, stationX(index) + 0.06, -0.55, 0.12, Math.max(9, scale * 0.21), colors.glyph);
+        faceText(target, name, stationX(index) - 0.1, STATION_Y + STATION_D, 0.2, Math.max(10, scale * 0.19), colors.faceInk);
       });
 
       const track: Faces = { top: colors.trackTop, left: colors.trackLeft, right: colors.trackRight };
-      box(target, PILE_X - 0.2, -0.45, -0.3, WIKI_X - PILE_X + 0.3, 1.75, 0.3, track, colors.edge);
+      box(target, TRACK_X0, -0.45, -0.3, TRACK_X1 - TRACK_X0, 1.75, 0.3, track, colors.edge);
 
-      // Direction of travel along the middle of the line
       target.save();
       target.setLineDash([3, 5]);
-      segment(target, project(0.9, TILE_Y + TILE / 2, 0), project(WIKI_X - 0.1, TILE_Y + TILE / 2, 0), rgba(colors.text3, 0.35), 1);
+      segment(target, project(STACK_X + STACK_W + 0.15, TILE_Y + TILE / 2, 0), project(WIKI_X - 0.1, TILE_Y + TILE / 2, 0), rgba(colors.text3, 0.35), 1);
       target.restore();
 
-
-      const paper: Faces = { top: colors.paperTop, left: colors.paperLeft, right: colors.paperRight };
-      for (let level = 0; level < 3; level += 1) {
-        box(target, PILE_X, TILE_Y, level * 0.15, TILE, TILE, TILE_H, paper, colors.edge);
+      const slab: Faces = { top: colors.stackTop, left: colors.stackLeft, right: colors.stackRight };
+      for (let level = 0; level < SLABS; level += 1) {
+        const inset = seeded(level, 3) * 0.03;
+        box(target, STACK_X + inset, STACK_Y + inset, level * SLAB, STACK_W - inset * 2, STACK_W - inset * 2, SLAB, slab, colors.edge);
+      }
+      // Lines of code on the file at the top of the repository
+      for (let row = 0; row < 6; row += 1) {
+        const y = STACK_Y + 0.16 + row * 0.15;
+        const indent = [0.12, 0.22, 0.32, 0.22, 0.12, 0.22][row]!;
+        const length = 0.3 + seeded(row, 5) * 0.35;
+        segment(target, project(STACK_X + indent, y, STACK_TOP), project(STACK_X + indent + length, y, STACK_TOP), rgba(colors.ink, 0.4), Math.max(1, scale * 0.026));
       }
     }
 
     function drawFront(target: CanvasRenderingContext2D) {
       const block: Faces = { top: colors.blockTop, left: colors.blockLeft, right: colors.blockRight };
-      box(target, WIKI_X, -0.35, -0.3, 1.3, 1.75, WIKI_TOP + 0.3, block, colors.edge);
-      const T = (u: number, v: number) => project(WIKI_X + u * 1.3, -0.35 + v * 1.75, WIKI_TOP);
-      const width = Math.max(1.3, scale * 0.04);
-      const pageLeft = [T(0.2, 0.28), T(0.5, 0.36), T(0.5, 0.78), T(0.2, 0.7)];
-      const pageRight = [T(0.5, 0.36), T(0.8, 0.28), T(0.8, 0.7), T(0.5, 0.78)];
+      box(target, WIKI_X, -0.35, -0.3, WIKI_W, 1.75, WIKI_TOP + 0.3, block, colors.edge);
+      const T = (u: number, v: number) => project(WIKI_X + u * WIKI_W, -0.35 + v * 1.75, WIKI_TOP);
+      const pageLeft = [T(0.2, 0.3), T(0.5, 0.38), T(0.5, 0.8), T(0.2, 0.72)];
+      const pageRight = [T(0.5, 0.38), T(0.8, 0.3), T(0.8, 0.72), T(0.5, 0.8)];
       for (const page of [pageLeft, pageRight]) {
         target.beginPath();
         target.moveTo(page[0]![0], page[0]![1]);
         for (const point of page.slice(1)) target.lineTo(point[0], point[1]);
         target.closePath();
         target.strokeStyle = colors.accent;
-        target.lineWidth = width;
+        target.lineWidth = Math.max(1.3, scale * 0.04);
         target.lineJoin = "round";
         target.stroke();
       }
-      flatText(target, "wiki", WIKI_X + 0.12, -0.2, WIKI_TOP + 0.001, Math.max(9, scale * 0.22), colors.text2);
+      flatText(target, "wiki", WIKI_X + 0.12, -0.22, WIKI_TOP + 0.001, Math.max(9, scale * 0.2), colors.text2);
     }
 
-    // Lines of code on a tile, grouped by the slices the chunk station cuts
-    function codeLines(target: CanvasRenderingContext2D, key: number, x: number, z: number, gap: number, alpha: number, reveal: number, marks: number) {
-      const rows = [0.14, 0.3, 0.46, 0.62, 0.84];
-      rows.forEach((v, row) => {
-        const shown = span(reveal, row * 0.14, row * 0.14 + 0.3);
-        if (shown <= 0 || alpha <= 0) return;
-        const indent = row === 1 || row === 2 ? 0.2 : 0.1;
-        const length = (0.3 + seeded(key, row) * 0.4) * shown;
-        const slice = v < 0.4 ? -1 : v < 0.72 ? 0 : 1;
-        const y = TILE_Y + v * TILE + slice * gap;
-        const top = z + TILE_H;
-        segment(target, project(x + indent * TILE, y, top), project(x + (indent + length) * TILE, y, top), rgba(colors.ink, 0.55 * alpha), Math.max(1.1, scale * 0.03));
-        if (marks > 0 && (row === 0 || row === 2)) {
-          segment(target, project(x + indent * TILE, y, top), project(x + (indent + 0.1) * TILE, y, top), rgba(colors.accent, marks * alpha), Math.max(1.8, scale * 0.05));
-        }
-      });
+    interface PageState {
+      organize: number;
+      explain: number;
+      link: number;
+      check: number;
+      scanning: boolean;
     }
 
-    function drawItem(key: number, x: number, z: number, state: Record<string, number>) {
+    const rowV = (index: number, group: number) =>
+      EVEN[index]! + (GROUPED[index]! - EVEN[index]!) * group;
+
+    function chipPoint(x: number, z: number, row: number, group: number): Point {
+      const at = INDENT[0]! + PROSE[row]! + 0.05;
+      return project(x + (at + 0.045) * TILE, TILE_Y + rowV(row, group) * TILE, z + TILE_H);
+    }
+
+    function drawPage(key: number, x: number, z: number, state: PageState) {
       const paper: Faces = { top: colors.paperTop, left: colors.paperLeft, right: colors.paperRight };
-      const gap = state.gap ?? 0;
-      if (gap > 0.001) {
-        const slices = [
-          [0, 0.4],
-          [0.4, 0.72],
-          [0.72, 1],
-        ];
-        slices.forEach(([from, to], index) => {
-          box(ctx, x, TILE_Y + from! * TILE + (index - 1) * gap, z, TILE, (to! - from!) * TILE, TILE_H, paper, colors.edge);
-        });
-      } else {
-        box(ctx, x, TILE_Y, z, TILE, TILE, TILE_H, paper, colors.edge);
+      const top = z + TILE_H;
+      const line = Math.max(1.1, scale * 0.028);
+      const tab = span(state.organize, 0.1, 0.45);
+      const group = ease(span(state.organize, 0.3, 0.8));
+      const codeFade = span(state.explain, 0.15, 0.45);
+      const prose = span(state.explain, 0.35, 0.85);
+      const chips = span(state.link, 0.5, 0.65);
+      const strike = span(state.check, 0.35, 0.55);
+      const removed = span(state.check, 0.55, 0.75);
+      const badge = span(state.check, 0.72, 0.95);
+
+      if (tab > 0) {
+        ctx.save();
+        ctx.globalAlpha = tab;
+        box(ctx, x + 0.1, TILE_Y - 0.1, z, 0.26, 0.1, TILE_H, { top: colors.accent2, left: colors.accent, right: colors.accent }, colors.edge);
+        ctx.restore();
+      }
+      box(ctx, x, TILE_Y, z, TILE, TILE, TILE_H, paper, colors.edge);
+
+      for (let row = 0; row < EVEN.length; row += 1) {
+        const y = TILE_Y + rowV(row, group) * TILE;
+        if (codeFade < 1) {
+          const indent = INDENT[row]!;
+          const length = 0.22 + seeded(key, row) * 0.3;
+          segment(ctx, project(x + indent * TILE, y, top), project(x + (indent + length) * TILE, y, top), rgba(colors.ink, 0.5 * (1 - codeFade)), line);
+        }
+        if (prose > 0) {
+          const shown = span(prose, row * 0.12, row * 0.12 + 0.4);
+          const fade = row === UNSUPPORTED ? 1 - 0.85 * removed : 1;
+          if (shown > 0) {
+            segment(ctx, project(x + INDENT[0]! * TILE, y, top), project(x + (INDENT[0]! + PROSE[row]! * shown) * TILE, y, top), rgba(colors.ink, 0.62 * fade), line);
+          }
+        }
       }
 
-      codeLines(ctx, key, x, z, gap, 1 - (state.rewrite ?? 0), state.parse ?? 0, state.marks ?? 0);
-
-      const prose = state.prose ?? 0;
-      if (prose > 0) {
-        const top = z + TILE_H;
-        const rows = [
-          { v: 0.18, length: 0.62, cite: true },
-          { v: 0.38, length: 0.72, cite: false },
-          { v: 0.58, length: 0.56, cite: true },
-          { v: 0.78, length: 0.44, cite: true },
-        ];
-        rows.forEach((row, index) => {
-          const y = TILE_Y + row.v * TILE;
-          const fade = !row.cite ? 1 - 0.85 * (state.removed ?? 0) : 1;
-          segment(ctx, project(x + 0.1 * TILE, y, top), project(x + (0.1 + row.length) * TILE, y, top), rgba(colors.ink, 0.6 * prose * fade), Math.max(1.1, scale * 0.03));
-          if (row.cite && (state.cites ?? 0) > 0) {
-            const at = 0.1 + row.length + 0.06;
-            segment(ctx, project(x + at * TILE, y, top), project(x + (at + 0.08) * TILE, y, top), rgba(colors.accent, state.cites!), Math.max(2.2, scale * 0.07));
-          }
-          if (!row.cite && (state.strike ?? 0) > 0) {
-            const reach = 0.06 + (row.length + 0.08) * state.strike!;
-            segment(ctx, project(x + 0.06 * TILE, y, top), project(x + reach * TILE, y, top), rgba(colors.accent, 0.9), Math.max(1.1, scale * 0.03));
-          }
-          if (index === 0 && (state.scan ?? -1) >= 0) {
-            const u = state.scan!;
-            segment(ctx, project(x + u * TILE, TILE_Y, top), project(x + u * TILE, TILE_Y + TILE, top), rgba(colors.accent2, 0.9), Math.max(1.4, scale * 0.04));
-          }
-        });
+      if (chips > 0) {
+        for (const row of CITED) {
+          const y = TILE_Y + rowV(row, group) * TILE;
+          const at = INDENT[0]! + PROSE[row]! + 0.05;
+          segment(ctx, project(x + at * TILE, y, top), project(x + (at + 0.09) * TILE, y, top), rgba(colors.accent, chips), Math.max(2.2, scale * 0.065));
+        }
       }
 
-      const check = state.check ?? 0;
-      if (check > 0) {
-        const [cx, cy] = project(x + TILE, TILE_Y, z + TILE_H + 0.35);
-        const radius = Math.max(7, scale * 0.17);
+      if (strike > 0) {
+        const y = TILE_Y + rowV(UNSUPPORTED, group) * TILE;
+        const reach = INDENT[0]! - 0.03 + (PROSE[UNSUPPORTED]! + 0.06) * strike;
+        segment(ctx, project(x + (INDENT[0]! - 0.03) * TILE, y, top), project(x + reach * TILE, y, top), colors.accent, line);
+      }
+
+      if (state.scanning) {
+        const v = span(state.check, 0.02, 0.62);
+        if (v > 0 && v < 1) {
+          const y = TILE_Y + v * TILE;
+          segment(ctx, project(x + 0.02 * TILE, y, top), project(x + 0.98 * TILE, y, top), rgba(colors.accent2, 0.9), Math.max(1.4, scale * 0.035));
+        }
+      }
+
+      // The page number counts pages since the site was opened
+      const label = String(key);
+      const size = Math.max(8, scale * 0.15);
+      ctx.save();
+      ctx.font = `500 ${size}px "IBM Plex Mono", monospace`;
+      const labelUnits = ctx.measureText(label).width / scale;
+      ctx.restore();
+      flatText(ctx, label, x + TILE * 0.94 - labelUnits, TILE_Y + TILE * 0.92, top + 0.001, size, rgba(colors.ink, 0.7), 500);
+
+      if (badge > 0) {
+        const [cx, cy] = project(x + TILE, TILE_Y, top + 0.3);
+        const radius = Math.max(7, scale * 0.16);
         ctx.beginPath();
         ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-        ctx.fillStyle = rgba(colors.accent, check);
+        ctx.fillStyle = rgba(colors.accent, badge);
         ctx.fill();
         const a: Point = [cx - radius * 0.45, cy + radius * 0.02];
         const b: Point = [cx - radius * 0.1, cy + radius * 0.38];
         const c: Point = [cx + radius * 0.5, cy - radius * 0.35];
-        const draw = span(check, 0.3, 1);
+        const draw = span(badge, 0.3, 1);
         ctx.beginPath();
         ctx.moveTo(a[0], a[1]);
         if (draw < 0.4) {
@@ -430,7 +507,7 @@ const { items } = Astro.props;
           ctx.lineTo(b[0], b[1]);
           ctx.lineTo(b[0] + (c[0] - b[0]) * t, b[1] + (c[1] - b[1]) * t);
         }
-        ctx.strokeStyle = rgba(colors.accentInk, check);
+        ctx.strokeStyle = rgba(colors.accentInk, badge);
         ctx.lineWidth = Math.max(1.6, scale * 0.045);
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
@@ -438,25 +515,69 @@ const { items } = Astro.props;
       }
     }
 
-    function tag(anchor: Point, offset: Point, label: string, value: string, alpha: number) {
+    // Two files in the repository that a page at the linked station cites
+    function citedSlabs(key: number) {
+      return [
+        { level: 1 + Math.floor(seeded(key, 11) * 4), from: 0.14 + seeded(key, 17) * 0.3 },
+        { level: 6 + Math.floor(seeded(key, 13) * 4), from: 0.2 + seeded(key, 19) * 0.3 },
+      ];
+    }
+
+    function drawThreads(key: number, x: number, progress: number): Point | null {
+      const reach = ease(span(progress, 0.08, 0.48));
+      const glow = span(progress, 0.44, 0.52) * (1 - span(progress, 0.86, 1));
+      const fade = 1 - span(progress, 0.86, 1);
+      const face = STACK_X + STACK_W;
+      let firstTarget: Point | null = null;
+      citedSlabs(key).forEach((slab, index) => {
+        const zMid = (slab.level + 0.5) * SLAB;
+        const y0 = STACK_Y + slab.from;
+        const y1 = y0 + 0.42;
+        const targetPoint = project(face, (y0 + y1) / 2, zMid);
+        if (index === 0) firstTarget = targetPoint;
+        if (glow > 0) {
+          quad(ctx, [project(face, STACK_Y, slab.level * SLAB), project(face, STACK_Y + STACK_W, slab.level * SLAB), project(face, STACK_Y + STACK_W, (slab.level + 1) * SLAB), project(face, STACK_Y, (slab.level + 1) * SLAB)], rgba(colors.accent, 0.4 * glow));
+          segment(ctx, project(face, y0, zMid), project(face, y1, zMid), rgba(colors.accent2, glow), Math.max(2, scale * 0.05));
+        }
+        if (reach <= 0 || fade <= 0) return;
+        const from = chipPoint(x, 0, CITED[index]!, 1);
+        const control: Point = [(from[0] + targetPoint[0]) / 2, Math.min(from[1], targetPoint[1]) - scale * 1.5];
+        ctx.beginPath();
+        ctx.moveTo(from[0], from[1]);
+        const samples = 36;
+        for (let n = 1; n <= samples; n += 1) {
+          const t = (n / samples) * reach;
+          const u = 1 - t;
+          ctx.lineTo(u * u * from[0] + 2 * u * t * control[0] + t * t * targetPoint[0], u * u * from[1] + 2 * u * t * control[1] + t * t * targetPoint[1]);
+        }
+        ctx.strokeStyle = rgba(colors.accent, 0.85 * fade);
+        ctx.lineWidth = 1.3;
+        ctx.lineCap = "round";
+        ctx.stroke();
+      });
+      return firstTarget;
+    }
+
+    function tag(anchor: Point, offset: Point, label: string, value: string, boxAlpha: number, valueAlpha: number) {
+      if (boxAlpha <= 0) return;
+      ctx.save();
+      ctx.globalAlpha = boxAlpha;
       ctx.font = `11px "IBM Plex Mono", monospace`;
       const labelWidth = ctx.measureText(label).width;
       const valueWidth = ctx.measureText(value).width;
       const boxWidth = labelWidth + valueWidth + 30;
       const boxHeight = 24;
-      let bx = anchor[0] + offset[0];
-      const by = anchor[1] + offset[1];
-      bx = Math.max(4, Math.min(width - boxWidth - 4, bx));
-      ctx.save();
+      const bx = Math.max(4, Math.min(width - boxWidth - 4, anchor[0] + offset[0]));
+      const by = Math.max(4, Math.min(height - boxHeight - 4, anchor[1] + offset[1]));
       ctx.setLineDash([2, 3]);
       ctx.beginPath();
       ctx.moveTo(anchor[0], anchor[1]);
       ctx.lineTo(anchor[0], by + boxHeight / 2);
-      ctx.lineTo(offset[0] < 0 ? bx + boxWidth : bx, by + boxHeight / 2);
+      ctx.lineTo(bx + (anchor[0] > bx + boxWidth / 2 ? boxWidth : 0), by + boxHeight / 2);
       ctx.strokeStyle = rgba(colors.text3, 0.8);
       ctx.lineWidth = 1;
       ctx.stroke();
-      ctx.restore();
+      ctx.setLineDash([]);
       ctx.beginPath();
       ctx.arc(anchor[0], anchor[1], 2.5, 0, Math.PI * 2);
       ctx.fillStyle = colors.accent;
@@ -466,20 +587,23 @@ const { items } = Astro.props;
       ctx.fillStyle = colors.panel;
       ctx.fill();
       ctx.strokeStyle = colors.line;
-      ctx.lineWidth = 1;
       ctx.stroke();
       ctx.textBaseline = "middle";
       ctx.fillStyle = colors.text3;
       ctx.fillText(label, bx + 10, by + boxHeight / 2 + 0.5);
-      ctx.fillStyle = rgba(colors.text, alpha);
+      ctx.globalAlpha = boxAlpha * valueAlpha;
+      ctx.fillStyle = colors.text;
       ctx.fillText(value, bx + 20 + labelWidth, by + boxHeight / 2 + 0.5);
+      ctx.restore();
     }
+
+    const itemFor = (key: number) => items[(key - 1) % items.length]!;
 
     function render(time: number) {
       const step = Math.floor(time / STEP);
       const phase = time / STEP - step;
       const moving = phase < MOVE;
-      const travel = ease(phase / MOVE);
+      const travel = ease(moving ? phase / MOVE : 1);
       const dwell = moving ? 0 : (phase - MOVE) / (1 - MOVE);
 
       ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -487,74 +611,49 @@ const { items } = Astro.props;
       if (back) ctx.drawImage(back, 0, 0);
       ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
 
-      // Stations light up while they work on the file in front of them
-      STATIONS.forEach((_, index) => {
-        if (moving) return;
-        const glow = Math.sin(Math.PI * dwell);
-        drawGlyph(ctx, index, rgba(colors.lit, 0.9 * glow));
-      });
+      const newest = step + 1;
+      const oldest = Math.max(1, newest - LAST);
+      let linkingKey = 0;
+      let linkingX = 0;
 
-      const graphLinks: Array<{ from: Point; to: Point; progress: number; node: number }> = [];
+      // A station lights up only while a page is being worked on in front of it
+      for (let key = newest; key >= oldest; key -= 1) {
+        const pos = step - (key - 1);
+        if (!moving && pos < LAST) {
+          drawGlyph(ctx, pos, rgba(colors.lit, 0.9 * Math.sin(Math.PI * dwell)));
+        }
+      }
 
-      for (let key = step - LAST; key <= step; key += 1) {
-        const station = step - key;
-        if (station < 0 || station > LAST) continue;
-        if (station === LAST && !moving) continue;
-        const done = (index: number) => (station > index ? 1 : station === index && !moving ? dwell : 0);
-        const parse = done(1);
-        const graph = done(2);
-        const chunk = done(3);
-        const write = done(4);
-        const verify = done(5);
-
-        const at = (index: number) => (index === 0 ? 0 : index === LAST ? WIKI_X + 0.5 : stationX(index - 1));
-        let x = at(station);
+      const parkX = (index: number) => (index < LAST ? stationX(index) : WIKI_X + 0.25);
+      for (let key = newest; key >= oldest; key -= 1) {
+        const pos = step - (key - 1);
+        if (pos === LAST && !moving) continue;
+        let x = parkX(pos);
         let z = 0;
         if (moving) {
-          if (station === 0) {
-            x = PILE_X + (0 - PILE_X) * travel;
-            z = 0.3 * (1 - travel) + Math.sin(travel * Math.PI) * 0.12;
+          if (pos === 0) {
+            x = STACK_X + 0.15 + (parkX(0) - STACK_X - 0.15) * travel;
+            z = STACK_TOP * (1 - travel) + Math.sin(travel * Math.PI) * 0.3;
           } else {
-            x = at(station - 1) + (at(station) - at(station - 1)) * travel;
+            x = parkX(pos - 1) + (parkX(pos) - parkX(pos - 1)) * travel;
           }
         }
-
-        const state: Record<string, number> = {
-          parse: span(parse, 0.05, 0.7),
-          marks: span(parse, 0.7, 0.95),
-          gap: 0.09 * ease(span(chunk, 0.1, 0.55)) * (1 - ease(span(write, 0, 0.35))),
-          rewrite: span(write, 0.3, 0.55),
-          prose: span(write, 0.45, 0.8),
-          cites: span(write, 0.78, 0.95),
-          strike: span(verify, 0.3, 0.55),
-          removed: span(verify, 0.55, 0.8),
-          check: span(verify, 0.75, 1),
-          scan: station === 5 && !moving ? Math.min(1, dwell * 1.05) : -1,
-        };
-        drawItem(key, x, z, state);
-
-        if (station === 2 && !moving) {
-          graphLinks.push({
-            from: project(x + 0.18 * TILE, TILE_Y + 0.14 * TILE, TILE_H),
-            to: stationTop(1, [0.25, 0.72, 0.4, 0.76][key % 4]!, [0.3, 0.25, 0.74, 0.7][key % 4]!),
-            progress: graph,
-            node: key % 4,
-          });
+        const done = (index: number) => (pos > index ? 1 : pos === index && !moving ? dwell : 0);
+        drawPage(key, x, z, {
+          organize: done(0),
+          explain: done(1),
+          link: done(2),
+          check: done(3),
+          scanning: pos === 3 && !moving,
+        });
+        if (pos === 2 && !moving) {
+          linkingKey = key;
+          linkingX = x;
         }
       }
 
-      for (const link of graphLinks) {
-        const reach = ease(span(link.progress, 0.05, 0.45));
-        const fade = 1 - span(link.progress, 0.8, 1);
-        const end: Point = [link.from[0] + (link.to[0] - link.from[0]) * reach, link.from[1] + (link.to[1] - link.from[1]) * reach];
-        segment(ctx, link.from, end, rgba(colors.accent, 0.9 * fade), 1.4);
-        if (reach >= 1) {
-          ctx.beginPath();
-          ctx.arc(link.to[0], link.to[1], Math.max(3, scale * 0.07), 0, Math.PI * 2);
-          ctx.fillStyle = rgba(colors.accent, fade);
-          ctx.fill();
-        }
-      }
+      let sourceAnchor: Point | null = null;
+      if (linkingKey > 0) sourceAnchor = drawThreads(linkingKey, linkingX, dwell);
 
       if (front) {
         ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -562,39 +661,41 @@ const { items } = Astro.props;
         ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
       }
 
-      const reading = items[((step % items.length) + items.length) % items.length]!;
-      const filed = items[(((step - LAST) % items.length) + items.length) % items.length]!;
-      const fresh = span(phase, 0, 0.2);
-      const arrived = moving ? 0 : span(dwell, 0, 0.25);
-      tag(project(PILE_X + 0.4, TILE_Y + 0.4, 0.62), [-30, -scale * 1.7], "reading", reading.file, fresh);
-      const below = project(WIKI_X + 1.3, 0.9, -0.3);
-      if (arrived > 0) {
-        tag(below, [-230, scale * 0.3], "filed", filed.title, arrived);
-      } else {
-        const previous = items[(((step - LAST - 1) % items.length) + items.length) % items.length]!;
-        tag(below, [-230, scale * 0.3], "filed", previous.title, 1);
+      tag(project(STACK_X + STACK_W / 2, STACK_Y + STACK_W / 2, STACK_TOP + 0.02), [-30, -scale * 1.25], repoName, fileCount, 1, 1);
+
+      if (sourceAnchor && linkingKey > 0) {
+        const item = itemFor(linkingKey);
+        const alpha = span(dwell, 0.45, 0.55) * (1 - span(dwell, 0.86, 1));
+        tag(sourceAnchor, [-scale * 2.6, scale * 2.4], item.file, item.lines, alpha, 1);
+      }
+
+      const lastFiled = moving ? step - LAST : step - LAST + 1;
+      if (lastFiled >= 1) {
+        const arriving = !moving && lastFiled === step - LAST + 1;
+        const valueAlpha = arriving ? span(dwell, 0, 0.2) : 1;
+        const boxAlpha = lastFiled === 1 && arriving ? span(dwell, 0, 0.2) : 1;
+        tag(project(WIKI_X + WIKI_W, 0.95, -0.3), [-250, scale * 0.35], `page ${lastFiled}`, itemFor(lastFiled).title, boxAlpha, valueAlpha);
       }
     }
 
     function frame(now: number) {
       const delta = Math.min(now - last, 64) / 1000;
       last = now;
-      if (visible && !document.hidden && !reduced.matches) {
+      if (!document.hidden && !reduced.matches) {
         clock += delta;
-        render(clock);
+        if (visible) render(clock);
       }
       requestAnimationFrame(frame);
     }
 
-    // A still frame shows every station mid-task when motion is reduced
-    const still = STEP * 12 + STEP * (MOVE + (1 - MOVE) * 0.62);
+    // With reduced motion a single frame shows every station in use
+    const still = STEP * 6 + STEP * (MOVE + (1 - MOVE) * 0.55);
 
     function refresh() {
       fit();
       render(reduced.matches ? still : clock);
     }
 
-    clock = STEP * 8;
     void document.fonts.ready.then(refresh);
     refresh();
     requestAnimationFrame(frame);

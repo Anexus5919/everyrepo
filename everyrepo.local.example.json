@@ -47,23 +47,10 @@
       }
     },
     "tasks": {
-      "summary": [
-        "gemini-lite",
-        "groq-qwen"
-      ],
-      "plan": [
-        "gemini-flash",
-        "gemini-lite"
-      ],
-      "page": [
-        "gemini-lite",
-        "gemini-flash"
-      ],
-      "ask": [
-        "groq-oss",
-        "groq-qwen",
-        "gemini-lite"
-      ]
+      "summary": ["gemini-lite", "groq-qwen"],
+      "plan": ["gemini-flash", "gemini-lite"],
+      "page": ["gemini-lite", "gemini-flash"],
+      "ask": ["groq-oss", "groq-qwen", "gemini-lite"]
     }
   }
 }

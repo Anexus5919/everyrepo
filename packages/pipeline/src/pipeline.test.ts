@@ -14,7 +14,7 @@ import {
 import { claimNextJob, enqueueJob, runJob, StageDeferredError } from "@everyrepo/queue";
 import { git } from "@everyrepo/repo";
 import { LlmRouter, type ChatModel } from "@everyrepo/llm";
-import { summarizeClusters } from "@everyrepo/wiki";
+import { summarizeRepository } from "@everyrepo/wiki";
 import { afterAll, describe, expect, it } from "vitest";
 import { runEmbedStage } from "./embed-stage.ts";
 import { estimateIndexCost } from "./estimate.ts";
@@ -147,23 +147,33 @@ describe("index pipeline", () => {
       embedder: { ...embedder, model: "limited" },
     });
     expect(resumed).toMatchObject({ cached: 1, embedded: chunkCount - 1 });
-    // Cluster summaries are stored once and reused while their input stays the same
+    // Summaries are stored once and reused while their input stays the same
     let modelCalls = 0;
+    const clusterAnswer = {
+      title: "Core store",
+      purpose: "Keeps widget state for the rest of the packages.",
+      responsibilities: ["Load state"],
+      keyFiles: [{ path: "packages/core/src/store.ts", role: "Defines the store" }],
+      concepts: ["Store"],
+    };
+    const repoAnswer = {
+      summary: "A small widget library with a state store.",
+      overview: "The repository holds a core package with a store and a Java server that uses it.",
+      architecture: "The core package defines the store and the server creates it.",
+      mainAreas: [{ title: "Core", description: "State handling.", modules: ["packages/core"] }],
+      technologies: ["TypeScript", "Java"],
+    };
     const fakeModel: ChatModel = {
       id: "fake",
       provider: "test",
       model: "fake",
       limits: { requestsPerMinute: 100, tokensPerMinute: 1_000_000, requestsPerDay: 1_000 },
-      complete: async () => {
+      complete: async (request) => {
         modelCalls += 1;
+        const prompt = request.messages.map((message) => message.content).join("\n");
+        const answer = prompt.includes("Describe the repository") ? repoAnswer : clusterAnswer;
         return {
-          text: JSON.stringify({
-            title: "Core store",
-            purpose: "Keeps widget state for the rest of the packages.",
-            responsibilities: ["Load state"],
-            keyFiles: [{ path: "packages/core/src/store.ts", role: "Defines the store" }],
-            concepts: ["Store"],
-          }),
+          text: JSON.stringify(answer),
           provider: "test",
           model: "fake",
           inputTokens: 10,
@@ -173,7 +183,7 @@ describe("index pipeline", () => {
       },
     };
     const summarize = () =>
-      summarizeClusters({
+      summarizeRepository({
         enginePath,
         repo: "acme/widgets",
         router: new LlmRouter({ summary: [fakeModel] }),
@@ -181,11 +191,15 @@ describe("index pipeline", () => {
         heartbeat: () => {},
       });
     const first = await summarize();
-    expect(first.written).toBe(first.clusters);
-    expect(first.clusters).toBeGreaterThan(0);
+    expect(first.clusters.total).toBeGreaterThan(0);
+    expect(first.clusters.written).toBe(first.clusters.total);
+    expect(first.repo.written).toBe(1);
+    const callsAfterFirst = modelCalls;
     const second = await summarize();
-    expect(second).toMatchObject({ written: 0, reused: first.clusters });
-    expect(modelCalls).toBe(first.clusters);
+    expect(second.clusters).toMatchObject({ written: 0, reused: first.clusters.total });
+    expect(second.modules.written).toBe(0);
+    expect(second.repo).toMatchObject({ written: 0, reused: 1 });
+    expect(modelCalls).toBe(callsAfterFirst);
 
     const report = buildReport(enginePath);
     expect(report.repo).toBe("acme/widgets");

@@ -12,5 +12,26 @@ export {
   clusterSummarySchema,
   type ClusterSummary,
 } from "./cluster-summary.ts";
-export { summarizeClusters, type SummarizeInput, type SummarizeOutput } from "./summarize.ts";
+export {
+  buildModuleContext,
+  listModulesWithClusters,
+  MODULE_PROMPT_VERSION,
+  moduleNeighbors,
+  type ModuleRow,
+} from "./module-summary.ts";
+export {
+  buildRepoContext,
+  cleanRepoSummary,
+  readableReadme,
+  REPO_PROMPT_VERSION,
+  repoSummarySchema,
+  type RepoSummary,
+} from "./repo-summary.ts";
+export { loadSummaries, pruneSummaries, saveSummary, type SummaryLevel } from "./store.ts";
+export {
+  summarizeRepository,
+  type LevelCounts,
+  type SummarizeInput,
+  type SummarizeOutput,
+} from "./summarize.ts";
 export { plainText } from "./text.ts";

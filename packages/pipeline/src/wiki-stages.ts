@@ -2,7 +2,7 @@ import { formatRepoRef, repoDirName, type LocalConfig, type RepoRef } from "@eve
 import { engineDbPath, eq, repos, type AppDb } from "@everyrepo/db";
 import { ModelUnavailableError, type LlmRouter } from "@everyrepo/llm";
 import { StageDeferredError, type StageHandler } from "@everyrepo/queue";
-import { summarizeClusters } from "@everyrepo/wiki";
+import { summarizeRepository } from "@everyrepo/wiki";
 
 export const WIKI_STAGES = ["summarize"] as const;
 export type WikiStage = (typeof WIKI_STAGES)[number];
@@ -40,7 +40,7 @@ async function deferWhenUnavailable<T>(work: () => Promise<T>): Promise<T> {
 export function createWikiHandlers(options: WikiOptions): Record<WikiStage, StageHandler> {
   const summarize: StageHandler = async ({ heartbeat, log }) =>
     deferWhenUnavailable(() =>
-      summarizeClusters({
+      summarizeRepository({
         enginePath: enginePathFor(options),
         repo: formatRepoRef(options.ref),
         router: options.router,

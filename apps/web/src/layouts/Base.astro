@@ -29,6 +29,10 @@ const { title, description } = Astro.props;
       try {
         const saved = localStorage.getItem("theme");
         if (saved === "light" || saved === "dark") document.documentElement.dataset.theme = saved;
+        if (saved === "system") {
+          const light = window.matchMedia("(prefers-color-scheme: light)").matches;
+          document.documentElement.dataset.theme = light ? "light" : "dark";
+        }
       } catch {}
     </script>
   </head>

@@ -205,5 +205,6 @@ import Logo from "./Logo.astro";
     } catch {
       // Storage can be blocked, so the choice lasts only for this page view
     }
+    window.dispatchEvent(new Event("themechange"));
   });
 </script>

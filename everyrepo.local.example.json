@@ -22,14 +22,14 @@
         "model": "gemini-3.8-flash",
         "requestsPerMinute": 5,
         "tokensPerMinute": 250000,
-        "requestsPerDay": 100
+        "requestsPerDay": 18
       },
       "gemini-lite": {
         "provider": "gemini",
         "model": "gemini-3.5-flash-lite",
-        "requestsPerMinute": 10,
+        "requestsPerMinute": 15,
         "tokensPerMinute": 250000,
-        "requestsPerDay": 1000
+        "requestsPerDay": 480
       },
       "groq-oss": {
         "provider": "groq",
@@ -47,10 +47,23 @@
       }
     },
     "tasks": {
-      "summary": ["gemini-lite", "groq-qwen"],
-      "plan": ["gemini-flash", "gemini-lite"],
-      "page": ["gemini-flash", "gemini-lite"],
-      "ask": ["groq-oss", "groq-qwen", "gemini-lite"]
+      "summary": [
+        "gemini-lite",
+        "groq-qwen"
+      ],
+      "plan": [
+        "gemini-flash",
+        "gemini-lite"
+      ],
+      "page": [
+        "gemini-lite",
+        "gemini-flash"
+      ],
+      "ask": [
+        "groq-oss",
+        "groq-qwen",
+        "gemini-lite"
+      ]
     }
   }
 }

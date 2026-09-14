@@ -182,7 +182,8 @@ export const summaries = sqliteTable(
   (table) => [uniqueIndex("summary_target").on(table.level, table.target)],
 );
 
-export const WIKI_PAGE_STATUSES = ["planned", "written", "failed"] as const;
+// A page is empty when the snapshot has no indexed sources for it to cite
+export const WIKI_PAGE_STATUSES = ["planned", "written", "failed", "empty"] as const;
 
 // Planned wiki pages for the snapshot; the write stage fills in markdown and citations
 export const wikiPages = sqliteTable("wiki_page", {

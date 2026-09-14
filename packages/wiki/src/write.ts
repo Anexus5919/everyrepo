@@ -39,6 +39,7 @@ export interface WriteOutput {
   written: number;
   reused: number;
   failed: number;
+  empty: number;
   inputTokens: number;
   outputTokens: number;
 }
@@ -150,10 +151,12 @@ export async function writePages(input: WriteInput): Promise<WriteOutput> {
       written: 0,
       reused: 0,
       failed: 0,
+      empty: 0,
       inputTokens: 0,
       outputTokens: 0,
     };
     const link = (source: Source) => githubLink(snapshot.repo, snapshot.sha, source);
+    const knownNames = [snapshot.repo, snapshot.repo.split("/").pop() ?? snapshot.repo];
 
     for (const page of pages) {
       if (input.only && !input.only.includes(page.slug)) continue;
@@ -194,6 +197,12 @@ export async function writePages(input: WriteInput): Promise<WriteOutput> {
 
       const files = candidateFiles(sql, page, clusterSummaries, children);
       const sources = selectSources(sql, files, input.maxSourceChars ?? DEFAULT_SOURCE_CHARS);
+      if (sources.length === 0) {
+        update.run("empty", null, "[]", JSON.stringify(items), null, null, Date.now(), page.slug);
+        output.empty += 1;
+        input.log(`left ${page.slug} empty: no indexed sources to cite`);
+        continue;
+      }
       const messages = pageMessages(
         snapshot.repo,
         repoSummary,
@@ -218,7 +227,7 @@ export async function writePages(input: WriteInput): Promise<WriteOutput> {
       );
       output.inputTokens += result.inputTokens;
       output.outputTokens += result.outputTokens;
-      let verified = verifyPage(result.text, sources, link);
+      let verified = verifyPage(result.text, sources, link, knownNames);
       if (!passes(verified.stats)) {
         // One rewrite with the verifier's findings; the better of the two versions is kept
         const repair = await input.router.complete(
@@ -236,7 +245,7 @@ export async function writePages(input: WriteInput): Promise<WriteOutput> {
         );
         output.inputTokens += repair.inputTokens;
         output.outputTokens += repair.outputTokens;
-        const repaired = verifyPage(repair.text, sources, link);
+        const repaired = verifyPage(repair.text, sources, link, knownNames);
         input.log(
           `rewrote ${page.slug} after verification: kept ${verified.stats.kept}, then ${repaired.stats.kept}`,
         );

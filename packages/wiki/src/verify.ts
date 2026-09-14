@@ -76,20 +76,24 @@ export function splitBlocks(markdown: string): Block[] {
 
 const normalize = (text: string) => text.replace(/\s+/g, " ").trim();
 
-// A name is grounded when a cited source contains it, ignoring case, or when it names a source file
+// A name is grounded when cited code contains it in any case, it names a source file or folder, or it is a known name
 export function isGroundedName(
   name: string,
   citedContent: string,
   sourcePaths: readonly string[],
+  knownNames: readonly string[] = [],
 ): boolean {
-  if (citedContent.includes(name) || citedContent.toLowerCase().includes(name.toLowerCase())) {
-    return true;
-  }
-  const trimmed = name.replace(/^\.?\//, "");
+  const lower = name.toLowerCase();
+  if (citedContent.includes(name) || citedContent.toLowerCase().includes(lower)) return true;
+  if (knownNames.some((known) => known.toLowerCase() === lower)) return true;
+  const trimmed = name.replace(/^\.?\//, "").replace(/\/$/, "");
+  if (trimmed === "") return false;
   return sourcePaths.some(
     (path) =>
       path === trimmed ||
       path.endsWith(`/${trimmed}`) ||
+      path.startsWith(`${trimmed}/`) ||
+      path.includes(`/${trimmed}/`) ||
       (path.split("/").pop() ?? "").replace(/\.[^.]+$/, "") === trimmed,
   );
 }
@@ -104,6 +108,7 @@ export function verifyPage(
   raw: string,
   sources: readonly Source[],
   link: (source: Source) => string,
+  knownNames: readonly string[] = [],
 ): VerifiedPage {
   const byLabel = new Map(sources.map((source) => [source.label, source]));
   const allContent = normalize(sources.map((source) => source.content).join("\n"));
@@ -167,7 +172,9 @@ export function verifyPage(
     }
     const citedContent = [...cited].map((source) => source.content).join("\n");
     const names = [...block.text.matchAll(INLINE_CODE)].map((match) => match[1]!.trim());
-    const missing = names.filter((name) => !isGroundedName(name, citedContent, sourcePaths));
+    const missing = names.filter(
+      (name) => !isGroundedName(name, citedContent, sourcePaths, knownNames),
+    );
     if (missing.length > 0) {
       stats.unknownNames += 1;
       for (const name of missing) {

@@ -77,4 +77,15 @@ describe("verifyPage", () => {
     expect(isGroundedName("ai/chatRelay.ts", "", paths)).toBe(true);
     expect(isGroundedName("otherFile", "", paths)).toBe(false);
   });
+
+  it("accepts folders of source files and known names such as the repository", () => {
+    const paths = ["src/ai/chatRelay.ts"];
+    expect(isGroundedName("src", "", paths)).toBe(true);
+    expect(isGroundedName("src/ai/", "", paths)).toBe(true);
+    expect(isGroundedName("ai", "", paths)).toBe(true);
+    expect(isGroundedName("sugarlabs/www-v2", "", paths, ["sugarlabs/www-v2", "www-v2"])).toBe(
+      true,
+    );
+    expect(isGroundedName("lib", "", paths)).toBe(false);
+  });
 });

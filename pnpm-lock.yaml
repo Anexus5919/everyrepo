@@ -218,6 +218,9 @@ importers:
       '@everyrepo/graph':
         specifier: workspace:*
         version: link:../graph
+      '@everyrepo/llm':
+        specifier: workspace:*
+        version: link:../llm
       '@everyrepo/parse':
         specifier: workspace:*
         version: link:../parse
@@ -230,6 +233,9 @@ importers:
       '@everyrepo/search':
         specifier: workspace:*
         version: link:../search
+      '@everyrepo/wiki':
+        specifier: workspace:*
+        version: link:../wiki
 
   packages/queue:
     dependencies:
@@ -254,6 +260,18 @@ importers:
       '@everyrepo/embed':
         specifier: workspace:*
         version: link:../embed
+
+  packages/wiki:
+    dependencies:
+      '@everyrepo/db':
+        specifier: workspace:*
+        version: link:../db
+      '@everyrepo/llm':
+        specifier: workspace:*
+        version: link:../llm
+      zod:
+        specifier: ^4.6.4
+        version: 4.6.4
 
 packages:
 

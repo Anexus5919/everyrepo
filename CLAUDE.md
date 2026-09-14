@@ -28,6 +28,8 @@ TypeScript source directly and run with tsx. Tests use Vitest.
   - `eval [repos...] [--modes keyword,hybrid,files] [--dims <n>] [--details]` scores retrieval
     against the gold question sets in `packages/eval/gold`
   - `llm <task> <prompt...>` sends one prompt through the models configured for a task
+  - `wiki <owner/repo> [--until <stage>]` generates wiki content for the indexed snapshot (stages:
+    summarize); a used-up model allowance pauses the job and a rerun resumes it
 - `pnpm --filter @everyrepo/db db:generate` regenerates SQL migrations after schema changes.
 
 ## Layout
@@ -56,6 +58,8 @@ TypeScript source directly and run with tsx. Tests use Vitest.
 - `packages/llm`: chat models behind one OpenAI-compatible client (Gemini, Groq, Workers AI), per
   task fallback order from the `llm` config, per-minute pacing, daily request limits, a response
   cache and JSON answers validated with zod
+- `packages/wiki`: cluster context building, prompts, answer validation and resumable summaries
+  stored in the engine database; generated text passes through `plainText` for the writing rules
 - `packages/eval`: gold question sets and retrieval metrics
 - `packages/pipeline`: index stage handlers, cost estimate, snapshot report
 - `packages/cli`: the `everyrepo` command

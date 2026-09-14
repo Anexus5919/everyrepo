@@ -11,3 +11,4 @@ export {
   type PipelineOptions,
   type SourceOutput,
 } from "./stages.ts";
+export { createWikiHandlers, WIKI_STAGES, wikiStagesUntil, type WikiStage } from "./wiki-stages.ts";

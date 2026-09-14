@@ -13,9 +13,11 @@
     "@everyrepo/detect": "workspace:*",
     "@everyrepo/embed": "workspace:*",
     "@everyrepo/graph": "workspace:*",
+    "@everyrepo/llm": "workspace:*",
     "@everyrepo/parse": "workspace:*",
     "@everyrepo/queue": "workspace:*",
     "@everyrepo/repo": "workspace:*",
-    "@everyrepo/search": "workspace:*"
+    "@everyrepo/search": "workspace:*",
+    "@everyrepo/wiki": "workspace:*"
   }
 }

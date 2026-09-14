@@ -26,6 +26,11 @@ export function indexCommand(): Command {
       try {
         const repo = ensureRepo(context.appDb, ref);
         const open = findOpenJob(context.appDb, repo.id);
+        if (open && open.kind === "wiki") {
+          throw new Error(
+            `Job ${open.id} (wiki) is still open; finish it with the wiki command first`,
+          );
+        }
         const queued = open ?? enqueueJob(context.appDb, { repoId: repo.id, kind: "full", stages });
         if (open) log(`resuming job ${open.id} (${open.stages.join(", ")})`);
 

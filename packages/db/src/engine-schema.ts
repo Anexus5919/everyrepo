@@ -1,5 +1,14 @@
 import { FILE_KINDS, MODULE_KINDS, SIZE_TIERS } from "@everyrepo/core";
-import { blob, index, integer, primaryKey, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import {
+  blob,
+  index,
+  integer,
+  primaryKey,
+  real,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 
 export const snapshots = sqliteTable("snapshot", {
   sha: text("sha").primaryKey(),
@@ -150,3 +159,25 @@ export const chunkVectors = sqliteTable("chunk_vector", {
     .references(() => chunks.id, { onDelete: "cascade" }),
   vector: blob("vector", { mode: "buffer" }).notNull(),
 });
+
+export const SUMMARY_LEVELS = ["cluster", "module", "repo"] as const;
+
+// Model-written descriptions of clusters, modules and the repository, reused across wiki runs
+export const summaries = sqliteTable(
+  "summary",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    level: text("level", { enum: SUMMARY_LEVELS }).notNull(),
+    target: text("target").notNull(),
+    promptVersion: text("prompt_version").notNull(),
+    // Hash of the prompt input; a changed cluster or prompt produces a new summary
+    inputHash: text("input_hash").notNull(),
+    provider: text("provider").notNull(),
+    model: text("model").notNull(),
+    content: text("content", { mode: "json" }).$type<Record<string, unknown>>().notNull(),
+    inputTokens: integer("input_tokens").notNull(),
+    outputTokens: integer("output_tokens").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [uniqueIndex("summary_target").on(table.level, table.target)],
+);

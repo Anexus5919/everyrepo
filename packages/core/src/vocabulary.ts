@@ -32,7 +32,7 @@ export type ModuleKind = (typeof MODULE_KINDS)[number];
 export const REPO_STATUSES = ["requested", "queued", "indexing", "indexed", "failed"] as const;
 export type RepoStatus = (typeof REPO_STATUSES)[number];
 
-export const JOB_KINDS = ["full", "incremental"] as const;
+export const JOB_KINDS = ["full", "incremental", "wiki"] as const;
 export type JobKind = (typeof JOB_KINDS)[number];
 
 export const JOB_STATUSES = ["queued", "running", "succeeded", "failed", "cancelled"] as const;

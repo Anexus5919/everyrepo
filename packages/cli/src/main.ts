@@ -7,6 +7,7 @@ import { llmCommand } from "./commands/llm.ts";
 import { reportCommand } from "./commands/report.ts";
 import { reposCommand } from "./commands/repos.ts";
 import { searchCommand } from "./commands/search.ts";
+import { wikiCommand } from "./commands/wiki.ts";
 
 // Secrets such as provider tokens live in a gitignored .env next to the local config
 if (existsSync(".env")) process.loadEnvFile(".env");
@@ -23,6 +24,7 @@ program.addCommand(reportCommand());
 program.addCommand(searchCommand());
 program.addCommand(evalCommand());
 program.addCommand(llmCommand());
+program.addCommand(wikiCommand());
 
 try {
   await program.parseAsync();

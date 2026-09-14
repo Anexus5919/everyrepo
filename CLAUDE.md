@@ -30,6 +30,7 @@ TypeScript source directly and run with tsx. Tests use Vitest.
   - `llm <task> <prompt...>` sends one prompt through the models configured for a task
   - `wiki <owner/repo> [--until <stage>]` generates wiki content for the indexed snapshot (stages:
     summarize, plan, write); a used-up model allowance pauses the job and a rerun resumes it
+  - `export <owner/repo> [--out <dir>]` writes the generated pages as Markdown files for review
 - `pnpm --filter @everyrepo/db db:generate` regenerates SQL migrations after schema changes.
 
 ## Layout

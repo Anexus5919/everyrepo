@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { Command } from "commander";
 import { dbCommand } from "./commands/db.ts";
 import { evalCommand } from "./commands/eval.ts";
+import { exportCommand } from "./commands/export.ts";
 import { indexCommand } from "./commands/index-repo.ts";
 import { llmCommand } from "./commands/llm.ts";
 import { reportCommand } from "./commands/report.ts";
@@ -25,6 +26,7 @@ program.addCommand(searchCommand());
 program.addCommand(evalCommand());
 program.addCommand(llmCommand());
 program.addCommand(wikiCommand());
+program.addCommand(exportCommand());
 
 try {
   await program.parseAsync();

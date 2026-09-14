@@ -30,6 +30,27 @@ export function recordUsage(db: AppDb, usage: UsageRecord, at = new Date()): voi
     .run();
 }
 
+export function requestsLastDay(
+  db: AppDb,
+  provider: string,
+  model: string,
+  now = new Date(),
+): number {
+  const since = hourBucket(new Date(now.getTime() - 23 * HOUR_MS));
+  const row = db
+    .select({ requests: sum(usageCounters.requests) })
+    .from(usageCounters)
+    .where(
+      and(
+        eq(usageCounters.provider, provider),
+        eq(usageCounters.model, model),
+        gte(usageCounters.hour, since),
+      ),
+    )
+    .get();
+  return Number(row?.requests ?? 0);
+}
+
 // Neurons across all models in the current hour and the 23 before it; the allowance is per account over a rolling day
 export function neuronsUsedLastDay(db: AppDb, provider: string, now = new Date()): number {
   const since = hourBucket(new Date(now.getTime() - 23 * HOUR_MS));

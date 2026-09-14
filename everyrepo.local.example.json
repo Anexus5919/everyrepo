@@ -14,5 +14,43 @@
     "batchSize": 32,
     "dailyNeuronBudget": 9000,
     "concurrency": 4
+  },
+  "llm": {
+    "models": {
+      "gemini-flash": {
+        "provider": "gemini",
+        "model": "gemini-3.8-flash",
+        "requestsPerMinute": 5,
+        "tokensPerMinute": 250000,
+        "requestsPerDay": 100
+      },
+      "gemini-lite": {
+        "provider": "gemini",
+        "model": "gemini-3.5-flash-lite",
+        "requestsPerMinute": 10,
+        "tokensPerMinute": 250000,
+        "requestsPerDay": 1000
+      },
+      "groq-oss": {
+        "provider": "groq",
+        "model": "openai/gpt-oss-120b",
+        "requestsPerMinute": 30,
+        "tokensPerMinute": 8000,
+        "requestsPerDay": 1000
+      },
+      "groq-qwen": {
+        "provider": "groq",
+        "model": "qwen/qwen3.8-27b",
+        "requestsPerMinute": 30,
+        "tokensPerMinute": 8000,
+        "requestsPerDay": 1000
+      }
+    },
+    "tasks": {
+      "summary": ["gemini-lite", "groq-qwen"],
+      "plan": ["gemini-flash", "gemini-lite"],
+      "page": ["gemini-flash", "gemini-lite"],
+      "ask": ["groq-oss", "groq-qwen", "gemini-lite"]
+    }
   }
 }

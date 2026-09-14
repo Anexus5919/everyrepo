@@ -25,8 +25,9 @@ TypeScript source directly and run with tsx. Tests use Vitest.
     `embeddings` is not configured
   - `report <owner/repo> [--json]` summarizes the latest snapshot
   - `search <owner/repo> <query...> [--limit <n>]` runs keyword search over indexed chunks
-  - `eval [repos...] [--modes keyword,vector,hybrid] [--dims <n>] [--details]` scores retrieval
+  - `eval [repos...] [--modes keyword,hybrid,files] [--dims <n>] [--details]` scores retrieval
     against the gold question sets in `packages/eval/gold`
+  - `llm <task> <prompt...>` sends one prompt through the models configured for a task
 - `pnpm --filter @everyrepo/db db:generate` regenerates SQL migrations after schema changes.
 
 ## Layout
@@ -50,7 +51,11 @@ TypeScript source directly and run with tsx. Tests use Vitest.
   exposing /v1/embeddings, a hashing embedder for tests) and vector helpers; vectors are cached per
   repository by content hash, and Workers AI usage is counted in hourly buckets against
   `dailyNeuronBudget` over a rolling 24 hours, pausing the job when it is used up
-- `packages/search`: FTS5 keyword, vector and hybrid (reciprocal rank fusion) search over chunks
+- `packages/search`: FTS5 keyword, vector and hybrid (reciprocal rank fusion) search over chunks,
+  plus file ranking with a centrality prior and import expansion
+- `packages/llm`: chat models behind one OpenAI-compatible client (Gemini, Groq, Workers AI), per
+  task fallback order from the `llm` config, per-minute pacing, daily request limits, a response
+  cache and JSON answers validated with zod
 - `packages/eval`: gold question sets and retrieval metrics
 - `packages/pipeline`: index stage handlers, cost estimate, snapshot report
 - `packages/cli`: the `everyrepo` command

@@ -1,7 +1,14 @@
 // Query helpers are re-exported so every package shares one drizzle-orm instance
 export { and, asc, count, desc, eq, inArray, isNull, lt, ne, sql, sum } from "drizzle-orm";
 export * from "./app-schema.ts";
-export { hourBucket, neuronsUsedLastDay, recordUsage, type UsageRecord } from "./budget.ts";
+export {
+  hourBucket,
+  neuronsUsedLastDay,
+  recordUsage,
+  requestsLastDay,
+  type UsageRecord,
+} from "./budget.ts";
+export { LlmCache, llmCachePath, type CachedResponse } from "./llm-cache.ts";
 export * from "./engine-schema.ts";
 export {
   appDbPath,

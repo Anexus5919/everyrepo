@@ -3,6 +3,7 @@ import { Command } from "commander";
 import { dbCommand } from "./commands/db.ts";
 import { evalCommand } from "./commands/eval.ts";
 import { indexCommand } from "./commands/index-repo.ts";
+import { llmCommand } from "./commands/llm.ts";
 import { reportCommand } from "./commands/report.ts";
 import { reposCommand } from "./commands/repos.ts";
 import { searchCommand } from "./commands/search.ts";
@@ -21,6 +22,7 @@ program.addCommand(indexCommand());
 program.addCommand(reportCommand());
 program.addCommand(searchCommand());
 program.addCommand(evalCommand());
+program.addCommand(llmCommand());
 
 try {
   await program.parseAsync();

@@ -2,6 +2,7 @@ export { formatRepoRef, parseRepoRef, repoDirName, type RepoRef } from "./repo-r
 export {
   loadLocalConfig,
   type EmbeddingsConfig,
+  type LlmConfig,
   type LocalConfig,
   type LocalRepo,
 } from "./local-config.ts";

@@ -33,13 +33,42 @@ const embeddingsSchema = z.discriminatedUnion("provider", [
   workersAiEmbeddingsSchema,
 ]);
 
+// Chat models by name with the limits of their free tier, and the ordered models each task may use
+const llmModelSchema = z.object({
+  provider: z.enum(["gemini", "groq", "workers-ai"]),
+  model: z.string().min(1),
+  requestsPerMinute: z.number().int().positive(),
+  tokensPerMinute: z.number().int().positive(),
+  requestsPerDay: z.number().int().positive(),
+});
+
+const llmSchema = z
+  .object({
+    models: z.record(z.string(), llmModelSchema),
+    tasks: z.record(z.string(), z.array(z.string()).min(1)),
+  })
+  .superRefine((llm, context) => {
+    for (const [task, ids] of Object.entries(llm.tasks)) {
+      for (const id of ids) {
+        if (!llm.models[id]) {
+          context.addIssue({
+            code: "custom",
+            message: `Task "${task}" uses unknown model "${id}"`,
+          });
+        }
+      }
+    }
+  });
+
 const localConfigSchema = z.object({
   dataDir: z.string().min(1),
   localRepos: z.record(z.string(), localRepoSchema).default({}),
   embeddings: embeddingsSchema.optional(),
+  llm: llmSchema.optional(),
 });
 
 export type EmbeddingsConfig = z.infer<typeof embeddingsSchema>;
+export type LlmConfig = z.infer<typeof llmSchema>;
 export type LocalRepo = z.infer<typeof localRepoSchema>;
 export type LocalConfig = z.infer<typeof localConfigSchema>;
 

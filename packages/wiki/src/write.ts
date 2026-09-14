@@ -5,12 +5,13 @@ import type { ClusterSummary } from "./cluster-summary.ts";
 import { clusterDiagram, moduleDiagram } from "./diagrams.ts";
 import type { RepoSummary } from "./repo-summary.ts";
 import { candidateFiles, formatSources, selectSources, type Source } from "./sources.ts";
+import { fileLink, readingOrder, sectionMarkdown } from "./reading-order.ts";
 import { loadSummaries } from "./store.ts";
 import { githubLink, verifyPage, type VerifyStats } from "./verify.ts";
 
 type Sql = EngineDb["$client"];
 
-export const PAGE_PROMPT_VERSION = "page-1";
+export const PAGE_PROMPT_VERSION = "page-2";
 
 interface PageRow {
   slug: string;
@@ -48,6 +49,7 @@ const MIN_KEPT_SHARE = 0.5;
 
 const SYSTEM = [
   "You write one page of a wiki that explains a software repository to developers who are new to it.",
+  "Explain how the code works: what calls what, how data and state move, and in which order things happen, the way a senior engineer would walk a new teammate through it.",
   "Every paragraph and every list item must end with citations such as [S2] or [S1, S4] that name the numbered sources supporting it.",
   "State only facts that the cited sources show. Put names in backticks only when they appear exactly in the cited sources.",
   "Write plain, specific English. Do not use long dashes, emoji or marketing words.",
@@ -108,10 +110,12 @@ export function pageMessages(
     formatSources(sources),
     "",
     "Instructions:",
-    "- Do not add a top-level title; start with 2 or 3 sentences on what this part is and why it matters.",
-    "- Then use ## and ### sections that explain how it works, the main files and concepts, and how it connects to other pages.",
-    "- Keep paragraphs short and prefer lists for steps and file roles. Aim for 350 to 900 words.",
-    "- Short code excerpts are welcome when copied exactly from a source.",
+    "- Do not add a top-level title. Start with 2 or 3 sentences on what this part does for people using the software and why it exists.",
+    "- Explain mechanisms rather than listing files: walk through how a typical operation moves through the code, which functions or hooks run, what state they read or change, and where the feature plugs into the rest of the system.",
+    "- Name the key functions, classes, hooks or types and say what each one does and who calls it.",
+    "- Write explanations as short paragraphs. Use lists only for ordered steps or for a brief table of file roles.",
+    "- Include one or two short code excerpts copied exactly from the sources where they make a mechanism clearer.",
+    "- Use ## and ### sections, and finish with a short section on how this part connects to other pages. Aim for 500 to 1,100 words.",
     "- End every paragraph and list item with citations like [S3].",
   ]
     .filter((line) => line !== "")
@@ -137,9 +141,10 @@ export async function writePages(input: WriteInput): Promise<WriteOutput> {
     const pages = loadPages(sql);
     if (pages.length === 0) throw new Error("Run the plan stage before writing pages");
     const update = sql.prepare(
-      `UPDATE wiki_page SET status = ?, markdown = ?, citations = ?, model = ?, input_hash = ?, updated_at = ?
-       WHERE slug = ?`,
+      `UPDATE wiki_page SET status = ?, markdown = ?, citations = ?, reading_order = ?, model = ?, input_hash = ?,
+         updated_at = ? WHERE slug = ?`,
     );
+    const setReadingOrder = sql.prepare("UPDATE wiki_page SET reading_order = ? WHERE slug = ?");
     const output: WriteOutput = {
       pages: pages.length,
       written: 0,
@@ -153,6 +158,40 @@ export async function writePages(input: WriteInput): Promise<WriteOutput> {
     for (const page of pages) {
       if (input.only && !input.only.includes(page.slug)) continue;
       const children = pages.filter((other) => other.parentSlug === page.slug);
+      const items = readingOrder(sql, page, children, clusterSummaries, (path) =>
+        fileLink(snapshot.repo, snapshot.sha, path),
+      );
+      const diagramClusters =
+        page.clusters.length > 0 ? page.clusters : children.flatMap((child) => child.clusters);
+
+      // Section pages that only group child pages are built from the plan and the graph
+      if (children.length > 0 && page.clusters.length === 0 && page.slug !== "overview") {
+        const markdown = sectionMarkdown(
+          page,
+          children,
+          items,
+          clusterDiagram(sql, diagramClusters),
+        );
+        const sectionHash = hashInput("section-1", markdown);
+        if (page.status === "written" && page.inputHash === sectionHash) {
+          output.reused += 1;
+          continue;
+        }
+        update.run(
+          "written",
+          markdown,
+          "[]",
+          JSON.stringify(items),
+          "section",
+          sectionHash,
+          Date.now(),
+          page.slug,
+        );
+        output.written += 1;
+        input.log(`built section ${page.slug} from ${children.length} child pages`);
+        continue;
+      }
+
       const files = candidateFiles(sql, page, clusterSummaries, children);
       const sources = selectSources(sql, files, input.maxSourceChars ?? DEFAULT_SOURCE_CHARS);
       const messages = pageMessages(
@@ -168,6 +207,7 @@ export async function writePages(input: WriteInput): Promise<WriteOutput> {
         messages.map((message) => message.content).join("\n"),
       );
       if (page.status === "written" && page.inputHash === inputHash) {
+        setReadingOrder.run(JSON.stringify(items), page.slug);
         output.reused += 1;
         continue;
       }
@@ -206,20 +246,14 @@ export async function writePages(input: WriteInput): Promise<WriteOutput> {
         }
       }
       const diagram =
-        page.slug === "overview"
-          ? moduleDiagram(sql)
-          : clusterDiagram(
-              sql,
-              page.clusters.length > 0
-                ? page.clusters
-                : children.flatMap((child) => child.clusters),
-            );
+        page.slug === "overview" ? moduleDiagram(sql) : clusterDiagram(sql, diagramClusters);
       const ok = passes(verified.stats);
       const markdown = diagram ? insertDiagram(verified.markdown, diagram) : verified.markdown;
       update.run(
         ok ? "written" : "failed",
         markdown,
         JSON.stringify(verified.citations),
+        JSON.stringify(items),
         result.model,
         inputHash,
         Date.now(),

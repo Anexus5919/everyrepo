@@ -2,9 +2,9 @@ import { formatRepoRef, repoDirName, type LocalConfig, type RepoRef } from "@eve
 import { engineDbPath, eq, repos, type AppDb } from "@everyrepo/db";
 import { ModelUnavailableError, type LlmRouter } from "@everyrepo/llm";
 import { StageDeferredError, type StageHandler } from "@everyrepo/queue";
-import { planWiki, summarizeRepository, writePages } from "@everyrepo/wiki";
+import { buildGlossary, planWiki, summarizeRepository, writePages } from "@everyrepo/wiki";
 
-export const WIKI_STAGES = ["summarize", "plan", "write"] as const;
+export const WIKI_STAGES = ["summarize", "plan", "write", "glossary"] as const;
 export type WikiStage = (typeof WIKI_STAGES)[number];
 
 export interface WikiOptions {
@@ -13,6 +13,8 @@ export interface WikiOptions {
   ref: RepoRef;
   repoId: number;
   router: LlmRouter;
+  // Rewrites only these page slugs when set
+  pages?: readonly string[] | undefined;
 }
 
 function enginePathFor(options: WikiOptions): string {
@@ -62,11 +64,16 @@ export function createWikiHandlers(options: WikiOptions): Record<WikiStage, Stag
       writePages({
         enginePath: enginePathFor(options),
         router: options.router,
+        ...(options.pages ? { only: options.pages } : {}),
         log,
         heartbeat,
       }),
     );
-  return { summarize, plan, write };
+  const glossary: StageHandler = async ({ log }) =>
+    deferWhenUnavailable(() =>
+      buildGlossary({ enginePath: enginePathFor(options), router: options.router, log }),
+    );
+  return { summarize, plan, write, glossary };
 }
 
 export function wikiStagesUntil(stage: string | undefined): WikiStage[] {

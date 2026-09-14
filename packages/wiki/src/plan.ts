@@ -11,6 +11,7 @@ import { plainText } from "./text.ts";
 type Sql = EngineDb["$client"];
 
 export const PLAN_PROMPT_VERSION = "plan-2";
+const PLAN_CHECK_VERSION = "check-2";
 
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const MAX_PAGE_FILES = 10;
@@ -188,6 +189,15 @@ export function planMessages(context: string): ChatMessage[] {
   ];
 }
 
+// Models sometimes copy the list wording, as in "cluster src#1" or a backticked key
+export function normalizeClusterKey(key: string): string {
+  return key
+    .trim()
+    .replace(/^`|`$/g, "")
+    .replace(/^cluster\s+/i, "")
+    .trim();
+}
+
 function toSlug(text: string): string {
   const slug = text
     .toLowerCase()
@@ -214,7 +224,7 @@ export function validatePlan(
       slug = `${toSlug(page.slug || page.title)}-${suffix}`;
     }
     slugs.set(page.slug, slug);
-    const clusters = page.clusters.filter((key) => {
+    const clusters = page.clusters.map(normalizeClusterKey).filter((key) => {
       const ok = clusterModules.has(key) && !placed.has(key);
       if (!ok) dropped.clusters += 1;
       else placed.add(key);
@@ -336,7 +346,8 @@ export async function planWiki(input: PlanInput): Promise<PlanOutput> {
       moduleSummaries,
       topics,
     );
-    const inputHash = hashInput(PLAN_PROMPT_VERSION, context);
+    // The check version is part of the hash so a better plan check replans from the cached answer
+    const inputHash = hashInput(`${PLAN_PROMPT_VERSION}:${PLAN_CHECK_VERSION}`, context);
     const stored = sql.prepare("SELECT value FROM wiki_meta WHERE key = 'plan_hash'").get() as
       { value: string } | undefined;
     const existingPages = (

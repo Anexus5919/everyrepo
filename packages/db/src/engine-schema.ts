@@ -197,6 +197,8 @@ export const wikiPages = sqliteTable("wiki_page", {
   status: text("status", { enum: WIKI_PAGE_STATUSES }).notNull(),
   markdown: text("markdown"),
   citations: text("citations", { mode: "json" }).$type<unknown[]>(),
+  // Files to open first for this page, with a one-line role for each
+  readingOrder: text("reading_order", { mode: "json" }).$type<unknown[]>(),
   model: text("model"),
   inputHash: text("input_hash"),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
@@ -206,4 +208,14 @@ export const wikiPages = sqliteTable("wiki_page", {
 export const wikiMeta = sqliteTable("wiki_meta", {
   key: text("key").primaryKey(),
   value: text("value").notNull(),
+});
+
+// Terms a newcomer meets across the wiki, each defined from a cited source
+export const glossaryTerms = sqliteTable("glossary_term", {
+  term: text("term").primaryKey(),
+  definition: text("definition").notNull(),
+  citations: text("citations", { mode: "json" }).$type<unknown[]>().notNull(),
+  pages: text("pages", { mode: "json" }).$type<string[]>().notNull(),
+  model: text("model").notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 });

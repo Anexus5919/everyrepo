@@ -18,7 +18,7 @@ describe("validatePlan", () => {
             title: "Data grid",
             parent: null,
             purpose: "How rows and columns are rendered.",
-            clusters: ["grid#1", "missing#9"],
+            clusters: ["cluster grid#1", "missing#9"],
             files: ["packages/grid/src/Grid.tsx", "packages/grid/src/Invented.tsx"],
           },
           {

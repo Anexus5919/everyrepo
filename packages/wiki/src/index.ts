@@ -30,6 +30,7 @@ export {
 export {
   buildPlanContext,
   detectTopics,
+  normalizeClusterKey,
   PLAN_PROMPT_VERSION,
   planMessages,
   planSchema,
@@ -48,7 +49,29 @@ export {
   type SummarizeOutput,
 } from "./summarize.ts";
 export { clusterDiagram, moduleDiagram } from "./diagrams.ts";
-export { candidateFiles, formatSources, selectSources, type Source } from "./sources.ts";
+export {
+  candidateFiles,
+  formatSources,
+  importShare,
+  selectSources,
+  type Source,
+} from "./sources.ts";
+export {
+  fileLink,
+  readingOrder,
+  sectionMarkdown,
+  type ReadingItem,
+  type SectionPage,
+} from "./reading-order.ts";
+export {
+  buildGlossary,
+  collectTerms,
+  GLOSSARY_PROMPT_VERSION,
+  glossarySchema,
+  groundTerm,
+  type GlossaryOutput,
+  type TermCandidate,
+} from "./glossary.ts";
 export { plainText } from "./text.ts";
 export {
   githubLink,

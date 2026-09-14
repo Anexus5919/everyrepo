@@ -12,6 +12,8 @@ interface PageRow {
   purpose: string;
   status: string;
   markdown: string | null;
+  model: string | null;
+  readingOrder: string | null;
 }
 
 export function exportCommand(): Command {
@@ -31,7 +33,7 @@ export function exportCommand(): Command {
         );
         const pages = engine.$client
           .prepare(
-            "SELECT slug, parent_slug AS parentSlug, title, purpose, status, markdown FROM wiki_page ORDER BY position",
+            "SELECT slug, parent_slug AS parentSlug, title, purpose, status, markdown, model, reading_order AS readingOrder FROM wiki_page ORDER BY position",
           )
           .all() as PageRow[];
         engine.$client.close();
@@ -44,8 +46,38 @@ export function exportCommand(): Command {
           const indent = page.parentSlug ? "  " : "";
           const note = page.status === "written" ? "" : ` (${page.status})`;
           index.push(`${indent}- [${page.title}](${page.slug}.md)${note}: ${page.purpose}`);
-          const body = page.markdown ?? "_Not written yet._";
+          const items = page.readingOrder
+            ? (JSON.parse(page.readingOrder) as Array<{ path: string; role: string; url: string }>)
+            : [];
+          // Section pages already list their reading order in the text
+          const reading =
+            page.model !== "section" && items.length > 0
+              ? `\n\n## Where to start reading\n\n${items
+                  .map(
+                    (item) =>
+                      `- [\`${item.path}\`](${item.url})${item.role ? `: ${item.role}` : ""}`,
+                  )
+                  .join("\n")}`
+              : "";
+          const body = `${page.markdown ?? "_Not written yet._"}${reading}`;
           await writeFile(join(out, `${page.slug}.md`), `# ${page.title}\n\n${body}\n`);
+        }
+        const reopened = openEngineDb(
+          engineDbPath(context.config.dataDir, repoDirName(ref), repo.lastIndexedSha),
+        );
+        const terms = reopened.$client
+          .prepare(
+            "SELECT term, definition, citations FROM glossary_term ORDER BY term COLLATE NOCASE",
+          )
+          .all() as Array<{ term: string; definition: string; citations: string }>;
+        reopened.$client.close();
+        if (terms.length > 0) {
+          const lines = terms.map((row) => {
+            const [citation] = JSON.parse(row.citations) as Array<{ url: string; path: string }>;
+            return `- **${row.term}**: ${row.definition}${citation ? ` ([source](${citation.url}))` : ""}`;
+          });
+          await writeFile(join(out, "glossary.md"), `# Glossary\n\n${lines.join("\n")}\n`);
+          index.push("", "- [Glossary](glossary.md)");
         }
         await writeFile(join(out, "index.md"), `${index.join("\n")}\n`);
         console.log(`Wrote ${pages.length} pages to ${out}`);

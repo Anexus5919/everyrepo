@@ -11,7 +11,8 @@ export function wikiCommand(): Command {
     .description("Generate the wiki for an indexed repository, resuming unfinished work")
     .argument("<repo>", "owner/name or GitHub URL")
     .option("--until <stage>", "stop after this stage")
-    .action(async (repoArg: string, options: { until?: string }) => {
+    .option("--pages <slugs>", "comma separated page slugs to write, others are left as they are")
+    .action(async (repoArg: string, options: { until?: string; pages?: string }) => {
       const ref = parseRepoRef(repoArg);
       const stages = wikiStagesUntil(options.until);
       const context = await openContext();
@@ -38,6 +39,7 @@ export function wikiCommand(): Command {
           ref,
           repoId: repo.id,
           router: llm.router,
+          pages: options.pages?.split(",").map((slug) => slug.trim()),
         });
         const started = Date.now();
         const result = await runJob(context.appDb, job, handlers, { heartbeatMs: 15_000, log });

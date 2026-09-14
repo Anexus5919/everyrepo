@@ -25,7 +25,6 @@ interface ChunkRow {
   content: string;
 }
 
-const CHUNKS_PER_FILE = 3;
 const MAX_FILES = 24;
 
 // Files a page should draw on: the planner's picks, the clusters' key files, then the clusters' most central files
@@ -68,31 +67,74 @@ export function candidateFiles(
   return [...new Set(ordered)].slice(0, MAX_FILES);
 }
 
-// Takes chunks round-robin across files so one large file cannot use up the whole budget
+const IMPORT_LINE =
+  /^(?:import\s|export\s+(?:\*|\{[^}]*\})\s+from\s|\}\s*from\s|from\s+\S+\s+import\s|package\s|using\s|use\s|#include\s|const\s+\w+\s*=\s*require\()/;
+
+// Share of non-empty lines that only import or re-export other code
+export function importShare(content: string): number {
+  const lines = content
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "" && !line.startsWith("//") && !line.startsWith("*"));
+  if (lines.length === 0) return 1;
+  return lines.filter((line) => IMPORT_LINE.test(line)).length / lines.length;
+}
+
+interface RankedChunk extends ChunkRow {
+  header: string;
+}
+
+// Chunks that define things explain more than chunks that only import; file order breaks ties
+function rankChunks(chunks: readonly RankedChunk[]): RankedChunk[] {
+  const useful = chunks.filter((chunk) => importShare(chunk.content) <= IMPORT_HEAVY);
+  const pool = useful.length > 0 ? useful : chunks.slice(0, 1);
+  return [...pool].sort((a, b) => {
+    const defines = Number(b.header.includes("defines ")) - Number(a.header.includes("defines "));
+    return defines !== 0 ? defines : a.startLine - b.startLine;
+  });
+}
+
+const IMPORT_HEAVY = 0.6;
+// The most important files are read in depth, the rest contribute one excerpt each
+const DEEP_FILES = 6;
+const DEEP_CHUNKS = 3;
+
 export function selectSources(sql: Sql, files: readonly string[], maxChars: number): Source[] {
   const chunkQuery = sql.prepare(
-    `SELECT c.id, c.start_line AS startLine, c.end_line AS endLine, c.content
+    `SELECT c.id, c.start_line AS startLine, c.end_line AS endLine, c.content, c.header
      FROM chunk c JOIN file f ON f.id = c.file_id WHERE f.path = ? ORDER BY c.start_line`,
   );
-  const perFile = files.map((path) => ({ path, chunks: chunkQuery.all(path) as ChunkRow[] }));
+  const perFile = files.map((path) => ({
+    path,
+    chunks: rankChunks(chunkQuery.all(path) as RankedChunk[]),
+  }));
   const sources: Source[] = [];
   let used = 0;
-  for (let round = 0; round < CHUNKS_PER_FILE; round += 1) {
-    for (const { path, chunks } of perFile) {
-      const chunk = chunks[round];
-      if (!chunk) continue;
-      if (used + chunk.content.length > maxChars) continue;
-      sources.push({
-        label: `S${sources.length + 1}`,
-        chunkId: chunk.id,
-        path,
-        startLine: chunk.startLine,
-        endLine: chunk.endLine,
-        content: chunk.content,
-      });
-      used += chunk.content.length;
-    }
-  }
+  const take = (path: string, chunk: RankedChunk | undefined) => {
+    if (!chunk || used + chunk.content.length > maxChars) return;
+    sources.push({
+      label: `S${sources.length + 1}`,
+      chunkId: chunk.id,
+      path,
+      startLine: chunk.startLine,
+      endLine: chunk.endLine,
+      content: chunk.content,
+    });
+    used += chunk.content.length;
+  };
+  perFile.slice(0, DEEP_FILES).forEach(({ path, chunks }) => {
+    for (const chunk of chunks.slice(0, 2)) take(path, chunk);
+  });
+  perFile.slice(DEEP_FILES).forEach(({ path, chunks }) => take(path, chunks[0]));
+  perFile.slice(0, DEEP_FILES).forEach(({ path, chunks }) => {
+    for (const chunk of chunks.slice(2, DEEP_CHUNKS)) take(path, chunk);
+  });
+  // Sources stay grouped by file in reading order, which makes the numbered list easier to follow
+  const order = new Map(files.map((path, index) => [path, index]));
+  sources.sort((a, b) => order.get(a.path)! - order.get(b.path)! || a.startLine - b.startLine);
+  sources.forEach((source, index) => {
+    source.label = `S${index + 1}`;
+  });
   return sources;
 }
 

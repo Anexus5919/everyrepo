@@ -33,6 +33,8 @@ const CANDIDATE_CHUNKS = 50;
 interface EvalOptions {
   modes: string;
   dims?: string;
+  candidates: string;
+  vectorWeight: string;
   details: boolean;
   out?: string;
 }
@@ -50,24 +52,27 @@ interface QuestionResult {
 
 // Re-running the eval reuses question vectors instead of paying for them again
 async function embedQueries(
-  embedder: Embedder,
+  getEmbedder: () => Promise<Embedder>,
+  model: string,
   cache: EmbeddingCache,
   texts: readonly string[],
 ): Promise<Float32Array[]> {
   const hashes = texts.map((text) =>
     createHash("sha256").update(`query\n${text}`).digest().subarray(0, 16),
   );
-  const found = cache.getMany(embedder.model, hashes);
+  const found = cache.getMany(model, hashes);
   const missing = hashes.flatMap((hash, index) => (found.has(hash.toString("hex")) ? [] : [index]));
   if (missing.length > 0) {
-    const vectors = await embedder.embed(
+    const vectors = await (
+      await getEmbedder()
+    ).embed(
       missing.map((index) => texts[index]!),
       "query",
     );
     const entries = missing.map(
       (index, position) => [hashes[index]!, toBlob(vectors[position]!)] as const,
     );
-    cache.putMany(embedder.model, entries);
+    cache.putMany(model, entries);
     for (const [hash, blob] of entries) found.set(hash.toString("hex"), blob);
   }
   return hashes.map((hash) => fromBlob(found.get(hash.toString("hex"))!));
@@ -89,6 +94,8 @@ export function evalCommand(): Command {
     .argument("[repos...]", "limit to these repositories")
     .option("--modes <list>", "comma separated: keyword, vector, hybrid", MODES.join(","))
     .option("--dims <n>", "truncate vectors to this many dimensions")
+    .option("--candidates <n>", "chunks taken from each list before fusion", "100")
+    .option("--vector-weight <w>", "weight of the vector list in hybrid fusion", "2")
     .option("--details", "print the rank of every question", false)
     .option("--out <file>", "write per-question results as JSON")
     .action(async (repoArgs: string[], options: EvalOptions) => {
@@ -103,12 +110,18 @@ export function evalCommand(): Command {
       );
       const context = await openContext();
       const needsVectors = modes.some((mode) => mode !== "keyword");
-      const configured = needsVectors ? await openEmbedder(context) : undefined;
-      const queryCache = configured
+      const embeddings = context.config.embeddings;
+      if (needsVectors && !embeddings)
+        throw new Error("Vector modes need embeddings in the config");
+      const queryCache = needsVectors
         ? new EmbeddingCache(queryCachePath(context.config.dataDir))
         : undefined;
-      if (needsVectors && !configured)
-        throw new Error("Vector modes need embeddings in the config");
+      let configured: Awaited<ReturnType<typeof openEmbedder>>;
+      const getEmbedder = async () => {
+        configured ??= await openEmbedder(context);
+        if (!configured) throw new Error("Vector modes need embeddings in the config");
+        return configured.embedder;
+      };
       const results: QuestionResult[] = [];
       try {
         console.log(formatRow(["repo", "mode", "n", "R@5", "R@10", "Hit@10", "MRR"]));
@@ -136,9 +149,10 @@ export function evalCommand(): Command {
               continue;
             }
             const queries =
-              configured && queryCache
+              embeddings && queryCache
                 ? await embedQueries(
-                    configured.embedder,
+                    getEmbedder,
+                    embeddings.model,
                     queryCache,
                     set.questions.map((question) => question.question),
                   )
@@ -152,13 +166,11 @@ export function evalCommand(): Command {
                 } else if (mode === "vector") {
                   hits = searchVector(engine, index!, queries[position]!, CANDIDATE_CHUNKS);
                 } else {
-                  hits = searchHybrid(
-                    engine,
-                    index!,
-                    question.question,
-                    queries[position]!,
-                    CANDIDATE_CHUNKS,
-                  );
+                  hits = searchHybrid(engine, index!, question.question, queries[position]!, {
+                    limit: CANDIDATE_CHUNKS,
+                    candidates: Number(options.candidates),
+                    vectorWeight: Number(options.vectorWeight),
+                  });
                 }
                 const ranked = distinctPaths(hits);
                 const score = scoreQuestion(question.expected, ranked);

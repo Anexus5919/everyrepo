@@ -22,4 +22,13 @@ describe("fuseRankings", () => {
     );
     expect(fused.map((item) => item.chunkId)).toEqual([2, 1, 4]);
   });
+
+  it("lets a heavier list lead", () => {
+    const lists = [
+      [{ chunkId: 1 }, { chunkId: 2 }],
+      [{ chunkId: 3 }, { chunkId: 4 }],
+    ];
+    expect(fuseRankings(lists, 1)[0]?.chunkId).toBe(1);
+    expect(fuseRankings(lists, 1, { weights: [1, 2] })[0]?.chunkId).toBe(3);
+  });
 });

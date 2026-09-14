@@ -96,7 +96,7 @@ describe("index pipeline", () => {
     expect(index.chunkIds.length).toBe(chunkCount);
     const [query] = await embedder.embed(["keeps state store"], "query");
     expect(searchVector(engine, index, query!, 5)[0]?.path).toBe("packages/core/src/store.ts");
-    expect(searchHybrid(engine, index, "keeps state store", query!, 5)[0]?.path).toBe(
+    expect(searchHybrid(engine, index, "keeps state store", query!, { limit: 5 })[0]?.path).toBe(
       "packages/core/src/store.ts",
     );
     engine.$client.close();

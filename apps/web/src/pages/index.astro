@@ -6,42 +6,22 @@ import RepoGrid from "../components/RepoGrid.astro";
 import WikiPreview from "../components/WikiPreview.astro";
 import Base from "../layouts/Base.astro";
 import { formatCount } from "../lib/format.ts";
+import { citationLinks, pipelineItems, readingMinutes } from "../lib/showcase.ts";
 import { loadRepos, loadWiki } from "../lib/site-data.ts";
 
 const repos = loadRepos();
 const ready = repos.filter((repo) => repo.status === "ready");
-const featured = ready.find((repo) => repo.repo === "mui/mui-x") ?? ready[0];
-if (!featured) throw new Error("No written wiki to feature; run the site command");
+if (ready.length === 0) throw new Error("No written wiki to show; run the site command");
 const wikis = new Map(ready.map((repo) => [repo.repo, loadWiki(repo.repo)]));
-const wiki = wikis.get(featured.repo)!;
+// Wikis with the most pages lead the showcase
+const wikiList = [...wikis.values()].sort((a, b) => b.pages - a.pages);
 
-// What reading the featured wiki takes, measured from its text at 230 words a minute
-const prose = (markdown: string) =>
-  markdown
-    .replace(/```[\s\S]*?```/g, " ")
-    .replace(/\[\[\d+\]\]\([^)]*\)/g, " ")
-    .split(/\s+/)
-    .filter((word) => /\w/.test(word)).length;
-const readingMinutes = Math.max(
-  1,
-  Math.round(wiki.wikiPages.reduce((sum, page) => sum + prose(page.markdown ?? ""), 0) / 230),
-);
-const citationLinks = wiki.wikiPages.reduce(
-  (sum, page) => sum + (page.markdown?.match(/\[\[\d+\]\]\(/g)?.length ?? 0),
-  0,
-);
-
-// Pages of the featured wiki, each with the first lines of code it cites
-const pipelineItems = wiki.wikiPages
-  .filter((page) => page.status === "written" && !page.section && page.citations.length > 0)
-  .map((page) => {
-    const source = page.citations[0]!;
-    return {
-      title: page.title,
-      file: source.path.split("/").pop() ?? source.path,
-      lines: `lines ${source.startLine}-${source.endLine}`,
-    };
-  });
+const totalFiles = repos.reduce((sum, repo) => sum + repo.files, 0);
+const totalPages = ready.reduce((sum, repo) => sum + repo.pages, 0);
+const minutes = readingMinutes(wikiList);
+const readingTime = minutes >= 90 ? `${(minutes / 60).toFixed(1)} h` : `${minutes} min`;
+const citations = citationLinks(wikiList);
+const items = pipelineItems(wikiList, (count) => `${formatCount(count)} files`);
 
 const outlines = Object.fromEntries(
   [...wikis.entries()].map(([repo, item]) => [
@@ -121,30 +101,26 @@ const examples = ready.slice(0, 3).map((repo) => repo.repo);
       </div>
 
       <div class="hero-art">
-        <Pipeline
-          repo={featured.repo}
-          files={`${formatCount(featured.files)} files`}
-          items={pipelineItems}
-        />
+        <Pipeline items={items} />
       </div>
     </div>
 
     <div class="frame hero-stats">
       <div class="stat">
-        <span class="value">{formatCount(featured.files)}</span>
-        <span class="label">files in {featured.repo}</span>
+        <span class="value">{formatCount(totalFiles)}</span>
+        <span class="label">files read across {repos.length} repositories</span>
       </div>
       <div class="stat">
-        <span class="value">{featured.pages}</span>
-        <span class="label">wiki pages explain them</span>
+        <span class="value">{totalPages}</span>
+        <span class="label">wiki pages written from them</span>
       </div>
       <div class="stat">
-        <span class="value">{readingMinutes} min</span>
-        <span class="label">to read the whole wiki</span>
+        <span class="value">{readingTime}</span>
+        <span class="label">of reading across {ready.length} wikis</span>
       </div>
       <div class="stat">
-        <span class="value">{formatCount(citationLinks)}</span>
-        <span class="label">citations open the exact lines</span>
+        <span class="value">{formatCount(citations)}</span>
+        <span class="label">citations that open the exact lines</span>
       </div>
     </div>
   </section>
@@ -157,11 +133,11 @@ const examples = ready.slice(0, 3).map((repo) => repo.repo);
           <h2 class="title">Every sentence points at the code it came from.</h2>
         </div>
         <p class="block-text">
-          A real page from the {featured.name} wiki. Point at a number to read the lines it cites.
-          Nothing on a page is written without a source.
+          Real pages from each wiki in the guide. Switch between repositories and point at a number
+          to read the lines it cites.
         </p>
       </div>
-      <WikiPreview wiki={wiki} slug="data-grid-premium" focus="formula" />
+      <WikiPreview wikis={wikiList} />
     </div>
   </section>
 

@@ -152,6 +152,7 @@ cards.sort((a, b) => order[a.status] - order[b.status]);
 
   .swap > * {
     grid-area: 1 / 1;
+    align-self: start;
     transition: opacity 220ms ease;
   }
 
@@ -279,9 +280,22 @@ cards.sort((a, b) => order[a.status] - order[b.status]);
     font-weight: 500;
   }
 
-  /* Short screens drop the language line so both rows still fit on one screen */
+  /* Short screens drop the language line and shorten summaries so both rows fit on one screen */
   @media (max-height: 860px) and (min-width: 1000px) {
     .languages {
+      display: none;
+    }
+
+    .repo {
+      min-height: 0;
+    }
+
+    .summary {
+      -webkit-line-clamp: 2;
+      max-height: calc(1.55em * 2);
+    }
+
+    .outline li:nth-child(n + 3) {
       display: none;
     }
   }

@@ -39,7 +39,7 @@
   --accent-line: rgba(238, 122, 67, 0.45);
   --button-bg: #f3efe7;
   --button-ink: #13120f;
-  --header-bg: rgba(13, 12, 10, 0.78);
+  --header-bg: rgba(13, 12, 10, 0.97);
   --flow-line: #9a9282;
   --grain-opacity: 0.06;
   --shadow: 0 30px 80px -40px rgba(0, 0, 0, 0.8);
@@ -100,7 +100,7 @@
   --accent-line: rgba(184, 83, 47, 0.45);
   --button-bg: #1c1a16;
   --button-ink: #f5f1e8;
-  --header-bg: rgba(245, 241, 232, 0.82);
+  --header-bg: rgba(245, 241, 232, 0.97);
   --flow-line: #8f8676;
   --grain-opacity: 0.05;
   --shadow: 0 30px 80px -40px rgba(60, 45, 20, 0.45);
@@ -367,7 +367,7 @@ pre code {
 }
 
 /* On large screens every section fills the viewport below the header and scrolling settles on it */
-@media (min-width: 1000px) and (min-height: 680px) {
+@media (min-width: 1000px) and (min-height: 720px) {
   html {
     scroll-snap-type: y mandatory;
   }
@@ -375,6 +375,15 @@ pre code {
   .snap {
     min-height: calc(100svh - var(--header));
     scroll-snap-align: start;
+  }
+}
+
+/* Short laptop screens get tighter headings so each section still fits one screen */
+@media (min-width: 1000px) and (max-height: 820px) {
+  :root {
+    --t-display: clamp(40px, 4.6vw, 56px);
+    --t-title: clamp(28px, 2.8vw, 36px);
+    --t-lead: 18px;
   }
 }
 

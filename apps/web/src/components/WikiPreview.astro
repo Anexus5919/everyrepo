@@ -1,127 +1,169 @@
 ---
 import type { SiteWiki } from "@everyrepo/core";
 import { languageForPath, shortSha } from "../lib/format.ts";
-import { highlight, renderMarkdown, sections } from "../lib/markdown.ts";
+import { highlight, renderMarkdown } from "../lib/markdown.ts";
+import { samplePage, sampleText } from "../lib/showcase.ts";
 
 interface Props {
-  wiki: SiteWiki;
-  slug: string;
-  focus: string;
+  wikis: SiteWiki[];
 }
-const { wiki, slug, focus } = Astro.props;
+const { wikis } = Astro.props;
 
-const EXCERPT_LINES = 24;
-const page = wiki.wikiPages.find((candidate) => candidate.slug === slug);
-if (!page?.markdown) throw new Error(`Page ${slug} has no text`);
+const EXCERPT_LINES = 28;
 
-const parts = sections(page.markdown);
-const firstParagraph = (body: string) =>
-  body
-    .split(/\n{2,}/)
-    .find((block) => block.trim() !== "" && !block.trim().startsWith("```")) ?? "";
-const intro = firstParagraph(parts[0]?.body ?? "");
-const section =
-  parts.find((part) => part.heading?.toLowerCase().includes(focus)) ?? parts[1] ?? parts[0]!;
-const introHtml = await renderMarkdown(intro);
-const sectionHtml = await renderMarkdown(firstParagraph(section.body));
-
-const cited = [
-  ...new Set(
-    [...`${introHtml}${sectionHtml}`.matchAll(/data-cite="(\d+)"/g)].map((match) => Number(match[1])),
-  ),
-];
-const sources = await Promise.all(
-  page.citations
-    .filter((citation) => cited.includes(citation.number))
-    .map(async (citation) => {
-      const lines = citation.excerpt.split("\n");
-      return {
-        ...citation,
-        name: citation.path.split("/").pop() ?? citation.path,
-        folder: citation.path.split("/").slice(0, -1).join("/"),
-        html: await highlight(lines.slice(0, EXCERPT_LINES).join("\n"), languageForPath(citation.path)),
-        more: Math.max(0, lines.length - EXCERPT_LINES),
-      };
+const samples = (
+  await Promise.all(
+    wikis.map(async (wiki) => {
+      const page = samplePage(wiki);
+      if (!page) return null;
+      const text = sampleText(page);
+      const introHtml = await renderMarkdown(text.intro);
+      const parts = await Promise.all(
+        text.parts.map(async (part) => ({ heading: part.heading, html: await renderMarkdown(part.body) })),
+      );
+      const html = `${introHtml}${parts.map((part) => part.html).join("")}`;
+      const cited = [...new Set([...html.matchAll(/data-cite="(\d+)"/g)].map((match) => Number(match[1])))];
+      const sources = await Promise.all(
+        page.citations
+          .filter((citation) => cited.includes(citation.number))
+          .map(async (citation) => {
+            const lines = citation.excerpt.split("\n");
+            return {
+              ...citation,
+              name: citation.path.split("/").pop() ?? citation.path,
+              folder: citation.path.split("/").slice(0, -1).join("/"),
+              html: await highlight(lines.slice(0, EXCERPT_LINES).join("\n"), languageForPath(citation.path)),
+              more: Math.max(0, lines.length - EXCERPT_LINES),
+            };
+          }),
+      );
+      const parent = wiki.wikiPages.find((candidate) => candidate.slug === page.parentSlug);
+      const siblings = parent
+        ? wiki.wikiPages.filter((candidate) => candidate.parentSlug === parent.slug)
+        : wiki.wikiPages.filter((candidate) => candidate.parentSlug === null);
+      return { wiki, page, introHtml, parts, sources, parent, siblings, active: cited[0] };
     }),
-);
-const active = [...sectionHtml.matchAll(/data-cite="(\d+)"/g)].map((match) => Number(match[1]))[0] ?? sources[0]?.number;
+  )
+).filter((sample) => sample !== null);
 
-const parent = wiki.wikiPages.find((candidate) => candidate.slug === page.parentSlug);
-const siblings = parent
-  ? wiki.wikiPages.filter((candidate) => candidate.parentSlug === parent.slug)
-  : [page];
+// Wikis with the most pages come first
+samples.sort((a, b) => b.wiki.pages - a.wiki.pages);
 ---
 
 <div class="window" data-preview>
-  <div class="window-bar">
-    <span class="path">
-      <span>everyrepo.me</span><span class="sep">/</span><span>{wiki.repo}</span><span class="sep"
-        >/</span
-      ><span class="current">{page.slug}</span>
-    </span>
-    <span class="commit mono">commit {shortSha(wiki.sha)}</span>
+  <div class="tabs" role="tablist" aria-label="Wikis">
+    {
+      samples.map((sample, index) => (
+        <button
+          class="tab"
+          type="button"
+          role="tab"
+          id={`wiki-tab-${index}`}
+          aria-controls={`wiki-panel-${index}`}
+          aria-selected={index === 0 ? "true" : "false"}
+          tabindex={index === 0 ? 0 : -1}
+          data-tab={index}
+        >
+          <span class="tab-owner">{sample.wiki.owner}/</span>
+          <span class="tab-name">{sample.wiki.name}</span>
+        </button>
+      ))
+    }
+    <span class="tabs-note">Point at a number to read its source</span>
   </div>
-  <div class="window-body">
-    <aside class="tree" aria-label="Pages">
-      <span class="tree-title serif">{wiki.name} wiki</span>
-      {parent && <span class="tree-parent">{parent.title}</span>}
-      {
-        siblings.map((sibling) => (
-          <span class:list={["tree-item", sibling.slug === page.slug && "is-current"]}>
-            {sibling.title}
-          </span>
-        ))
-      }
-      <span class="tree-more">{wiki.pages} pages in this wiki</span>
-    </aside>
 
-    <article class="article">
-      {parent && <span class="crumbs">{parent.title}</span>}
-      <h3 class="page-title">{page.title}</h3>
-      <span class="meta">Written from {page.citations.length} excerpts of the code</span>
-      <div class="prose" set:html={introHtml} />
-      <h4 class="section-title">{section.heading}</h4>
-      <div class="prose" set:html={sectionHtml} />
-    </article>
-
-    <aside class="source" aria-label="Cited source">
-      {
-        sources.map((source) => (
-          <div class="source-item" data-source={source.number} hidden={source.number !== active}>
-            <div class="source-head">
-              <span class="badge mono">{source.number}</span>
-              <span class="source-file">
-                <span class="mono name">{source.name}</span>
-                <span class="mono folder">{source.folder}</span>
-              </span>
-              <a class="lines mono" href={source.url} target="_blank" rel="noopener">
-                lines {source.startLine}-{source.endLine}
-              </a>
+  {
+    samples.map((sample, index) => (
+      <div
+        class="panel"
+        role="tabpanel"
+        id={`wiki-panel-${index}`}
+        aria-labelledby={`wiki-tab-${index}`}
+        data-panel={index}
+        hidden={index !== 0}
+      >
+        <div class="window-body">
+          <aside class="tree" aria-label="Pages">
+            <span class="tree-title serif">{sample.wiki.name} wiki</span>
+            {sample.parent && <span class="tree-parent">{sample.parent.title}</span>}
+            <div class="tree-list">
+              {sample.siblings.slice(0, 9).map((sibling) => (
+                <span
+                  class:list={[
+                    "tree-item",
+                    sample.parent && "is-child",
+                    sibling.slug === sample.page.slug && "is-current",
+                  ]}
+                >
+                  {sibling.title}
+                </span>
+              ))}
             </div>
-            <div
-              class="code"
-              style={`counter-reset: line ${source.startLine - 1}`}
-              set:html={source.html}
-            />
-            {source.more > 0 && (
-              <a class="more" href={source.url} target="_blank" rel="noopener">
-                {source.more} more lines on GitHub
-              </a>
-            )}
-          </div>
-        ))
-      }
-    </aside>
-  </div>
+            <span class="tree-more">
+              {sample.wiki.pages} pages <span class="mono">· {shortSha(sample.wiki.sha)}</span>
+            </span>
+          </aside>
+
+          <article class="article">
+            {sample.parent && <span class="crumbs">{sample.parent.title}</span>}
+            <h3 class="page-title">{sample.page.title}</h3>
+            <span class="meta">Written from {sample.page.citations.length} excerpts of the code</span>
+            <div class="prose" set:html={sample.introHtml} />
+            {sample.parts.map((part) => (
+              <>
+                <h4 class="section-title">{part.heading}</h4>
+                <div class="prose" set:html={part.html} />
+              </>
+            ))}
+          </article>
+
+          <aside class="source" aria-label="Cited source">
+            {sample.sources.map((source) => (
+              <div class="source-item" data-source={source.number} hidden={source.number !== sample.active}>
+                <div class="source-head">
+                  <span class="badge mono">{source.number}</span>
+                  <span class="source-file">
+                    <span class="mono name">{source.name}</span>
+                    <span class="mono folder">{source.folder}</span>
+                  </span>
+                  <a class="lines mono" href={source.url} target="_blank" rel="noopener">
+                    lines {source.startLine}-{source.endLine}
+                  </a>
+                </div>
+                <div
+                  class="code"
+                  style={`counter-reset: line ${source.startLine - 1}`}
+                  set:html={source.html}
+                />
+                {source.more > 0 && (
+                  <a class="more" href={source.url} target="_blank" rel="noopener">
+                    {source.more} more lines on GitHub
+                  </a>
+                )}
+              </div>
+            ))}
+          </aside>
+        </div>
+      </div>
+    ))
+  }
 </div>
 
 <script>
   document.querySelectorAll<HTMLElement>("[data-preview]").forEach((preview) => {
-    let current = "";
-    const select = (number: string) => {
-      if (number === current) return;
-      current = number;
-      preview.querySelectorAll<HTMLElement>("[data-source]").forEach((item) => {
+    const tabs = [...preview.querySelectorAll<HTMLButtonElement>("[data-tab]")];
+    const panels = [...preview.querySelectorAll<HTMLElement>("[data-panel]")];
+
+    function markChips(panel: HTMLElement, number: string) {
+      panel.querySelectorAll<HTMLElement>(".cite").forEach((chip) => {
+        chip.classList.toggle("is-active", chip.dataset.cite === number);
+      });
+    }
+
+    function showSource(panel: HTMLElement, number: string) {
+      if (panel.dataset.current === number) return;
+      panel.dataset.current = number;
+      panel.querySelectorAll<HTMLElement>("[data-source]").forEach((item) => {
         const active = item.dataset.source === number;
         item.hidden = !active;
         item.classList.remove("is-entering");
@@ -130,33 +172,60 @@ const siblings = parent
           item.classList.add("is-entering");
         }
       });
-      preview.querySelectorAll<HTMLElement>(".cite").forEach((chip) => {
-        chip.classList.toggle("is-active", chip.dataset.cite === number);
+      markChips(panel, number);
+    }
+
+    function selectTab(index: number, focus = false) {
+      tabs.forEach((tab, position) => {
+        const selected = position === index;
+        tab.setAttribute("aria-selected", String(selected));
+        tab.tabIndex = selected ? 0 : -1;
+        if (selected && focus) tab.focus();
       });
-    };
-    const initial = preview.querySelector<HTMLElement>("[data-source]:not([hidden])");
-    if (initial?.dataset.source) {
-      current = initial.dataset.source;
-      preview.querySelectorAll<HTMLElement>(".cite").forEach((chip) => {
-        chip.classList.toggle("is-active", chip.dataset.cite === current);
+      panels.forEach((panel, position) => {
+        panel.hidden = position !== index;
       });
     }
+
+    for (const panel of panels) {
+      const initial = panel.querySelector<HTMLElement>("[data-source]:not([hidden])");
+      if (initial?.dataset.source) {
+        panel.dataset.current = initial.dataset.source;
+        markChips(panel, initial.dataset.source);
+      }
+    }
+
+    tabs.forEach((tab, index) => {
+      tab.addEventListener("click", () => selectTab(index));
+      tab.addEventListener("keydown", (event) => {
+        if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+        event.preventDefault();
+        const step = event.key === "ArrowRight" ? 1 : -1;
+        selectTab((index + step + tabs.length) % tabs.length, true);
+      });
+    });
+
     const chipFrom = (target: EventTarget | null) =>
       (target as HTMLElement | null)?.closest<HTMLElement>(".cite") ?? null;
-    // Pointing at a citation shows its source; clicking keeps the page in place
+    const panelFrom = (element: HTMLElement) => element.closest<HTMLElement>("[data-panel]");
+
+    // Pointing at a citation shows its source; clicking keeps the reader on the page
     preview.addEventListener("mouseover", (event) => {
       const chip = chipFrom(event.target);
-      if (chip?.dataset.cite) select(chip.dataset.cite);
+      const panel = chip && panelFrom(chip);
+      if (chip?.dataset.cite && panel) showSource(panel, chip.dataset.cite);
     });
     preview.addEventListener("focusin", (event) => {
       const chip = chipFrom(event.target);
-      if (chip?.dataset.cite) select(chip.dataset.cite);
+      const panel = chip && panelFrom(chip);
+      if (chip?.dataset.cite && panel) showSource(panel, chip.dataset.cite);
     });
     preview.addEventListener("click", (event) => {
       const chip = chipFrom(event.target);
-      if (!chip?.dataset.cite) return;
+      const panel = chip && panelFrom(chip);
+      if (!chip?.dataset.cite || !panel) return;
       event.preventDefault();
-      select(chip.dataset.cite);
+      showSource(panel, chip.dataset.cite);
     });
   });
 </script>
@@ -170,51 +239,81 @@ const siblings = parent
     overflow: hidden;
   }
 
-  .window-bar {
+  .tabs {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    height: 44px;
-    padding: 0 18px;
+    align-items: stretch;
+    height: 46px;
+    padding: 0 8px;
     border-bottom: 1px solid var(--line-soft);
     background: var(--bg-raise);
-    font-size: var(--t-caption);
-    color: var(--text-3);
+    overflow-x: auto;
+    scrollbar-width: none;
   }
 
-  .path {
+  .tab {
+    position: relative;
     display: flex;
-    gap: 8px;
-    min-width: 0;
-    overflow: hidden;
+    align-items: center;
+    padding: 0 16px;
+    border: 0;
+    background: transparent;
+    font-size: var(--t-ui);
+    color: var(--text-3);
     white-space: nowrap;
+    cursor: pointer;
+    transition: color 140ms ease;
   }
 
-  .sep {
-    color: var(--line);
+  .tab::after {
+    content: "";
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    bottom: -1px;
+    height: 2px;
+    border-radius: 2px;
+    background: transparent;
+    transition: background-color 160ms ease;
   }
 
-  .current {
+  .tab:hover {
+    color: var(--text-2);
+  }
+
+  .tab[aria-selected="true"] {
     color: var(--text);
   }
 
-  .commit {
+  .tab[aria-selected="true"]::after {
+    background: var(--accent);
+  }
+
+  .tab-owner {
+    color: var(--text-3);
+  }
+
+  .tabs-note {
+    display: flex;
+    align-items: center;
+    margin-left: auto;
+    padding: 0 10px;
     font-size: var(--t-label);
+    color: var(--text-3);
     white-space: nowrap;
   }
 
   /* The window takes the room left in the viewport so the section fits on one screen */
   .window-body {
     display: grid;
-    grid-template-columns: 210px minmax(0, 1fr) 400px;
-    height: clamp(400px, calc(100svh - var(--header) - 332px), 600px);
+    grid-template-columns: 230px minmax(0, 1fr) 400px;
+    height: clamp(360px, calc(100svh - var(--header) - 300px), 600px);
   }
 
   .tree {
     display: flex;
     flex-direction: column;
     gap: 2px;
+    min-height: 0;
     padding: 22px 14px;
     border-right: 1px solid var(--line-soft);
     font-size: var(--t-ui);
@@ -231,10 +330,25 @@ const siblings = parent
     font-weight: 500;
   }
 
+  .tree-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-height: 0;
+    overflow: hidden;
+  }
+
   .tree-item {
-    padding: 6px 8px 6px 20px;
+    padding: 6px 8px;
     border-radius: var(--radius);
     color: var(--text-2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .tree-item.is-child {
+    padding-left: 20px;
   }
 
   .tree-item.is-current {
@@ -256,9 +370,10 @@ const siblings = parent
     flex-direction: column;
     gap: 14px;
     min-height: 0;
-    padding: 30px 40px 36px;
-    overflow: hidden;
-    mask-image: linear-gradient(to bottom, #000 84%, transparent);
+    padding: 28px 40px 36px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--line) transparent;
   }
 
   .crumbs {
@@ -277,15 +392,43 @@ const siblings = parent
   }
 
   .section-title {
-    margin-top: 10px;
+    margin-top: 12px;
     font-size: var(--t-h3);
     line-height: 1.25;
   }
 
-  .prose :global(p) {
+  .prose {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .prose :global(p),
+  .prose :global(li) {
     font-size: var(--t-small);
     line-height: 1.75;
     color: var(--text-2);
+  }
+
+  .prose :global(ul),
+  .prose :global(ol) {
+    margin: 0;
+    padding-left: 20px;
+  }
+
+  .prose :global(h3) {
+    margin-top: 6px;
+    font-size: var(--t-h4);
+  }
+
+  .prose :global(.code-block) {
+    padding: 12px 14px;
+    border: 1px solid var(--line-soft);
+    border-radius: 8px;
+    background: var(--bg-raise);
+    overflow-x: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--line) transparent;
   }
 
   .source {
@@ -360,12 +503,14 @@ const siblings = parent
   .code {
     position: relative;
     flex-grow: 1;
+    min-height: 0;
     padding: 14px 0;
     overflow: auto;
-    min-height: 0;
+    scrollbar-width: thin;
+    scrollbar-color: var(--line) transparent;
   }
 
-  /* A new source is read top to bottom once, then the tint clears */
+  /* A newly shown source is read top to bottom once, then the tint clears */
   .is-entering .code::after {
     content: "";
     position: absolute;
@@ -425,19 +570,21 @@ const siblings = parent
       grid-template-columns: minmax(0, 1fr) 360px;
     }
 
-    .tree {
+    .tree,
+    .tabs-note {
       display: none;
     }
   }
 
   @media (max-width: 820px) {
-    .commit {
-      display: none;
-    }
-
     .window-body {
       grid-template-columns: 1fr;
       height: auto;
+    }
+
+    .article {
+      max-height: 520px;
+      padding: 24px 20px;
     }
 
     .code {
@@ -447,10 +594,6 @@ const siblings = parent
     .source {
       border-left: 0;
       border-top: 1px solid var(--line-soft);
-    }
-
-    .article {
-      padding: 24px 20px;
     }
   }
 </style>

@@ -1,24 +1,19 @@
 ---
+import type { PipelineItem } from "../lib/showcase.ts";
+
 interface Props {
-  repo: string;
-  files: string;
-  items: Array<{ title: string; file: string; lines: string }>;
+  items: PipelineItem[];
 }
-const { repo, files, items } = Astro.props;
+const { items } = Astro.props;
+const names = [...new Set(items.map((item) => item.repo))].join(", ");
 ---
 
-<div
-  class="pipeline"
-  data-pipeline
-  data-repo={repo}
-  data-files={files}
-  data-items={JSON.stringify(items)}
->
+<div class="pipeline" data-pipeline data-items={JSON.stringify(items)}>
   <canvas aria-hidden="true"></canvas>
   <p class="sr-only">
-    Pages come off the {repo} repository one at a time. Each page is organized into a section,
-    explained in plain English, linked to the exact lines of code it came from, checked against that
-    code, and filed into the wiki.
+    Pages from {names} come off their repositories one at a time. Each page is organized into a
+    section, explained in plain English, linked to the exact lines of code it came from, checked
+    against that code, and filed into its wiki.
   </p>
 </div>
 
@@ -39,6 +34,8 @@ const { repo, files, items } = Astro.props;
 
 <script>
   interface Item {
+    repo: string;
+    files: string;
     title: string;
     file: string;
     lines: string;
@@ -107,8 +104,6 @@ const { repo, files, items } = Astro.props;
     const ctx = context;
     const items = JSON.parse(host.dataset.items ?? "[]") as Item[];
     if (items.length === 0) return;
-    const repoName = host.dataset.repo ?? "";
-    const fileCount = host.dataset.files ?? "";
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
 
     let width = 0;
@@ -589,9 +584,9 @@ const { repo, files, items } = Astro.props;
       ctx.strokeStyle = colors.line;
       ctx.stroke();
       ctx.textBaseline = "middle";
+      ctx.globalAlpha = boxAlpha * valueAlpha;
       ctx.fillStyle = colors.text3;
       ctx.fillText(label, bx + 10, by + boxHeight / 2 + 0.5);
-      ctx.globalAlpha = boxAlpha * valueAlpha;
       ctx.fillStyle = colors.text;
       ctx.fillText(value, bx + 20 + labelWidth, by + boxHeight / 2 + 0.5);
       ctx.restore();
@@ -661,7 +656,10 @@ const { repo, files, items } = Astro.props;
         ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
       }
 
-      tag(project(STACK_X + STACK_W / 2, STACK_Y + STACK_W / 2, STACK_TOP + 0.02), [-30, -scale * 1.25], repoName, fileCount, 1, 1);
+      // The repository label follows the page leaving the stack
+      const lifting = itemFor(step + 1);
+      const labelAlpha = moving ? span(phase, 0, 0.14) : 1;
+      tag(project(STACK_X + STACK_W / 2, STACK_Y + STACK_W / 2, STACK_TOP + 0.02), [-30, -scale * 1.25], lifting.repo, lifting.files, 1, labelAlpha);
 
       if (sourceAnchor && linkingKey > 0) {
         const item = itemFor(linkingKey);
@@ -674,7 +672,9 @@ const { repo, files, items } = Astro.props;
         const arriving = !moving && lastFiled === step - LAST + 1;
         const valueAlpha = arriving ? span(dwell, 0, 0.2) : 1;
         const boxAlpha = lastFiled === 1 && arriving ? span(dwell, 0, 0.2) : 1;
-        tag(project(WIKI_X + WIKI_W, 0.95, -0.3), [-250, scale * 0.35], `page ${lastFiled}`, itemFor(lastFiled).title, boxAlpha, valueAlpha);
+        const filed = itemFor(lastFiled);
+        const shortName = filed.repo.split("/").pop() ?? filed.repo;
+        tag(project(WIKI_X + WIKI_W, 0.95, -0.3), [-300, scale * 0.35], `page ${lastFiled}`, `${shortName} · ${filed.title}`, boxAlpha, valueAlpha);
       }
     }
 

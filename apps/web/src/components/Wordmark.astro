@@ -1,0 +1,214 @@
+<div class="wordmark" data-wordmark>
+  <canvas aria-hidden="true"></canvas>
+</div>
+
+<style>
+  .wordmark {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 6.4 / 1;
+    min-height: 110px;
+    flex: 0 1 auto;
+  }
+
+  canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+</style>
+
+<script>
+  const TEXT = "EveryRepo";
+  const FONT = '"Newsreader Variable", Georgia, serif';
+  const STRANDS = 58;
+  const SAMPLES = 90;
+  const STREAKS = 5;
+
+  interface Palette {
+    a: string;
+    b: string;
+    streak: string;
+    outline: string;
+    base: string;
+  }
+
+  function rgba(hex: string, alpha: number): string {
+    const value = parseInt(hex.replace("#", ""), 16);
+    return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, ${alpha})`;
+  }
+
+  function palette(): Palette {
+    return document.documentElement.dataset.theme === "light"
+      ? {
+          a: rgba("#b8532f", 0.5),
+          b: rgba("#d9823f", 0.26),
+          streak: "#8f3d20",
+          outline: rgba("#1c1a16", 0.14),
+          base: rgba("#1c1a16", 0.025),
+        }
+      : {
+          a: rgba("#ee7a43", 0.36),
+          b: rgba("#f6b16c", 0.16),
+          streak: "#ffd8ad",
+          outline: rgba("#f3efe7", 0.12),
+          base: rgba("#f3efe7", 0.02),
+        };
+  }
+
+  function start(host: HTMLElement) {
+    const canvas = host.querySelector("canvas");
+    const context = canvas?.getContext("2d");
+    if (!canvas || !context) return;
+    const ctx = context;
+    const mask = document.createElement("canvas");
+    const maskContext = mask.getContext("2d")!;
+    const layer = document.createElement("canvas");
+    const layerContext = layer.getContext("2d")!;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let width = 0;
+    let height = 0;
+    let ratio = 1;
+    let size = 100;
+    let left = 0;
+    let baseline = 0;
+    let top = 0;
+    let colors = palette();
+    let visible = false;
+    let clock = 0;
+    let last = performance.now();
+
+    function setFont(target: CanvasRenderingContext2D, px: number) {
+      target.font = `500 ${px}px ${FONT}`;
+      target.letterSpacing = `${-0.04 * px}px`;
+      target.textBaseline = "alphabetic";
+    }
+
+    // The word fills the width, or the height when space is short, and stands on the bottom edge
+    function fit() {
+      const rect = host.getBoundingClientRect();
+      ratio = Math.min(window.devicePixelRatio || 1, 2);
+      width = rect.width;
+      height = rect.height;
+      for (const target of [canvas!, mask, layer]) {
+        target.width = Math.round(width * ratio);
+        target.height = Math.round(height * ratio);
+      }
+      setFont(ctx, 100);
+      const metrics = ctx.measureText(TEXT);
+      const wide = (metrics.actualBoundingBoxLeft + metrics.actualBoundingBoxRight) / 100;
+      const tall = metrics.actualBoundingBoxAscent / 100;
+      size = Math.max(10, Math.min(width / wide, (height - 6) / tall));
+      left = metrics.actualBoundingBoxLeft * (size / 100);
+      baseline = height;
+      top = height - tall * size;
+
+      maskContext.setTransform(ratio, 0, 0, ratio, 0, 0);
+      maskContext.clearRect(0, 0, width, height);
+      setFont(maskContext, size);
+      maskContext.fillStyle = "#000";
+      maskContext.fillText(TEXT, left, baseline);
+    }
+
+    function strand(index: number, family: number, time: number, x: number): number {
+      const span = height - top;
+      const y0 = top - span * 0.2 + (index / (STRANDS - 1)) * span * 1.4;
+      const phase = (family === 0 ? 1 : -1) * index * 0.08;
+      const wave = Math.sin((x / width) * Math.PI * 2 * 0.9 + phase + time * (family === 0 ? 0.3 : -0.24));
+      return y0 + wave * span * 0.12;
+    }
+
+    function draw(time: number) {
+      if (width === 0 || height === 0) return;
+      layerContext.setTransform(ratio, 0, 0, ratio, 0, 0);
+      layerContext.globalCompositeOperation = "source-over";
+      layerContext.clearRect(0, 0, width, height);
+      layerContext.lineWidth = 1;
+
+      for (let family = 0; family < 2; family += 1) {
+        layerContext.strokeStyle = family === 0 ? colors.a : colors.b;
+        layerContext.beginPath();
+        for (let index = 0; index < STRANDS; index += 1) {
+          for (let sample = 0; sample <= SAMPLES; sample += 1) {
+            const x = (sample / SAMPLES) * width;
+            const y = strand(index, family, time, x);
+            if (sample === 0) layerContext.moveTo(x, y);
+            else layerContext.lineTo(x, y);
+          }
+        }
+        layerContext.stroke();
+      }
+
+      if (!reduced.matches) {
+        // Short lights travel along the strands from left to right
+        layerContext.lineCap = "round";
+        for (let n = 0; n < STREAKS; n += 1) {
+          const index = (n * 7 + 4) % STRANDS;
+          const family = n % 2;
+          const head = (((time * 0.07 + n / STREAKS) % 1) + 1) % 1;
+          const length = 0.14;
+          let previousX = (head - length) * width;
+          let previousY = strand(index, family, time, previousX);
+          for (let step = 1; step <= 10; step += 1) {
+            const x = (head - length + (length * step) / 10) * width;
+            const y = strand(index, family, time, x);
+            layerContext.strokeStyle = rgba(colors.streak, (step / 10) * (step / 10) * 0.6);
+            layerContext.lineWidth = 1 + step / 20;
+            layerContext.beginPath();
+            layerContext.moveTo(previousX, previousY);
+            layerContext.lineTo(x, y);
+            layerContext.stroke();
+            previousX = x;
+            previousY = y;
+          }
+        }
+      }
+
+      layerContext.globalCompositeOperation = "destination-in";
+      layerContext.setTransform(1, 0, 0, 1, 0, 0);
+      layerContext.drawImage(mask, 0, 0);
+
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      ctx.clearRect(0, 0, width, height);
+      setFont(ctx, size);
+      ctx.fillStyle = colors.base;
+      ctx.fillText(TEXT, left, baseline);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.drawImage(layer, 0, 0);
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      ctx.strokeStyle = colors.outline;
+      ctx.lineWidth = 1;
+      ctx.strokeText(TEXT, left, baseline);
+    }
+
+    function frame(now: number) {
+      const delta = Math.min(now - last, 64) / 1000;
+      last = now;
+      if (visible && !document.hidden && !reduced.matches) {
+        clock += delta;
+        draw(clock);
+      }
+      requestAnimationFrame(frame);
+    }
+
+    const refresh = () => {
+      fit();
+      draw(clock);
+    };
+
+    void document.fonts.load(`500 100px ${FONT}`).then(refresh);
+    refresh();
+    requestAnimationFrame(frame);
+    new ResizeObserver(refresh).observe(host);
+    new IntersectionObserver(([entry]) => {
+      visible = entry?.isIntersecting ?? false;
+    }).observe(host);
+    new MutationObserver(() => {
+      colors = palette();
+      draw(clock);
+    }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  }
+
+  document.querySelectorAll<HTMLElement>("[data-wordmark]").forEach(start);
+</script>

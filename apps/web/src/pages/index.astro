@@ -16,11 +16,12 @@ const wikis = new Map(ready.map((repo) => [repo.repo, loadWiki(repo.repo)]));
 // Wikis with the most pages lead the showcase
 const wikiList = [...wikis.values()].sort((a, b) => b.pages - a.pages);
 
-const totalFiles = repos.reduce((sum, repo) => sum + repo.files, 0);
-const totalPages = ready.reduce((sum, repo) => sum + repo.pages, 0);
-const minutes = readingMinutes(wikiList);
-const readingTime = minutes >= 90 ? `${(minutes / 60).toFixed(1)} h` : `${minutes} min`;
+// Every figure counts written wikis only, so each one describes something a reader can open today
+const explainedFiles = ready.reduce((sum, repo) => sum + repo.files, 0);
+const largestRepo = Math.max(...ready.map((repo) => repo.files));
+const averageMinutes = Math.round(readingMinutes(wikiList) / wikiList.length);
 const citations = citationLinks(wikiList);
+const terms = wikiList.reduce((sum, wiki) => sum + wiki.glossary.length, 0);
 const items = pipelineItems(wikiList, (count) => `${formatCount(count)} files`);
 
 const outlines = Object.fromEntries(
@@ -108,20 +109,20 @@ const examples = ready.slice(0, 3).map((repo) => repo.repo);
 
     <div class="frame hero-stats">
       <div class="stat">
-        <span class="value">{formatCount(totalFiles)}</span>
-        <span class="label">files read across {repos.length} repositories</span>
+        <span class="value">{formatCount(explainedFiles)}</span>
+        <span class="label">files already read and explained for you</span>
       </div>
       <div class="stat">
-        <span class="value">{totalPages}</span>
-        <span class="label">wiki pages written from them</span>
-      </div>
-      <div class="stat">
-        <span class="value">{readingTime}</span>
-        <span class="label">of reading across {ready.length} wikis</span>
+        <span class="value">{averageMinutes} min</span>
+        <span class="label">on average to read a whole repository, even at {formatCount(largestRepo)} files</span>
       </div>
       <div class="stat">
         <span class="value">{formatCount(citations)}</span>
-        <span class="label">citations that open the exact lines</span>
+        <span class="label">citations that open the exact lines behind a sentence</span>
+      </div>
+      <div class="stat">
+        <span class="value">{terms}</span>
+        <span class="label">project terms explained from the code, so jargon never stops you</span>
       </div>
     </div>
   </section>

@@ -162,7 +162,7 @@ const suggestions = [
   <section class="section hub-block">
     <div class="frame hub-grid">
       <div class="about">
-        <span class="eyebrow"><span class="num">01</span> What it is</span>
+        <span class="eyebrow">About this project</span>
         <p class="about-text">{wiki.overview}</p>
         {wiki.architecture && <p class="about-text muted">{wiki.architecture}</p>}
         {
@@ -177,7 +177,7 @@ const suggestions = [
       </div>
 
       <div class="sections">
-        <span class="eyebrow"><span class="num">02</span> Sections</span>
+        <span class="eyebrow">What the wiki covers</span>
         <div class="section-list">
           {
             sections.map((section, index) => (
@@ -220,9 +220,7 @@ const suggestions = [
       <section class="section hub-block">
         <div class="frame">
           <div class="glossary-head">
-            <span class="eyebrow">
-              <span class="num">03</span> Words you will meet
-            </span>
+            <span class="eyebrow">Words you will meet</span>
             <a class="glossary-link" href={`/${wiki.repo}/glossary`}>
               All {wiki.glossary.length} terms
             </a>

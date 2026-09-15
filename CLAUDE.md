@@ -85,8 +85,9 @@ TypeScript source directly and run with tsx. Tests use Vitest.
   stages, then the answer or an error; local origins only, per address rate limit)
 - `apps/web`: the Astro website, static pages built from the site JSON; styles are plain CSS with theme
   tokens in `src/styles/global.css` (dark by default, light on request). The home page snaps each section
-  to the viewport and shows every written wiki (hero canvas, a reader preview with a tab per wiki, the
-  footer wordmark). Each written wiki also gets a hub at `/<owner>/<repo>`, a reader page per wiki page at
+  to the viewport and shows every written wiki (hero canvas, a reader preview with a tab per wiki, an Ask
+  example and an import diagram taken from other wikis (`src/lib/showcase.ts`), features, repositories,
+  audiences, method, common questions and the footer wordmark); header menus link every written wiki. Each written wiki also gets a hub at `/<owner>/<repo>`, a reader page per wiki page at
   `/<owner>/<repo>/<slug>` (page tree, cited sources beside the text, import diagrams drawn from the stored
   flowcharts by `src/lib/diagram.ts`: cycle links drawn back, columns chosen for short links, median
   ordering with swaps to cut crossings, long links routed through lanes between boxes and bundled by

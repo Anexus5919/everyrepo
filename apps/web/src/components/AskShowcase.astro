@@ -1,0 +1,279 @@
+---
+import { renderMarkdown } from "../lib/markdown.ts";
+import type { AskExample } from "../lib/showcase.ts";
+
+interface Props {
+  example: AskExample;
+}
+const { example } = Astro.props;
+const name = example.repo.split("/")[1] ?? example.repo;
+const answerHtml = await renderMarkdown(example.answer);
+const steps = [
+  "Understanding the question",
+  `Reading ${example.page.citations.length} excerpts of the code`,
+  "Writing the answer",
+];
+---
+
+<div class="ask-showcase" data-ask-showcase>
+  <div class="panel">
+    <div class="panel-head">
+      <span class="panel-title">Ask about {name}</span>
+      <span class="panel-note mono">{example.repo}</span>
+    </div>
+    <div class="panel-body">
+      <p class="question">{example.question}</p>
+      <ol class="steps">
+        {
+          steps.map((step, index) => (
+            <li style={`--step: ${index}`}>
+              <span class="mark" aria-hidden="true" />
+              {step}
+            </li>
+          ))
+        }
+      </ol>
+      <div class="answer" set:html={answerHtml} />
+      <div class="sources">
+        <span class="sources-label">Sources</span>
+        {
+          example.sources.map((source) => (
+            <a class="source" href={source.url} target="_blank" rel="noopener">
+              <span class="cite">{source.number}</span>
+              <span class="source-path mono">{source.path.split("/").slice(-2).join("/")}</span>
+              <span class="source-lines mono">
+                {source.startLine}-{source.endLine}
+              </span>
+            </a>
+          ))
+        }
+      </div>
+    </div>
+    <p class="panel-foot">
+      An example drawn from the <a href={`/${example.repo}/${example.page.slug}`}>{example.page.title}</a> page
+    </p>
+  </div>
+</div>
+
+<script>
+  // The steps tick off and the answer arrives once, when the panel first comes into view
+  document.querySelectorAll<HTMLElement>("[data-ask-showcase]").forEach((showcase) => {
+    showcase.classList.add("is-waiting");
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry?.isIntersecting) return;
+        showcase.classList.replace("is-waiting", "is-playing");
+        observer.disconnect();
+      },
+      { threshold: 0.2 },
+    );
+    observer.observe(showcase);
+  });
+</script>
+
+<style>
+  .panel {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--bg-raise);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+
+  .panel-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 16px 22px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .panel-title {
+    font-family: var(--font-serif);
+    font-size: var(--t-h4);
+  }
+
+  .panel-note {
+    font-size: var(--t-label);
+    color: var(--text-3);
+  }
+
+  .panel-body {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 20px 22px;
+  }
+
+  .question {
+    align-self: flex-end;
+    max-width: 85%;
+    padding: 10px 14px;
+    border-radius: 12px 12px 4px 12px;
+    background: var(--panel-2);
+    font-size: var(--t-small);
+    color: var(--text);
+  }
+
+  .steps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 18px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: var(--t-caption);
+    color: var(--text-3);
+  }
+
+  .steps li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .mark {
+    position: relative;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+
+  .mark::after {
+    content: "";
+    position: absolute;
+    left: 4.5px;
+    top: 2px;
+    width: 3px;
+    height: 6px;
+    border: solid var(--accent-ink);
+    border-width: 0 1.5px 1.5px 0;
+    transform: rotate(45deg);
+  }
+
+  .answer {
+    font-size: var(--t-small);
+    line-height: 1.7;
+    color: var(--text-2);
+  }
+
+  .answer :global(p) {
+    margin: 0;
+  }
+
+  .sources {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius);
+  }
+
+  .sources-label {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--line-soft);
+    font-size: var(--t-label);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-3);
+  }
+
+  .source {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    font-size: var(--t-caption);
+    color: var(--text);
+    transition: background-color 140ms ease;
+  }
+
+  .source + .source {
+    border-top: 1px solid var(--line-soft);
+  }
+
+  .source:hover {
+    background: var(--panel-2);
+  }
+
+  .source .cite {
+    vertical-align: 0;
+  }
+
+  .source-path {
+    min-width: 0;
+    margin-right: auto;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .source-lines {
+    flex-shrink: 0;
+    white-space: nowrap;
+    font-size: 11px;
+    color: var(--text-3);
+  }
+
+  .panel-foot {
+    padding: 12px 22px;
+    border-top: 1px solid var(--line-soft);
+    font-size: var(--t-caption);
+    color: var(--text-3);
+  }
+
+  .panel-foot a {
+    color: var(--text-2);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .panel-foot a:hover {
+    color: var(--text);
+  }
+
+  /* Before the panel is seen the steps wait and the answer is held back */
+  @media (prefers-reduced-motion: no-preference) {
+    .is-waiting .mark {
+      background: transparent;
+      box-shadow: inset 0 0 0 1.5px var(--line);
+    }
+
+    .is-waiting .mark::after,
+    .is-waiting .answer,
+    .is-waiting .sources {
+      opacity: 0;
+    }
+
+    .is-playing .mark {
+      animation: tick 1ms linear calc(250ms + var(--step) * 450ms) both;
+    }
+
+    .is-playing .mark::after {
+      animation: appear 200ms ease-out calc(250ms + var(--step) * 450ms) both;
+    }
+
+    .is-playing .answer {
+      animation: appear 420ms ease-out 1650ms both;
+    }
+
+    .is-playing .sources {
+      animation: appear 420ms ease-out 1900ms both;
+    }
+  }
+
+  @keyframes tick {
+    from {
+      background: transparent;
+      box-shadow: inset 0 0 0 1.5px var(--line);
+    }
+  }
+
+  @keyframes appear {
+    from {
+      opacity: 0;
+    }
+  }
+</style>

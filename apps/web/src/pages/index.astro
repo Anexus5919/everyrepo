@@ -1,12 +1,24 @@
 ---
+import AskShowcase from "../components/AskShowcase.astro";
+import Audience from "../components/Audience.astro";
 import BookIcon from "../components/BookIcon.astro";
+import DiagramShowcase from "../components/DiagramShowcase.astro";
+import Faq from "../components/Faq.astro";
+import FeatureGrid from "../components/FeatureGrid.astro";
 import Method from "../components/Method.astro";
 import Pipeline from "../components/Pipeline.astro";
 import RepoGrid from "../components/RepoGrid.astro";
 import WikiPreview from "../components/WikiPreview.astro";
 import Base from "../layouts/Base.astro";
+import { layoutDiagram, parseFlowchart } from "../lib/diagram.ts";
 import { formatCount } from "../lib/format.ts";
-import { citationLinks, pipelineItems, readingMinutes } from "../lib/showcase.ts";
+import {
+  askExample,
+  citationLinks,
+  diagramExample,
+  pipelineItems,
+  readingMinutes,
+} from "../lib/showcase.ts";
 import { loadRepos, loadWiki } from "../lib/site-data.ts";
 
 const repos = loadRepos();
@@ -30,6 +42,41 @@ const outlines = Object.fromEntries(
     item.wikiPages.filter((page) => page.parentSlug === null).map((page) => page.title),
   ]),
 );
+
+// Each showcase uses a different wiki than the one the reader preview opens on
+const askWiki = wikiList[1] ?? wikiList[0]!;
+const ask = askExample(askWiki) ?? wikiList.map(askExample).find(Boolean);
+const measure = (source: string) => {
+  const graph = parseFlowchart(source);
+  if (!graph) return undefined;
+  const layout = layoutDiagram(graph);
+  return { boxes: layout.nodes.length, links: layout.edges.length, crossings: layout.crossings };
+};
+const diagram =
+  diagramExample(
+    wikiList.filter((wiki) => wiki.repo !== ask?.repo),
+    measure,
+  ) ?? diagramExample(wikiList, measure);
+const waiting = repos.length - ready.length;
+
+const askKinds = [
+  { question: "How does this part work?", answer: "Explained from the code, with every claim cited." },
+  {
+    question: "Where should I start?",
+    answer: "What the project is, how it is laid out and what to read first.",
+  },
+  {
+    question: "Which issue can I pick up?",
+    answer: "Open issues for newcomers, how serious each one is and the files it touches.",
+  },
+  { question: "What does this diagram show?", answer: "Every box and arrow, in plain words." },
+];
+const diagramPoints = [
+  "Drawn from how files really import each other",
+  "Point at a box to follow only its links",
+  "Open any diagram full screen to explore it",
+  "Ask for a plain explanation, box by box",
+];
 
 const knownRepos = repos.map((repo) => ({ repo: repo.repo, status: repo.status }));
 const examples = ready.slice(0, 3).map((repo) => repo.repo);
@@ -131,15 +178,85 @@ const examples = ready.slice(0, 3).map((repo) => repo.repo);
     <div class="frame">
       <div class="block-head">
         <div>
-          <span class="eyebrow"><span class="num">01</span> A wiki page</span>
-          <h2 class="title">Every sentence points at the code it came from.</h2>
+          <span class="eyebrow">Read a real page</span>
+          <h2 class="title">Every sentence shows where it came from.</h2>
         </div>
         <p class="block-text">
-          Real wikis from the guide. Pick a repository, open any page from its sidebar and point
-          at a number to read the lines it cites.
+          These are real wikis, not mockups. Pick a repository, open any page from its sidebar and
+          point at a number to see the exact lines behind that sentence.
         </p>
       </div>
       <WikiPreview wikis={wikiList} />
+    </div>
+  </section>
+
+  {
+    ask && (
+      <section class="section block snap" id="ask">
+        <div class="frame split">
+          <div class="split-copy">
+            <span class="eyebrow">Ask the codebase</span>
+            <h2 class="title">Ask in plain words. Check every answer.</h2>
+            <p class="block-text">
+              Answers are written from the repository's own code and wiki, and every claim links to
+              the lines that support it. When the code does not say, the answer says so.
+            </p>
+            <dl class="ask-kinds">
+              {askKinds.map((kind) => (
+                <div class="ask-kind">
+                  <dt>{kind.question}</dt>
+                  <dd>{kind.answer}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+          <AskShowcase example={ask} />
+        </div>
+      </section>
+    )
+  }
+
+  {
+    diagram && (
+      <section class="section block snap" id="diagrams">
+        <div class="frame split split-reverse">
+          <DiagramShowcase example={diagram} />
+          <div class="split-copy">
+            <span class="eyebrow">Diagrams</span>
+            <h2 class="title">See how the pieces fit before you read a line.</h2>
+            <p class="block-text">
+              Pages that cover many files carry a map of how those files depend on each other. This
+              one shows {diagram.boxes} files from {diagram.repo}. Point at any box.
+            </p>
+            <ul class="points">
+              {diagramPoints.map((point) => (
+                <li>
+                  <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+                    <path d="M3 7.5l2.6 2.6L11 4.5" />
+                  </svg>
+                  {point}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </section>
+    )
+  }
+
+  <section class="section block snap" id="features">
+    <div class="frame">
+      <div class="block-head">
+        <div>
+          <span class="eyebrow">In every wiki</span>
+          <h2 class="title">Everything you need for your first week in a new codebase.</h2>
+        </div>
+        <p class="block-text">
+          Each wiki comes with the same set of tools, whether the repository has two hundred files
+          or twenty thousand.
+        </p>
+      </div>
+      <FeatureGrid />
     </div>
   </section>
 
@@ -147,12 +264,12 @@ const examples = ready.slice(0, 3).map((repo) => repo.repo);
     <div class="frame">
       <div class="block-head">
         <div>
-          <span class="eyebrow"><span class="num">02</span> In the guide</span>
-          <h2 class="title">Wikis are built once and shared with everyone.</h2>
+          <span class="eyebrow">Ready to read</span>
+          <h2 class="title">Written once, open to everyone.</h2>
         </div>
         <p class="block-text">
-          Anyone can request a public repository. The first request starts the reading; everyone
-          after gets the finished wiki.
+          A wiki is written the first time a repository is requested. Everyone after that opens the
+          finished pages straight away.
         </p>
       </div>
     </div>
@@ -161,20 +278,55 @@ const examples = ready.slice(0, 3).map((repo) => repo.repo);
     </div>
   </section>
 
+  <section class="section block snap" id="audience">
+    <div class="frame">
+      <div class="block-head">
+        <div>
+          <span class="eyebrow">Who it is for</span>
+          <h2 class="title">Made for anyone opening code they did not write.</h2>
+        </div>
+        <p class="block-text">
+          Whether you are fixing your first issue or deciding what to build on, you get the same
+          cited explanation of how the project works.
+        </p>
+      </div>
+      <Audience />
+    </div>
+  </section>
+
   <section class="section block snap" id="method">
     <div class="frame">
       <div class="block-head">
         <div>
-          <span class="eyebrow"><span class="num">03</span> Method</span>
-          <h2 class="title">How a page is made.</h2>
+          <span class="eyebrow">How it works</span>
+          <h2 class="title">From source code to a page you can trust.</h2>
         </div>
         <p class="block-text">
-          Pages come from the code itself at a pinned commit. Point at a step to see it happen.
+          Every page is written from the code at a pinned commit and checked before it is
+          published. Point at a step to see it happen.
         </p>
       </div>
     </div>
     <div class="frame grid-frame">
       <Method />
+    </div>
+  </section>
+
+  <section class="section block snap" id="faq">
+    <div class="frame split faq-split">
+      <div class="split-copy">
+        <span class="eyebrow">Questions</span>
+        <h2 class="title">Good to know before you start.</h2>
+        <p class="block-text">
+          The short version: pick a repository, read with the sources open, and ask when something
+          is unclear.
+        </p>
+        <div class="faq-actions">
+          <a class="btn btn-solid book-trigger" href="#open">Open a repository <BookIcon /></a>
+          <button class="btn btn-line" type="button" data-guide-open>Take the tour</button>
+        </div>
+      </div>
+      <Faq ready={ready.length} waiting={waiting} />
     </div>
   </section>
 
@@ -468,8 +620,102 @@ const examples = ready.slice(0, 3).map((repo) => repo.repo);
     max-width: 420px;
   }
 
+  .split {
+    display: grid;
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+    align-items: center;
+    gap: 64px;
+    padding: 0 24px;
+  }
+
+  .split-reverse {
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.65fr);
+    gap: 56px;
+  }
+
+  .faq-split {
+    align-items: start;
+  }
+
+  .split-copy {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .split-copy .block-text {
+    margin-top: 18px;
+  }
+
+  .ask-kinds {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    margin: 28px 0 0;
+    border-top: 1px solid var(--line-soft);
+  }
+
+  .ask-kind {
+    padding: 14px 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .ask-kind dt {
+    font-family: var(--font-serif);
+    font-size: var(--t-h4);
+    color: var(--text);
+  }
+
+  .ask-kind dd {
+    margin: 4px 0 0;
+    font-size: var(--t-caption);
+    color: var(--text-3);
+  }
+
+  .points {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin: 28px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .points li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: var(--t-small);
+    color: var(--text);
+  }
+
+  .points svg {
+    flex-shrink: 0;
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .faq-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 28px;
+  }
 
   @media (max-width: 1000px) {
+    .split,
+    .split-reverse {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 36px;
+    }
+
+    .split-reverse > .split-copy {
+      order: -1;
+    }
+
     .hero-inner {
       grid-template-columns: 1fr;
       padding-top: 48px;
@@ -502,7 +748,8 @@ const examples = ready.slice(0, 3).map((repo) => repo.repo);
       padding-block: 48px;
     }
 
-    .block > .frame:first-child {
+    .block > .frame:first-child,
+    .split {
       padding: 0;
     }
   }

@@ -2,7 +2,7 @@
 import BookIcon from "./BookIcon.astro";
 import Logo from "./Logo.astro";
 import PaletteMenu from "./PaletteMenu.astro";
-import { readablePages } from "../lib/preview.ts";
+import { diagramPage } from "../lib/showcase.ts";
 import { loadRepos, loadWiki } from "../lib/site-data.ts";
 
 const icons = {
@@ -41,14 +41,10 @@ interface Menu {
 const repos = loadRepos();
 const ready = repos.filter((repo) => repo.status === "ready").sort((a, b) => b.pages - a.pages);
 const waiting = repos.filter((repo) => repo.status !== "ready");
-const sample = ready[0];
-const sampleWiki = sample ? loadWiki(sample.repo) : undefined;
-const diagramPage = sampleWiki
-  ? readablePages(sampleWiki).find((page) => page.markdown?.includes("```mermaid"))
-  : undefined;
-const hub = sample ? `/${sample.repo}` : "/#guide";
-const glossary = sample ? `/${sample.repo}/glossary` : "/#guide";
-const diagrams = sample && diagramPage ? `/${sample.repo}/${diagramPage.slug}` : hub;
+const diagramLinks = ready.flatMap((repo) => {
+  const page = diagramPage(loadWiki(repo.repo));
+  return page ? [{ text: repo.name, owner: repo.owner, href: `/${repo.repo}/${page.slug}` }] : [];
+});
 
 const menus: Menu[] = [
   {
@@ -65,31 +61,28 @@ const menus: Menu[] = [
         icon: "ask",
         title: "Ask about the code",
         text: "Answers written from the code itself, with the same citations.",
-        href: hub,
+        href: "/#ask",
       },
       {
         icon: "diagram",
         title: "Import diagrams",
         text: "See how files depend on each other, and have any diagram explained.",
-        href: diagrams,
+        href: "/#diagrams",
       },
     ],
     columns: [
       {
-        label: "In every wiki",
-        links: [
-          { text: "Files to open first", href: hub },
-          { text: "Project glossary", href: glossary },
-          { text: "Diagrams you can explain", href: diagrams },
-          { text: "Issues for newcomers", href: hub },
-        ],
+        label: "Start reading",
+        links: ready.map((repo) => ({ text: repo.name, owner: repo.owner, href: `/${repo.repo}` })),
       },
       {
-        label: "How it works",
+        label: "Learn more",
         links: [
+          { text: "What every wiki includes", href: "/#features" },
+          { text: "Who it is for", href: "/#audience" },
           { text: "How a page is made", href: "/#method" },
-          { text: "How to use EveryRepo", href: "?guide", action: "guide" },
-          { text: "Open a repository", href: "/#open" },
+          { text: "Common questions", href: "/#faq" },
+          { text: "Take the tour", href: "?guide", action: "guide" },
         ],
       },
     ],
@@ -156,6 +149,10 @@ const menus: Menu[] = [
       {
         label: "Glossaries",
         links: ready.map((repo) => ({ text: repo.name, owner: repo.owner, href: `/${repo.repo}/glossary` })),
+      },
+      {
+        label: "Diagrams",
+        links: diagramLinks,
       },
     ],
   },
@@ -569,6 +566,17 @@ const actionAttributes = (action?: Action) =>
 
   .column + .column {
     border-left: 1px solid var(--line-soft);
+  }
+
+  /* Menus with three columns stay inside the window on smaller laptops */
+  @media (max-width: 1240px) {
+    .features {
+      width: 320px;
+    }
+
+    .column {
+      min-width: 200px;
+    }
   }
 
   .column-label {

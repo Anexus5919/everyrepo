@@ -1,0 +1,187 @@
+---
+import { diagramSvg } from "../lib/diagram.ts";
+import type { DiagramExample } from "../lib/showcase.ts";
+
+interface Props {
+  example: DiagramExample;
+}
+const { example } = Astro.props;
+const svg = diagramSvg(example.source, `Import links on the ${example.page.title} page`) ?? "";
+const href = `/${example.repo}/${example.page.slug}`;
+---
+
+<figure class="diagram-showcase" data-diagram-showcase>
+  <div class="canvas" set:html={svg} />
+  <figcaption>
+    <span class="caption-text">
+      <span class="mono">{example.repo}</span>
+      <span class="sep" aria-hidden="true">/</span>
+      {example.page.title}
+    </span>
+    <a class="caption-link" href={href}>
+      Open the page
+      <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4"></path></svg>
+    </a>
+  </figcaption>
+</figure>
+
+<script>
+  // Pointing at a box keeps only its own links in view, the way the reader pages do
+  document.querySelectorAll<HTMLElement>("[data-diagram-showcase]").forEach((showcase) => {
+    const edges = [...showcase.querySelectorAll<SVGPathElement>(".edge")];
+    const nodes = [...showcase.querySelectorAll<SVGGElement>(".node")];
+    const focus = (id: string | null) => {
+      showcase.classList.toggle("is-focused", id !== null);
+      const linked = new Set<string>(id ? [id] : []);
+      for (const edge of edges) {
+        const on = id !== null && (edge.dataset.from === id || edge.dataset.to === id);
+        edge.classList.toggle("is-linked", on);
+        if (on) {
+          linked.add(edge.dataset.from!);
+          linked.add(edge.dataset.to!);
+        }
+      }
+      for (const node of nodes) node.classList.toggle("is-linked", linked.has(node.dataset.node!));
+    };
+    for (const node of nodes) {
+      node.addEventListener("pointerenter", () => focus(node.dataset.node!));
+      node.addEventListener("focus", () => focus(node.dataset.node!));
+      node.addEventListener("pointerleave", () => focus(null));
+      node.addEventListener("blur", () => focus(null));
+    }
+  });
+</script>
+
+<style>
+  .diagram-showcase {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background:
+      radial-gradient(circle, var(--line-soft) 1px, transparent 1.2px) 0 0 / 22px 22px,
+      var(--bg-raise);
+    overflow: hidden;
+  }
+
+  .canvas {
+    display: grid;
+    place-items: center;
+    padding: 24px 16px;
+    overflow-x: auto;
+  }
+
+  .canvas :global(svg) {
+    max-width: 100%;
+    height: auto;
+  }
+
+  .canvas :global(.edge) {
+    fill: none;
+    stroke: var(--flow-line);
+    stroke-width: 1.2;
+    opacity: 0.7;
+    transition:
+      opacity 160ms ease,
+      stroke 160ms ease;
+  }
+
+  .canvas :global(.edge.back) {
+    stroke-dasharray: 4 3;
+  }
+
+  .canvas :global(marker path) {
+    fill: var(--flow-line);
+  }
+
+  .canvas :global(.node rect) {
+    fill: var(--panel);
+    stroke: var(--line);
+    transition:
+      stroke 160ms ease,
+      fill 160ms ease;
+  }
+
+  .canvas :global(.node) {
+    cursor: default;
+    outline: none;
+    transition: opacity 160ms ease;
+  }
+
+  .canvas :global(.node-name) {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    fill: var(--text);
+  }
+
+  .canvas :global(.node-folder) {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    fill: var(--text-3);
+  }
+
+  .is-focused :global(.node:not(.is-linked)),
+  .is-focused :global(.edge:not(.is-linked)) {
+    opacity: 0.22;
+  }
+
+  .is-focused :global(.edge.is-linked) {
+    stroke: var(--accent);
+    opacity: 1;
+  }
+
+  .is-focused :global(.node.is-linked rect) {
+    stroke: var(--accent-line);
+  }
+
+  figcaption {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 12px 20px;
+    border-top: 1px solid var(--line-soft);
+    background: var(--bg-raise);
+    font-size: var(--t-caption);
+    color: var(--text-3);
+  }
+
+  .caption-text {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .caption-text .mono {
+    font-size: 12px;
+    color: var(--text-2);
+  }
+
+  .sep {
+    margin: 0 6px;
+    color: var(--line);
+  }
+
+  .caption-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    color: var(--text);
+  }
+
+  .caption-link svg {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.4;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transition: transform 180ms var(--ease-out);
+  }
+
+  .caption-link:hover svg {
+    transform: translateX(3px);
+  }
+</style>

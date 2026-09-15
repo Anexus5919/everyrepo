@@ -94,8 +94,8 @@ TypeScript source directly and run with tsx. Tests use Vitest.
   `/preview/<owner>__<repo>/<slug>.json` for the home preview. Hubs and reader pages open an Ask panel
   (`src/components/Ask.astro`, answer rendering in `src/lib/ask-render.ts`); reader pages keep a question box
   at the bottom of the article that opens it. First visits get a five step
-  guide (`src/components/Guide.astro`); theme changes spread from the control that was used
-  (`src/lib/theme.ts`). Motion plays on hover or focus
+  guide (`src/components/Guide.astro`); theme changes blur the whole page, then sweep the new
+  colours in from the left (`src/lib/theme.ts`). Motion plays on hover or focus
 
 ## Rules
 

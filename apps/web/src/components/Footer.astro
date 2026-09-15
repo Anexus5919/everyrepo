@@ -166,7 +166,7 @@ const year = new Date().getFullYear();
       const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-mode]");
       if (!button) return;
       const mode = button.dataset.mode as Mode;
-      changeTheme(resolve(mode), () => apply(mode), button);
+      changeTheme(resolve(mode), () => apply(mode));
     });
   });
   system.addEventListener("change", () => {

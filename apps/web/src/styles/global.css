@@ -395,65 +395,65 @@ pre code {
   }
 }
 
-/* A theme change spreads from the control that was used; the old colours blur and the new ones come into focus as they arrive */
-@property --shift-radius {
-  syntax: "<length>";
+/* A theme change first blurs the whole site, then the new colours sweep in from the left and come into focus */
+@property --sweep {
+  syntax: "<percentage>";
   inherits: false;
-  initial-value: 0px;
+  initial-value: -35%;
 }
 
-html.theme-shift *,
-html.theme-shift *::before,
-html.theme-shift *::after {
+html.theme-sweep *,
+html.theme-sweep *::before,
+html.theme-sweep *::after {
   transition: none !important;
 }
 
-html.theme-shift::view-transition-old(root),
-html.theme-shift::view-transition-new(root) {
+html.theme-sweep::view-transition {
+  background: var(--sweep-from);
+}
+
+html.theme-sweep::view-transition-old(root),
+html.theme-sweep::view-transition-new(root) {
   mix-blend-mode: normal;
 }
 
-html.theme-shift::view-transition-old(root) {
-  animation: theme-soften 620ms ease-out both;
+html.theme-sweep::view-transition-old(root) {
+  animation: theme-blur 1150ms linear both;
 }
 
-html.theme-shift::view-transition-new(root) {
-  -webkit-mask-image: radial-gradient(
-    circle at var(--shift-x) var(--shift-y),
-    #000 calc(var(--shift-radius) - 200px),
-    transparent var(--shift-radius)
+html.theme-sweep::view-transition-new(root) {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    #000 var(--sweep),
+    transparent calc(var(--sweep) + 35%)
   );
-  mask-image: radial-gradient(
-    circle at var(--shift-x) var(--shift-y),
-    #000 calc(var(--shift-radius) - 200px),
-    transparent var(--shift-radius)
-  );
-  animation: theme-spread 620ms cubic-bezier(0.45, 0, 0.2, 1) both;
+  mask-image: linear-gradient(to right, #000 var(--sweep), transparent calc(var(--sweep) + 35%));
+  animation: theme-sweep 750ms cubic-bezier(0.6, 0, 0.3, 1) 400ms both;
 }
 
-@keyframes theme-spread {
-  from {
-    --shift-radius: 0px;
-    filter: blur(4px);
-  }
-  50% {
-    filter: blur(0);
-  }
-  to {
-    --shift-radius: var(--shift-reach);
-    filter: blur(0);
-  }
-}
-
-@keyframes theme-soften {
+@keyframes theme-blur {
   from {
     filter: blur(0);
   }
-  18% {
-    filter: blur(2.5px);
+  22% {
+    filter: blur(10px);
   }
   to {
-    filter: blur(2.5px);
+    filter: blur(10px);
+  }
+}
+
+@keyframes theme-sweep {
+  from {
+    --sweep: -35%;
+    filter: blur(10px);
+  }
+  70% {
+    filter: blur(2px);
+  }
+  to {
+    --sweep: 100%;
+    filter: blur(0);
   }
 }
 

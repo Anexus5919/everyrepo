@@ -1,5 +1,6 @@
 ---
 import type { SitePage, SiteWiki } from "@everyrepo/core";
+import DiagramViewer from "../../../components/DiagramViewer.astro";
 import WikiTree from "../../../components/WikiTree.astro";
 import Base from "../../../layouts/Base.astro";
 import { shortSha } from "../../../lib/format.ts";
@@ -49,8 +50,44 @@ const reading = page.section ? [] : page.readingOrder.slice(0, 6);
   description={page.purpose || `${page.title} in the ${wiki.repo} wiki, with every sentence linked to its source.`}
 >
   <div class="reader" data-reader>
+    <script is:inline>
+      // Saved sidebar sizes apply before the first paint so the layout does not jump
+      try {
+        const reader = document.currentScript.parentElement;
+        const tree = Number(localStorage.getItem("reader.tree"));
+        const side = Number(localStorage.getItem("reader.side"));
+        if (tree) reader.style.setProperty("--tree-w", `${tree}px`);
+        if (side) reader.style.setProperty("--side-w", `${side}px`);
+        if (localStorage.getItem("reader.collapsed") === "true") reader.classList.add("tree-collapsed");
+      } catch {}
+    </script>
     <aside class="reader-tree" data-reader-tree>
-      <WikiTree wiki={wiki} current={page.slug} />
+      <button
+        class="tree-collapse"
+        type="button"
+        aria-label="Hide the page list"
+        aria-expanded="true"
+        data-tree-collapse
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <rect x="2" y="2.5" width="12" height="11" rx="2" stroke="currentColor" stroke-width="1.3"></rect>
+          <path d="M6 2.5v11" stroke="currentColor" stroke-width="1.3"></path>
+          <path class="collapse-arrow" d="M11 6.5L9.5 8L11 9.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"></path>
+        </svg>
+      </button>
+      <div class="tree-body">
+        <WikiTree wiki={wiki} current={page.slug} />
+      </div>
+      <div
+        class="resizer resizer-tree"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize the page list"
+        aria-valuemin="220"
+        aria-valuemax="440"
+        tabindex="0"
+        data-resize="tree"
+      ></div>
     </aside>
 
     <article class="reader-main">
@@ -143,6 +180,16 @@ const reading = page.section ? [] : page.readingOrder.slice(0, 6);
     </article>
 
     <aside class="reader-side">
+      <div
+        class="resizer resizer-side"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize the source panel"
+        aria-valuemin="320"
+        aria-valuemax="680"
+        tabindex="0"
+        data-resize="side"
+      ></div>
       {
         toc.length > 1 && (
           <nav class="toc" aria-label="On this page">
@@ -166,6 +213,7 @@ const reading = page.section ? [] : page.readingOrder.slice(0, 6);
         )
       }
     </aside>
+    <DiagramViewer />
   </div>
 </Base>
 
@@ -277,6 +325,88 @@ const reading = page.section ? [] : page.readingOrder.slice(0, 6);
       });
     });
 
+    // Both sidebars can be dragged wider or narrower within limits; the source panel stays wide enough for code
+    const LIMITS = { tree: { min: 220, max: 440, standard: 280 }, side: { min: 320, max: 680, standard: 400 } };
+    const MIN_TEXT = 520;
+    const COLLAPSE_BELOW = 150;
+    const store = (key: string, value: string) => {
+      try {
+        localStorage.setItem(key, value);
+      } catch {
+        // Sizes then last only for this page view
+      }
+    };
+    const width = (kind: "tree" | "side") => {
+      const value = parseFloat(getComputedStyle(reader).getPropertyValue(`--${kind}-w`));
+      return Number.isFinite(value) ? value : LIMITS[kind].standard;
+    };
+    const collapseButton = reader.querySelector<HTMLButtonElement>("[data-tree-collapse]");
+    const setCollapsed = (collapsed: boolean) => {
+      reader.classList.toggle("tree-collapsed", collapsed);
+      collapseButton?.setAttribute("aria-expanded", String(!collapsed));
+      collapseButton?.setAttribute("aria-label", collapsed ? "Show the page list" : "Hide the page list");
+      store("reader.collapsed", String(collapsed));
+    };
+    setCollapsed(reader.classList.contains("tree-collapsed"));
+    collapseButton?.addEventListener("click", () =>
+      setCollapsed(!reader.classList.contains("tree-collapsed")),
+    );
+
+    const setWidth = (kind: "tree" | "side", requested: number) => {
+      const other = kind === "tree" ? width("side") : reader.classList.contains("tree-collapsed") ? 48 : width("tree");
+      const room = reader.clientWidth - other - MIN_TEXT;
+      const { min, max } = LIMITS[kind];
+      const value = Math.round(Math.max(min, Math.min(max, requested, room)));
+      reader.style.setProperty(`--${kind}-w`, `${value}px`);
+      reader.querySelector(`[data-resize="${kind}"]`)?.setAttribute("aria-valuenow", String(value));
+      store(`reader.${kind}`, String(value));
+    };
+
+    reader.querySelectorAll<HTMLElement>("[data-resize]").forEach((handle) => {
+      const kind = handle.dataset.resize as "tree" | "side";
+      handle.setAttribute("aria-valuenow", String(Math.round(width(kind))));
+      let start: { x: number; width: number } | null = null;
+      handle.addEventListener("pointerdown", (event) => {
+        event.preventDefault();
+        start = { x: event.clientX, width: width(kind) };
+        try {
+          handle.setPointerCapture(event.pointerId);
+        } catch {
+          // Without capture the drag still follows moves over the handle
+        }
+        reader.classList.add("is-resizing");
+      });
+      handle.addEventListener("pointermove", (event) => {
+        if (!start) return;
+        const delta = event.clientX - start.x;
+        const next = kind === "tree" ? start.width + delta : start.width - delta;
+        // Pulling the page list far enough in folds it away
+        if (kind === "tree" && next < COLLAPSE_BELOW) {
+          start = null;
+          reader.classList.remove("is-resizing");
+          setCollapsed(true);
+          return;
+        }
+        setWidth(kind, next);
+      });
+      const stop = () => {
+        start = null;
+        reader.classList.remove("is-resizing");
+      };
+      handle.addEventListener("pointerup", stop);
+      handle.addEventListener("pointercancel", stop);
+      handle.addEventListener("dblclick", () => setWidth(kind, LIMITS[kind].standard));
+      handle.addEventListener("keydown", (event) => {
+        const step = event.shiftKey ? 48 : 16;
+        const grow = kind === "tree" ? 1 : -1;
+        if (event.key === "ArrowRight") setWidth(kind, width(kind) + step * grow);
+        else if (event.key === "ArrowLeft") setWidth(kind, width(kind) - step * grow);
+        else if (event.key === "Home") setWidth(kind, LIMITS[kind].standard);
+        else return;
+        event.preventDefault();
+      });
+    });
+
     const toggle = reader.querySelector<HTMLButtonElement>("[data-pages-toggle]");
     toggle?.addEventListener("click", () => {
       const open = reader.classList.toggle("pages-open");
@@ -287,13 +417,114 @@ const reading = page.section ? [] : page.readingOrder.slice(0, 6);
 
 <style is:global>
   .reader {
+    --tree-col: var(--tree-w, 280px);
     position: relative;
     z-index: 2;
     display: grid;
-    grid-template-columns: 280px minmax(0, 1fr) 400px;
+    grid-template-columns: var(--tree-col) minmax(0, 1fr) var(--side-w, 400px);
+    transition: grid-template-columns 200ms var(--ease-out);
     max-width: 1640px;
     margin: 0 auto;
     background: var(--bg);
+  }
+
+  .reader.is-resizing {
+    transition: none;
+    cursor: col-resize;
+    user-select: none;
+  }
+
+  .reader.tree-collapsed {
+    --tree-col: 48px;
+  }
+
+  .tree-body {
+    height: 100%;
+  }
+
+  .reader .reader-tree .tree-repo {
+    padding-right: 52px;
+  }
+
+  .reader.tree-collapsed .tree-body,
+  .reader.tree-collapsed .resizer-tree {
+    display: none;
+  }
+
+  .tree-collapse {
+    position: absolute;
+    top: 16px;
+    right: 12px;
+    z-index: 2;
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--text-3);
+    cursor: pointer;
+    transition:
+      color 140ms ease,
+      border-color 140ms ease;
+  }
+
+  .tree-collapse:hover {
+    color: var(--text);
+    border-color: var(--line);
+  }
+
+  .reader.tree-collapsed .tree-collapse {
+    right: 8px;
+  }
+
+  /* The arrow points the way the list will move */
+  .collapse-arrow {
+    transform-origin: 10.25px 8px;
+    transition: transform 200ms var(--ease-out);
+  }
+
+  .reader.tree-collapsed .collapse-arrow {
+    transform: scaleX(-1);
+  }
+
+  .resizer {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 3;
+    width: 9px;
+    cursor: col-resize;
+    touch-action: none;
+    outline: none;
+  }
+
+  .resizer::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 4px;
+    width: 1px;
+    background: transparent;
+    transition: background-color 140ms ease;
+  }
+
+  .resizer:hover::after,
+  .resizer:focus-visible::after,
+  .reader.is-resizing .resizer::after {
+    width: 2px;
+    left: 3.5px;
+    background: var(--accent);
+  }
+
+  .resizer-tree {
+    right: -5px;
+  }
+
+  .resizer-side {
+    left: -5px;
   }
 
   .reader-tree,
@@ -488,7 +719,9 @@ const reading = page.section ? [] : page.readingOrder.slice(0, 6);
   }
 
   .reader .diagram {
+    position: relative;
     margin: 8px 0;
+    cursor: zoom-in;
     border: 1px solid var(--line-soft);
     border-radius: 10px;
     background: var(--bg-raise);
@@ -507,6 +740,45 @@ const reading = page.section ? [] : page.readingOrder.slice(0, 6);
     display: block;
     max-width: none;
     margin: 0 auto;
+  }
+
+  .reader .diagram-expand {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--panel);
+    font-size: var(--t-caption);
+    color: var(--text-2);
+    cursor: pointer;
+    transition:
+      color 140ms ease,
+      border-color 140ms ease;
+  }
+
+  .reader .diagram:hover .diagram-expand,
+  .reader .diagram-expand:focus-visible {
+    color: var(--text);
+    border-color: var(--text-3);
+  }
+
+  /* The corners step outward, the way the diagram is about to grow */
+  .reader .diagram-expand .corner {
+    transition: transform 180ms var(--ease-out);
+  }
+
+  .reader .diagram:hover .diagram-expand .corner-a {
+    transform: translate(1px, -1px);
+  }
+
+  .reader .diagram:hover .diagram-expand .corner-b {
+    transform: translate(-1px, 1px);
   }
 
   .reader .diagram-scroll.is-scrollable {
@@ -874,7 +1146,12 @@ const reading = page.section ? [] : page.readingOrder.slice(0, 6);
 
   @media (max-width: 1280px) {
     .reader {
-      grid-template-columns: 260px minmax(0, 1fr) 340px;
+      --tree-col: var(--tree-w, 250px);
+      grid-template-columns: var(--tree-col) minmax(0, 1fr) var(--side-w, 340px);
+    }
+
+    .reader.tree-collapsed {
+      --tree-col: 48px;
     }
   }
 
@@ -883,8 +1160,14 @@ const reading = page.section ? [] : page.readingOrder.slice(0, 6);
       grid-template-columns: minmax(0, 1fr);
     }
 
-    .reader-side {
+    .reader-side,
+    .resizer,
+    .tree-collapse {
       display: none;
+    }
+
+    .reader.tree-collapsed .tree-body {
+      display: block;
     }
 
     .reader-tree {

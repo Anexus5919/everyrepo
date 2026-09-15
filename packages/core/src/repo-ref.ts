@@ -110,11 +110,29 @@ export function readRepoInput(input: string): RepoInput {
   const [first] = segments;
   // A first segment with a dot is a host name, since owner names never contain one
   if (first?.includes(".")) return fromUrl(`https://${text}`);
-  if (segments.length === 2) return fromPair(segments[0]!, segments[1]!);
+  if (segments.length === 2) return fromSegments(segments);
   if (segments.length === 1 && OWNER.test(segments[0]!)) {
     return { ok: false, problem: "owner-only", owner: segments[0]! };
   }
   return { ok: false, problem: "invalid" };
+}
+
+// What to tell someone whose text could not be read as a repository
+export function repoInputMessage(problem: RepoInputProblem, owner?: string): string {
+  switch (problem) {
+    case "empty":
+      return "Enter a repository as owner/name, or paste its GitHub link.";
+    case "other-host":
+      return "Only repositories on GitHub can be read for now.";
+    case "not-a-repository":
+      return "That link is not a repository. Open the repository on GitHub and copy its address.";
+    case "owner-only":
+      return owner
+        ? `That is the ${owner} account. Add a repository name, like ${owner}/name.`
+        : "Add a repository name after the account, like owner/name.";
+    case "invalid":
+      return "That does not look like a GitHub repository. Use owner/name or paste its GitHub link.";
+  }
 }
 
 export function parseRepoRef(input: string): RepoRef {

@@ -1,6 +1,7 @@
 import { loadLocalConfig, type LocalConfig } from "@everyrepo/core";
 import {
   appDbPath,
+  createGithubCacheStore,
   LlmCache,
   llmCachePath,
   neuronsUsedLastDay,
@@ -15,7 +16,13 @@ import {
   type ConfiguredEmbedder,
   type Reranker,
 } from "@everyrepo/embed";
+import { createGithubClient, type GithubClient } from "@everyrepo/github";
 import { createRouterFromConfig, type LlmRouter } from "@everyrepo/llm";
+import {
+  createRequestService,
+  DEFAULT_REQUEST_POLICY,
+  type RequestService,
+} from "@everyrepo/requests";
 
 export interface CliContext {
   config: LocalConfig;
@@ -83,6 +90,23 @@ export function openLlm(context: CliContext): OpenLlm {
     },
   });
   return { router, close: () => cache.close() };
+}
+
+// A token raises GitHub's hourly limit from 60 to 5,000 lookups but is optional; answers are saved with their entity tags
+export function openGithub(context: CliContext): GithubClient {
+  const token = process.env["GITHUB_TOKEN"];
+  return createGithubClient({
+    ...(token ? { token } : {}),
+    cache: createGithubCacheStore(context.appDb),
+  });
+}
+
+export function openRequests(context: CliContext): RequestService {
+  return createRequestService({
+    db: context.appDb,
+    github: openGithub(context),
+    policy: { ...DEFAULT_REQUEST_POLICY, ...context.config.requests },
+  });
 }
 
 export function timestamp(): string {

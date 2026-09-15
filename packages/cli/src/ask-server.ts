@@ -8,6 +8,7 @@ import {
 } from "@everyrepo/ask";
 import { EmbeddingBudgetError } from "@everyrepo/embed";
 import { ModelUnavailableError } from "@everyrepo/llm";
+import { applyCors } from "./http.ts";
 
 export interface AskRequestBody {
   repo: string;
@@ -25,6 +26,8 @@ export interface AskBackend {
 export interface AskServerOptions {
   // Questions one address may ask per minute
   perMinute?: number;
+  // Deployed sites allowed to call the API besides pages on this machine
+  allowedOrigins?: readonly string[];
   now?: () => number;
   log?: (message: string) => void;
 }
@@ -33,7 +36,6 @@ export type AskStreamLine =
   AskEvent | { type: "answer"; answer: AskAnswer } | { type: "error"; message: string };
 
 const MAX_BODY_BYTES = 8_000;
-const LOCAL_ORIGIN = /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/;
 const PAGE_SLUG = /^[a-z0-9][a-z0-9-]{0,150}$/i;
 const HISTORY_TURNS = 6;
 
@@ -133,13 +135,7 @@ export function createAskHandler(backend: AskBackend, options: AskServerOptions 
   };
 
   return async (request: IncomingMessage, response: ServerResponse): Promise<void> => {
-    const origin = request.headers.origin;
-    if (origin && LOCAL_ORIGIN.test(origin)) {
-      response.setHeader("access-control-allow-origin", origin);
-      response.setHeader("access-control-allow-methods", "GET, POST, OPTIONS");
-      response.setHeader("access-control-allow-headers", "content-type");
-      response.setHeader("vary", "origin");
-    }
+    applyCors(request, response, options.allowedOrigins ?? []);
     const path = new URL(request.url ?? "/", "http://localhost").pathname;
 
     if (request.method === "OPTIONS") {

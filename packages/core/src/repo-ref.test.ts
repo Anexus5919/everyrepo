@@ -78,6 +78,11 @@ describe("readRepoInput", () => {
       owner: "jenkinsci",
     });
     expect(readRepoInput("sugarlabs")).toMatchObject({ problem: "owner-only", owner: "sugarlabs" });
+    expect(readRepoInput("orgs/jenkinsci")).toMatchObject({
+      problem: "owner-only",
+      owner: "jenkinsci",
+    });
+    expect(readRepoInput("topics/react")).toMatchObject({ problem: "not-a-repository" });
     for (const input of [
       "https://github.com",
       "https://github.com/topics/react",

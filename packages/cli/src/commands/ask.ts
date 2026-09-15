@@ -1,8 +1,19 @@
-import { createServer } from "node:http";
+import { randomBytes } from "node:crypto";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { pruneRateLimits } from "@everyrepo/db";
 import { Command } from "commander";
 import { createAskHandler } from "../ask-server.ts";
-import { openAskSession } from "../ask-session.ts";
-import { openContext, timestamp } from "../context.ts";
+import { openAskSession, type AskSession } from "../ask-session.ts";
+import { openContext, openRequests, timestamp } from "../context.ts";
+import {
+  allowedOriginsFromEnv,
+  applyCors,
+  BodyTooLargeError,
+  clientAddress,
+  sendWebResponse,
+  toWebRequest,
+} from "../http.ts";
+import { createRequestApi, isRequestRoute, REQUEST_BODY_BYTES } from "../request-api.ts";
 
 export function askCommand(): Command {
   return new Command("ask")
@@ -59,30 +70,97 @@ export function askCommand(): Command {
     });
 }
 
+const DAY_MS = 86_400_000;
+
 export function serveCommand(): Command {
   return new Command("serve")
-    .description("Serve the Ask API on this machine for the website")
+    .description("Serve the Ask and repository request API on this machine for the website")
     .option("--port <n>", "port to listen on", "8787")
     .action(async (options: { port: string }) => {
       const context = await openContext();
-      const session = await openAskSession(context);
-      const handle = createAskHandler(session, {
-        log: (message) => console.log(`${timestamp()} ${message}`),
+      const log = (message: string) => console.log(`${timestamp()} ${message}`);
+      const allowedOrigins = allowedOriginsFromEnv();
+
+      // Ask needs embeddings and models; requests keep working without them
+      let session: AskSession | undefined;
+      try {
+        session = await openAskSession(context);
+      } catch (error) {
+        log(`Ask is off: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      const ask = session ? createAskHandler(session, { log, allowedOrigins }) : undefined;
+
+      let secret = process.env["EVERYREPO_REQUEST_SECRET"];
+      if (!secret) {
+        secret = randomBytes(32).toString("hex");
+        log(
+          "EVERYREPO_REQUEST_SECRET is not set, so requesters are told apart only until a restart",
+        );
+      }
+      const turnstileSecret = process.env["TURNSTILE_SECRET_KEY"];
+      const requests = createRequestApi({
+        service: openRequests(context),
+        db: context.appDb,
+        secret,
+        turnstile: turnstileSecret ? { secret: turnstileSecret } : undefined,
+        log,
       });
+
+      const json = (response: ServerResponse, status: number, code: string, message: string) => {
+        response.writeHead(status, { "content-type": "application/json; charset=utf-8" });
+        response.end(JSON.stringify({ error: { code, message } }));
+      };
+
+      async function handleRequests(request: IncomingMessage, response: ServerResponse) {
+        applyCors(request, response, allowedOrigins);
+        if (request.method === "OPTIONS") {
+          response.writeHead(204).end();
+          return;
+        }
+        let web: Request;
+        try {
+          web = await toWebRequest(request, REQUEST_BODY_BYTES);
+        } catch (error) {
+          if (error instanceof BodyTooLargeError) {
+            json(response, 413, "too-large", error.message);
+            return;
+          }
+          throw error;
+        }
+        const reply = await requests(web, clientAddress(request));
+        if (reply) await sendWebResponse(response, reply);
+        else json(response, 404, "not-found", "Not found");
+      }
+
+      async function handleAskOff(request: IncomingMessage, response: ServerResponse) {
+        applyCors(request, response, allowedOrigins);
+        if (request.method === "OPTIONS") response.writeHead(204).end();
+        else json(response, 503, "ask-off", "Ask is not available on this server right now.");
+      }
+
       const server = createServer((request, response) => {
-        handle(request, response).catch((error: unknown) => {
+        const path = new URL(request.url ?? "/", "http://127.0.0.1").pathname;
+        const work = isRequestRoute(path)
+          ? handleRequests(request, response)
+          : ask
+            ? ask(request, response)
+            : handleAskOff(request, response);
+        work.catch((error: unknown) => {
           console.error(error);
           if (!response.headersSent) response.writeHead(500);
           response.end();
         });
       });
+      const prune = setInterval(() => pruneRateLimits(context.appDb, 2 * DAY_MS), 3_600_000);
+      prune.unref();
       const port = Number(options.port);
       server.listen(port, "127.0.0.1", () => {
-        console.log(`Ask API listening on http://127.0.0.1:${port}`);
+        log(`API listening on http://127.0.0.1:${port}`);
       });
       const stop = () => {
+        clearInterval(prune);
         server.close();
-        session.close();
+        session?.close();
         context.close();
       };
       process.once("SIGINT", stop);

@@ -3,6 +3,7 @@ export {
   parseRepoRef,
   readRepoInput,
   repoDirName,
+  repoInputMessage,
   repoKey,
   type RepoInput,
   type RepoInputProblem,
@@ -15,6 +16,7 @@ export {
   type LlmConfig,
   type LocalConfig,
   type LocalRepo,
+  type RequestsConfig,
 } from "./local-config.ts";
 export { testRepos, type TestRepo } from "./test-repos.ts";
 export * from "./vocabulary.ts";

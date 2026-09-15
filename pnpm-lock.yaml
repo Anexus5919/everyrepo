@@ -107,6 +107,9 @@ importers:
       '@everyrepo/eval':
         specifier: workspace:*
         version: link:../eval
+      '@everyrepo/github':
+        specifier: workspace:*
+        version: link:../github
       '@everyrepo/llm':
         specifier: workspace:*
         version: link:../llm
@@ -122,6 +125,9 @@ importers:
       '@everyrepo/repo':
         specifier: workspace:*
         version: link:../repo
+      '@everyrepo/requests':
+        specifier: workspace:*
+        version: link:../requests
       '@everyrepo/search':
         specifier: workspace:*
         version: link:../search

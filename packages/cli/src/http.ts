@@ -22,7 +22,9 @@ export function applyCors(
   const origin = request.headers.origin;
   if (!isAllowedOrigin(origin, allowed)) return;
   response.setHeader("access-control-allow-origin", origin!);
-  response.setHeader("access-control-allow-methods", "GET, POST, OPTIONS");
+  // The website sends its session cookie with API calls, which browsers allow only with this header
+  response.setHeader("access-control-allow-credentials", "true");
+  response.setHeader("access-control-allow-methods", "GET, POST, DELETE, OPTIONS");
   response.setHeader("access-control-allow-headers", "content-type, if-none-match");
   response.setHeader("access-control-expose-headers", "etag, retry-after");
   response.setHeader("vary", "origin");
@@ -68,7 +70,12 @@ export async function toWebRequest(request: IncomingMessage, maxBytes: number): 
 }
 
 export async function sendWebResponse(response: ServerResponse, reply: Response): Promise<void> {
-  reply.headers.forEach((value, name) => response.setHeader(name, value));
+  reply.headers.forEach((value, name) => {
+    if (name !== "set-cookie") response.setHeader(name, value);
+  });
+  // Each cookie needs its own header line, which joining them into one value would break
+  const cookies = reply.headers.getSetCookie();
+  if (cookies.length > 0) response.setHeader("set-cookie", cookies);
   response.writeHead(reply.status);
   response.end(Buffer.from(await reply.arrayBuffer()));
 }

@@ -6,6 +6,7 @@ import Base from "../../layouts/Base.astro";
 <Base
   title="Request status: EveryRepo"
   description="Follow a repository's wiki while it is read, written and published."
+  guide={false}
 >
   <section class="section status-page">
     <div class="frame status-frame">
@@ -268,6 +269,16 @@ import Base from "../../layouts/Base.astro";
 
   .status-actions .btn .icon {
     stroke-width: 1.8;
+  }
+
+  .status-actions .btn .icon-github {
+    stroke: none;
+  }
+
+  .status-card .status-signin {
+    margin-top: -6px;
+    font-size: var(--t-caption);
+    color: var(--text-3);
   }
 
   .status-page .check:empty {

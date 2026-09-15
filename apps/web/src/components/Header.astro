@@ -292,6 +292,39 @@ const actionAttributes = (action?: Action) => (action ? ACTION_ATTRIBUTES[action
       </svg>
     </button>
 
+    <div class="account" data-account>
+      <a class="cell account-signin" href="/signin/" aria-label="Sign in" data-account-signin>
+        <svg class="account-icon" width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"
+          ><circle cx="12" cy="8.5" r="3.8"></circle><path d="M4.5 20c.9-3.6 3.9-5.8 7.5-5.8s6.6 2.2 7.5 5.8"
+          ></path></svg
+        >
+        <span class="account-text">Sign in</span>
+      </a>
+      <button
+        class="cell account-trigger"
+        type="button"
+        aria-expanded="false"
+        aria-controls="account-menu"
+        data-account-trigger
+        hidden
+      >
+        <span class="avatar" aria-hidden="true" data-account-avatar></span>
+        <span class="account-text" data-account-login></span>
+        <svg class="chevron" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+          <path d="M2 3.5 5 6.5 8 3.5"></path>
+        </svg>
+      </button>
+      <div class="account-menu" id="account-menu" data-account-menu hidden>
+        <div class="account-who">
+          <span class="account-name" data-account-name></span>
+          <span class="account-handle" data-account-handle></span>
+        </div>
+        <a class="account-item" href="/account/">Your account</a>
+        <a class="account-item" href="/account/#requests">Your requests</a>
+        <button class="account-item" type="button" data-account-signout>Sign out</button>
+      </div>
+    </div>
+
     <button
       class="cell cell-icon menu-toggle"
       type="button"
@@ -679,6 +712,124 @@ const actionAttributes = (action?: Action) => (action ? ACTION_ATTRIBUTES[action
     }
   }
 
+  .account {
+    position: relative;
+    display: flex;
+  }
+
+  .account-signin[hidden],
+  .account-trigger[hidden] {
+    display: none;
+  }
+
+  .account-icon {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.6;
+    stroke-linecap: round;
+  }
+
+  .account-trigger {
+    gap: 10px;
+    padding: 0 18px;
+  }
+
+  .account-trigger[aria-expanded="true"] .chevron {
+    transform: rotate(180deg);
+  }
+
+  .avatar {
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    background: var(--panel-2);
+    overflow: hidden;
+    font-family: var(--font-serif);
+    font-size: 14px;
+    color: var(--text);
+  }
+
+  .avatar :global(img) {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .account-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    z-index: 70;
+    display: flex;
+    flex-direction: column;
+    width: 240px;
+    margin-top: 1px;
+    padding: 6px;
+    border: 1px solid var(--line);
+    border-top: 0;
+    border-radius: 0 0 12px 12px;
+    background: var(--bg-raise);
+    box-shadow: var(--shadow);
+    animation: mega-in 180ms var(--ease-out);
+  }
+
+  .account-menu[hidden] {
+    display: none;
+  }
+
+  .account-who {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 10px 10px 12px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .account-name {
+    font-size: var(--t-small);
+    font-weight: 500;
+    color: var(--text);
+    overflow-wrap: anywhere;
+  }
+
+  .account-handle {
+    font-size: var(--t-caption);
+    color: var(--text-3);
+    overflow-wrap: anywhere;
+  }
+
+  .account-item {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: 9px 10px;
+    border: 0;
+    border-radius: var(--radius);
+    background: transparent;
+    font: inherit;
+    font-size: var(--t-ui);
+    text-align: left;
+    color: var(--text);
+    cursor: pointer;
+  }
+
+  .account-item:hover,
+  .account-item:focus-visible {
+    background: var(--panel-2);
+    outline: none;
+  }
+
+  button.account-item {
+    margin-top: 4px;
+    border-top: 1px solid var(--line-soft);
+    border-radius: 0 0 var(--radius) var(--radius);
+    color: var(--text-2);
+  }
+
   .menu-toggle {
     display: none;
   }
@@ -784,9 +935,24 @@ const actionAttributes = (action?: Action) => (action ? ACTION_ATTRIBUTES[action
     padding-top: 10px;
   }
 
-  @media (max-width: 1180px) {
+  @media (max-width: 1320px) {
     .status {
       display: none;
+    }
+  }
+
+  /* Narrower headers keep the account as an icon or a picture */
+  @media (max-width: 1180px) {
+    .account-text,
+    .account-trigger .chevron {
+      display: none;
+    }
+
+    .account-signin,
+    .account-trigger {
+      justify-content: center;
+      width: 64px;
+      padding: 0;
     }
   }
 
@@ -813,13 +979,17 @@ const actionAttributes = (action?: Action) => (action ? ACTION_ATTRIBUTES[action
       padding: 0 16px;
     }
 
-    .cell-icon {
+    .cell-icon,
+    .account-signin,
+    .account-trigger {
       width: 52px;
     }
   }
 </style>
 
 <script>
+  import type { AccountUser } from "@everyrepo/core/requests";
+  import { cachedUser, getAccount, signInPage, signOut } from "../lib/session.ts";
   import { changeTheme } from "../lib/theme.ts";
 
   const toggle = document.querySelector<HTMLButtonElement>("[data-theme-toggle]");
@@ -930,6 +1100,79 @@ const actionAttributes = (action?: Action) => (action ? ACTION_ATTRIBUTES[action
     });
     mobileMenu.addEventListener("click", (event) => {
       if ((event.target as Element).closest("a")) closeMobile();
+    });
+
+    const account = header.querySelector<HTMLElement>("[data-account]")!;
+    const signIn = account.querySelector<HTMLAnchorElement>("[data-account-signin]")!;
+    const accountTrigger = account.querySelector<HTMLButtonElement>("[data-account-trigger]")!;
+    const accountPanel = account.querySelector<HTMLElement>("[data-account-menu]")!;
+    const avatar = account.querySelector<HTMLElement>("[data-account-avatar]")!;
+
+    const setAccountMenu = (open: boolean) => {
+      accountPanel.hidden = !open;
+      accountTrigger.setAttribute("aria-expanded", String(open));
+    };
+
+    function renderAccount(user: AccountUser | null) {
+      signIn.hidden = user !== null;
+      accountTrigger.hidden = user === null;
+      if (!user) {
+        setAccountMenu(false);
+        // Signing in comes back to the page it started from, except from the sign-in pages themselves
+        const onAuthPage = /^\/(signin|signup)\/?$/.test(window.location.pathname);
+        signIn.href = onAuthPage ? "/signin/" : signInPage();
+        return;
+      }
+      accountTrigger.setAttribute("aria-label", `Account menu for ${user.login}`);
+      account.querySelector("[data-account-login]")!.textContent = user.login;
+      account.querySelector("[data-account-name]")!.textContent = user.name ?? user.login;
+      account.querySelector("[data-account-handle]")!.textContent = user.email ?? `@${user.login}`;
+      const initial = (user.name ?? user.login).charAt(0).toUpperCase();
+      if (!user.avatarUrl) {
+        avatar.replaceChildren(initial);
+        return;
+      }
+      const source = new URL(user.avatarUrl);
+      source.searchParams.set("s", "64");
+      if (avatar.querySelector("img")?.src === source.toString()) return;
+      const image = new Image(26, 26);
+      image.alt = "";
+      image.referrerPolicy = "no-referrer";
+      image.addEventListener("error", () => avatar.replaceChildren(initial));
+      image.src = source.toString();
+      avatar.replaceChildren(image);
+    }
+
+    renderAccount(cachedUser());
+    void getAccount().then((result) => {
+      if (result.reachable) renderAccount(result.user);
+    });
+    window.addEventListener("accountchange", (event) =>
+      renderAccount((event as CustomEvent<AccountUser | null>).detail),
+    );
+
+    accountTrigger.addEventListener("click", () => setAccountMenu(accountPanel.hidden));
+    account.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !accountPanel.hidden) {
+        setAccountMenu(false);
+        accountTrigger.focus();
+      }
+    });
+    account.addEventListener("focusout", (event) => {
+      if (!account.contains(event.relatedTarget as Node | null)) setAccountMenu(false);
+    });
+    document.addEventListener("click", (event) => {
+      if (!account.contains(event.target as Node)) setAccountMenu(false);
+    });
+    accountPanel.querySelector("[data-account-signout]")!.addEventListener("click", async () => {
+      setAccountMenu(false);
+      try {
+        await signOut();
+      } catch {
+        // With the API away the session stays as it is, which the next page view shows
+        return;
+      }
+      if (window.location.pathname.startsWith("/account")) window.location.href = "/";
     });
   }
 </script>

@@ -7,7 +7,7 @@ import {
   type RequestService,
 } from "@everyrepo/requests";
 import { describe, expect, it } from "vitest";
-import { clientKey, createRequestApi, hashAddress, type RequestApiOptions } from "./request-api.ts";
+import { createRequestApi, hashAddress, type RequestApiOptions } from "./request-api.ts";
 
 const view = (repo: string, state: RepoView["state"] = "available"): RepoView => ({
   repo,
@@ -46,6 +46,10 @@ function fakeService(overrides: Partial<RequestService> = {}) {
     decline: () => view("x/y"),
     retry: () => view("x/y"),
     requests: () => [],
+    requestsFor: (userId) =>
+      userId === 1
+        ? [{ requestedAt: "2026-09-16T07:00:00.000Z", view: view("acme/app", "queued") }]
+        : [],
     reconcile: () => 0,
     ...overrides,
   };
@@ -62,6 +66,8 @@ function api(service: RequestService, extra: Partial<RequestApiOptions> = {}) {
     secret: "test-secret",
     now: () => NOW,
     log: (message) => logs.push(message),
+    userFor: async () => ({ id: 1, login: "ada" }),
+    allowedOrigins: ["http://127.0.0.1:4323"],
     ...extra,
   });
   return { handle, logs };
@@ -153,8 +159,7 @@ describe("request API", () => {
     expect(reply.status).toBe(200);
     expect(await reply.json()).toMatchObject({ counted: true, view: { state: "queued" } });
     expect(submitted[0]?.ref).toEqual({ owner: "medusajs", name: "medusa" });
-    const visitor = await hashAddress("test-secret", "9.9.9.9", NOW);
-    expect(submitted[0]?.requester).toEqual({ voter: visitor, owners: [`address:${visitor}`] });
+    expect(submitted[0]?.requester).toEqual({ userId: 1 });
     expect(JSON.stringify(submitted[0])).not.toContain("9.9.9.9");
 
     for (const [body, code] of [
@@ -169,7 +174,6 @@ describe("request API", () => {
   });
 
   it("keeps one person to one request and says which request they are waiting on", async () => {
-    const client = "3f1c6f1e-6a55-4d2b-9e0a-1f0b5a1d9c22";
     const { service, submitted } = fakeService({
       submit: async (ref, requester) => {
         submitted.push({ ref, requester });
@@ -177,20 +181,32 @@ describe("request API", () => {
       },
     });
     const { handle } = api(service);
-    const reply = (await handle(post({ repo: "acme/second", client }), "4.4.4.4"))!;
+    const reply = (await handle(post({ repo: "acme/second" }), "4.4.4.4"))!;
     expect(reply.status).toBe(409);
     expect(await reply.json()).toMatchObject({
       error: { code: "one-at-a-time" },
       active: { repo: "acme/first", state: "queued" },
     });
-    const key = await clientKey(client);
-    expect(key).toMatch(/^client:[0-9a-f]{32}$/);
-    expect(submitted[0]?.requester.owners).toEqual([
-      key,
-      `address:${await hashAddress("test-secret", "4.4.4.4", NOW)}`,
-    ]);
-    expect(await clientKey("short")).toBeUndefined();
-    expect(await clientKey({ id: client })).toBeUndefined();
+    expect(submitted[0]?.requester).toEqual({ userId: 1 });
+  });
+
+  it("takes requests only from signed-in accounts on the website", async () => {
+    const { handle } = api(fakeService().service, { userFor: async () => undefined });
+    const anonymous = (await handle(post({ repo: "acme/app" }), "1.1.1.1"))!;
+    expect(anonymous.status).toBe(401);
+    expect(((await anonymous.json()) as { error: { code: string } }).error.code).toBe("sign-in");
+    expect((await handle(get("/api/account/requests"), "1.1.1.1"))!.status).toBe(401);
+
+    const signedIn = api(fakeService().service).handle;
+    const forged = new Request("http://127.0.0.1:8787/api/requests", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "https://evil.example" },
+      body: JSON.stringify({ repo: "acme/app" }),
+    });
+    expect((await signedIn(forged, "1.1.1.1"))!.status).toBe(403);
+    const mine = (await signedIn(get("/api/account/requests"), "1.1.1.1"))!;
+    expect(mine.status).toBe(200);
+    expect(await mine.json()).toMatchObject([{ view: { repo: "acme/app", state: "queued" } }]);
   });
 
   it("changes a visitor's hash every day", async () => {

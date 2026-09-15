@@ -2,7 +2,7 @@ import { formatRepoRef, readRepoInput, repoInputMessage } from "@everyrepo/core/
 import type { RepoView } from "@everyrepo/core/requests";
 import { ApiProblem, pollRepo, requestRepo, type Poller } from "./api.ts";
 import { h, icon } from "./dom.ts";
-import { formatCount, languageName } from "./format.ts";
+import { formatCount, languageName, sourceFileCount } from "./format.ts";
 import { showOneRequestNotice } from "./notice.ts";
 import {
   estimateReasons,
@@ -15,6 +15,13 @@ import {
   sizeName,
   statusCopy,
 } from "./repo-status.ts";
+import {
+  getAccount,
+  isSignInProblem,
+  requestIntentPath,
+  signInPage,
+  type Account,
+} from "./session.ts";
 import { turnstileToken } from "./turnstile.ts";
 
 function heading(view: RepoView, asked: string): HTMLElement {
@@ -29,7 +36,7 @@ function heading(view: RepoView, asked: string): HTMLElement {
   else if (view.estimate?.languages[0]) fact(languageName(view.estimate.languages[0].language));
   if (view.estimate) {
     fact(sizeName(view.estimate.sizeTier));
-    fact(icon("files"), `${formatCount(view.estimate.sourceFiles)} source files`);
+    fact(icon("files"), sourceFileCount(view.estimate.sourceFiles));
   }
   if (github?.archived) fact("Archived");
   if (github?.parent) fact(`Fork of ${github.parent}`);
@@ -173,9 +180,13 @@ export function mountStatusPage(): void {
   let problem: ApiProblem | undefined;
   let requesting = false;
   let copied = false;
+  let account: Account | undefined;
   const received = params.get("new") === "1";
-  if (received) {
+  // Set when someone chose to request this repository and was sent to sign in first
+  let intent = params.get("intent") === "request";
+  if (received || intent) {
     params.delete("new");
+    params.delete("intent");
     history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
   }
 
@@ -195,6 +206,15 @@ export function mountStatusPage(): void {
     if (action.kind === "open" && view.href) {
       buttons.push(
         h("a", { class: "btn btn-solid", href: view.href }, action.label, icon("arrow")),
+      );
+    } else if (action.kind === "request" && account?.reachable && !account.user) {
+      buttons.push(
+        h(
+          "a",
+          { class: "btn btn-solid", href: signInPage(requestIntentPath(view.repo)) },
+          icon("github"),
+          "Sign in to request",
+        ),
       );
     } else if (action.kind === "request") {
       const button = h(
@@ -236,7 +256,9 @@ export function mountStatusPage(): void {
       problem = undefined;
       poller?.refresh();
     } catch (error) {
-      if (error instanceof ApiProblem && error.code === "one-at-a-time") {
+      if (isSignInProblem(error)) {
+        window.location.href = signInPage(requestIntentPath(view.repo));
+      } else if (error instanceof ApiProblem && error.code === "one-at-a-time") {
         showOneRequestNotice(error.active, error.message);
       } else {
         problem =
@@ -300,6 +322,13 @@ export function mountStatusPage(): void {
         progressBar(view),
         problem ? h("p", { class: "status-problem" }, problem.message) : null,
         actions(view),
+        primaryAction(view).kind === "request" && account?.reachable && !account.user
+          ? h(
+              "p",
+              { class: "status-signin" },
+              "Requests belong to a GitHub account, and each person has one request in progress at a time. Reading needs no account.",
+            )
+          : null,
         check,
       ),
       estimatePanel(view, now),
@@ -339,6 +368,17 @@ export function mountStatusPage(): void {
     root!.replaceChildren(...parts.filter((part): part is HTMLElement => part !== null));
   }
 
+  // Carries on with the request someone started before signing in, once both answers are in
+  function continueIntent() {
+    if (!intent || !latest || !account) return;
+    if (!account.user || primaryAction(latest).kind !== "request") {
+      intent = false;
+      return;
+    }
+    intent = false;
+    void request(latest);
+  }
+
   let poller: Poller | undefined;
   const start = () => {
     poller?.stop();
@@ -355,6 +395,7 @@ export function mountStatusPage(): void {
         }
         document.title = `${view.repo}: request status, EveryRepo`;
         render();
+        continueIntent();
       },
       (error) => {
         problem = error;
@@ -366,6 +407,11 @@ export function mountStatusPage(): void {
 
   render();
   start();
+  void getAccount().then((result) => {
+    account = result;
+    render();
+    continueIntent();
+  });
   // Times such as "5 minutes ago" stay true while the page is open
   setInterval(() => latest && render(), 30_000);
 }

@@ -1,4 +1,5 @@
 import type { RepoView, SizeTier } from "@everyrepo/core/requests";
+import { sourceFileCount } from "./format.ts";
 
 // How a state feels at a glance: the colour of its mark and whether it moves
 export type Tone = "ready" | "active" | "waiting" | "attention" | "blocked" | "open";
@@ -246,7 +247,7 @@ export function statusCopy(view: RepoView, now: number, options: CopyOptions = {
       };
     case "available": {
       const size = view.estimate
-        ? `${sizeName(view.estimate.sizeTier)} repository with ${view.estimate.sourceFiles.toLocaleString("en-US")} source files.`
+        ? `${sizeName(view.estimate.sizeTier)} repository with ${sourceFileCount(view.estimate.sourceFiles)}.`
         : "";
       return {
         tone: "open",

@@ -60,6 +60,15 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
 
+  packages/accounts:
+    dependencies:
+      '@everyrepo/core':
+        specifier: workspace:*
+        version: link:../core
+      '@everyrepo/db':
+        specifier: workspace:*
+        version: link:../db
+
   packages/ask:
     dependencies:
       '@everyrepo/db':
@@ -89,6 +98,9 @@ importers:
 
   packages/cli:
     dependencies:
+      '@everyrepo/accounts':
+        specifier: workspace:*
+        version: link:../accounts
       '@everyrepo/ask':
         specifier: workspace:*
         version: link:../ask

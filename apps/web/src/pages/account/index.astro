@@ -1,0 +1,473 @@
+---
+import Base from "../../layouts/Base.astro";
+---
+
+<Base
+  title="Your account: EveryRepo"
+  description="Your EveryRepo profile, the repositories you requested and their ready times."
+  guide={false}
+>
+  <section class="section account-page">
+    <div class="frame account-frame">
+      <p class="sr-only" aria-live="polite" data-account-announce></p>
+      <div class="account-root" data-account-root>
+        <div class="account-loading">
+          <span class="spinner" aria-hidden="true"></span>
+          Loading your account
+        </div>
+        <noscript><p class="account-empty">This page needs JavaScript to show your account.</p></noscript>
+      </div>
+    </div>
+  </section>
+</Base>
+
+<script>
+  import { mountAccountPage } from "../../lib/account-page.ts";
+
+  mountAccountPage();
+</script>
+
+<style is:global>
+  .account-page {
+    padding-block: 48px 96px;
+  }
+
+  .account-frame {
+    max-width: 900px;
+  }
+
+  .account-root {
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+  }
+
+  .account-page .icon {
+    flex-shrink: 0;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .account-page .icon-github {
+    fill: currentColor;
+    stroke: none;
+  }
+
+  .account-loading {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 40px 0;
+    font-size: var(--t-small);
+    color: var(--text-3);
+  }
+
+  .account-page .spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--line);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: account-spin 700ms linear infinite;
+  }
+
+  @keyframes account-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .account-gate {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+    max-width: 560px;
+  }
+
+  .account-gate h1,
+  .profile-name {
+    font-size: var(--t-title);
+    line-height: 1.1;
+    letter-spacing: -0.01em;
+    overflow-wrap: anywhere;
+  }
+
+  .account-gate p {
+    font-size: var(--t-small);
+    line-height: 1.65;
+    color: var(--text-2);
+  }
+
+  .profile {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    padding-bottom: 32px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .profile-picture {
+    flex-shrink: 0;
+    display: grid;
+    place-items: center;
+    width: 84px;
+    height: 84px;
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    background: var(--panel-2);
+    overflow: hidden;
+    font-family: var(--font-serif);
+    font-size: 36px;
+    color: var(--text);
+  }
+
+  .profile-picture img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .profile-main {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+    flex-grow: 1;
+  }
+
+  .profile-facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 18px;
+    font-size: var(--t-caption);
+    color: var(--text-3);
+  }
+
+  .profile-facts .fact {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    overflow-wrap: anywhere;
+  }
+
+  .profile-facts a.fact {
+    color: var(--text-2);
+  }
+
+  .profile-facts a.fact:hover {
+    color: var(--text);
+  }
+
+  .account-section {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    scroll-margin-top: calc(var(--header) + 24px);
+  }
+
+  .account-section-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+  }
+
+  .account-section-head h2 {
+    font-size: var(--t-h3);
+  }
+
+  .account-section-head .count {
+    margin-left: 10px;
+    font-family: var(--font-sans);
+    font-size: var(--t-caption);
+    color: var(--text-3);
+  }
+
+  .account-note {
+    font-size: var(--t-caption);
+    line-height: 1.6;
+    color: var(--text-3);
+  }
+
+  .account-empty {
+    font-size: var(--t-small);
+    color: var(--text-3);
+  }
+
+  .current-request {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 22px 24px;
+    border: 1px solid var(--accent-line);
+    border-radius: 14px;
+    background: var(--bg-raise);
+  }
+
+  .current-label {
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-3);
+  }
+
+  .current-title {
+    font-size: var(--t-h4);
+    overflow-wrap: anywhere;
+  }
+
+  .account-subhead {
+    margin-top: 8px;
+    font-family: var(--font-sans);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-3);
+  }
+
+  .current-title .owner,
+  .request-name .owner {
+    color: var(--text-3);
+  }
+
+  .current-state {
+    font-size: var(--t-small);
+    line-height: 1.6;
+    color: var(--text-2);
+  }
+
+  .current-eta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-top: 14px;
+    border-top: 1px solid var(--line-soft);
+  }
+
+  .current-eta strong {
+    font-family: var(--font-serif);
+    font-size: var(--t-h4);
+    font-weight: 400;
+    color: var(--text);
+  }
+
+  .current-eta span {
+    font-size: var(--t-caption);
+    color: var(--accent-2);
+  }
+
+  .current-track {
+    height: 5px;
+    border-radius: 3px;
+    background: var(--panel-2);
+    overflow: hidden;
+  }
+
+  .current-track span {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+    transition: width 600ms var(--ease-out);
+  }
+
+  .current-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .current-actions .icon {
+    stroke-width: 1.8;
+  }
+
+  .request-rows {
+    margin: 0;
+    padding: 0;
+    border-top: 1px solid var(--line-soft);
+    list-style: none;
+  }
+
+  .request-row {
+    display: grid;
+    grid-template-columns: 14px minmax(0, 1fr) auto 16px;
+    align-items: center;
+    gap: 16px;
+    padding: 15px 6px;
+    border-bottom: 1px solid var(--line-soft);
+    color: var(--text);
+    transition: background-color 140ms ease;
+  }
+
+  .request-row:hover {
+    background: var(--panel);
+  }
+
+  .request-mark {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--text-3);
+  }
+
+  .request-row.tone-ready .request-mark,
+  .request-row.tone-active .request-mark {
+    background: var(--accent);
+  }
+
+  .request-row.tone-waiting .request-mark,
+  .request-row.tone-open .request-mark {
+    background: var(--accent-2);
+  }
+
+  .request-row.tone-attention .request-mark,
+  .request-row.tone-blocked .request-mark {
+    background: transparent;
+    box-shadow: inset 0 0 0 2px var(--text-3);
+  }
+
+  .request-main {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+  }
+
+  .request-name {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .request-meta,
+  .request-side {
+    font-size: var(--t-caption);
+    color: var(--text-3);
+  }
+
+  .request-side {
+    text-align: right;
+  }
+
+  .request-row > .icon {
+    color: var(--text-3);
+    transition: transform 160ms var(--ease-out);
+  }
+
+  .request-row:hover > .icon {
+    transform: translateX(3px);
+    color: var(--text);
+  }
+
+  .danger {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px 24px;
+    padding: 22px 24px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+  }
+
+  .danger-text {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-width: 560px;
+  }
+
+  .danger-text h2 {
+    font-size: var(--t-h4);
+  }
+
+  .danger-text p {
+    font-size: var(--t-caption);
+    line-height: 1.6;
+    color: var(--text-2);
+  }
+
+  .btn-danger {
+    border-color: var(--accent-line);
+    color: var(--accent-2);
+    background: transparent;
+  }
+
+  .btn-danger:hover {
+    border-color: var(--accent-2);
+    background: var(--accent-soft);
+    color: var(--text);
+  }
+
+  .btn[disabled] {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  .confirm-shell {
+    align-items: stretch;
+    gap: 14px;
+    padding-top: 26px;
+    text-align: left;
+  }
+
+  .confirm-field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: var(--t-caption);
+    color: var(--text-2);
+  }
+
+  .confirm-field input {
+    height: 44px;
+    padding: 0 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--panel);
+    font: inherit;
+    font-size: var(--t-small);
+    color: var(--text);
+  }
+
+  .confirm-field input:focus {
+    border-color: var(--text-3);
+    outline: none;
+  }
+
+  .confirm-problem {
+    font-size: var(--t-caption);
+    color: var(--accent-2);
+  }
+
+  .confirm-shell .notice-actions {
+    justify-content: flex-end;
+  }
+
+  @media (max-width: 720px) {
+    .profile {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 16px;
+    }
+
+    .request-row {
+      grid-template-columns: 14px minmax(0, 1fr) 16px;
+    }
+
+    .request-side {
+      display: none;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .account-page .spinner {
+      animation: none;
+    }
+  }
+</style>

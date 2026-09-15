@@ -1,5 +1,6 @@
 import { readRepoInput, repoInputMessage, type ApiError, type RepoRef } from "@everyrepo/core";
 import { hitRateLimit, type AppDb } from "@everyrepo/db";
+import { isAllowedOrigin } from "./http.ts";
 import {
   OneRequestAtATimeError,
   RequestsUnavailableError,
@@ -26,6 +27,10 @@ export interface RequestApiOptions {
   limits?: Partial<RequestLimits>;
   now?: () => number;
   log?: (message: string) => void;
+  // The signed-in account behind a request, from its session cookie
+  userFor: (request: Request) => Promise<{ id: number; login: string } | undefined>;
+  // Sites allowed to send requests that act for a signed-in account
+  allowedOrigins?: readonly string[];
 }
 
 export const REQUEST_BODY_BYTES = 4_000;
@@ -41,7 +46,12 @@ const DAY_MS = 86_400_000;
 const TURNSTILE_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 
 export function isRequestRoute(path: string): boolean {
-  return path === "/api/requests" || path === "/api/queue" || path.startsWith("/api/repos/");
+  return (
+    path === "/api/requests" ||
+    path === "/api/queue" ||
+    path === "/api/account/requests" ||
+    path.startsWith("/api/repos/")
+  );
 }
 
 // Same visitor, same day, same hash; the key changes every UTC day so hashes cannot be linked across days
@@ -60,18 +70,6 @@ export async function hashAddress(secret: string, address: string, now: number):
     new TextEncoder().encode(`${day}:${address}`),
   );
   return Buffer.from(signature).subarray(0, 16).toString("hex");
-}
-
-// A browser keeps a random id so one person keeps one request across days; only its hash is stored
-const CLIENT_ID = /^[A-Za-z0-9-]{16,64}$/;
-
-export async function clientKey(client: unknown): Promise<string | undefined> {
-  if (typeof client !== "string" || !CLIENT_ID.test(client)) return undefined;
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(`everyrepo-client:${client}`),
-  );
-  return `client:${Buffer.from(digest).subarray(0, 16).toString("hex")}`;
 }
 
 async function etagFor(body: string): Promise<string> {
@@ -190,6 +188,13 @@ export function createRequestApi(options: RequestApiOptions) {
       }
     }
 
+    if (path === "/api/account/requests") {
+      if (request.method !== "GET") return error(405, "method", "Use GET for this address.");
+      const user = await options.userFor(request);
+      if (!user) return error(401, "sign-in", "Sign in to see your requests.");
+      return json(request, options.service.requestsFor(user.id));
+    }
+
     if (path === "/api/queue") {
       if (request.method !== "GET") return error(405, "method", "Use GET for this address.");
       const blocked = limited(`lookup:${visitor}`, limits.lookupsPerMinute, MINUTE_MS);
@@ -198,6 +203,15 @@ export function createRequestApi(options: RequestApiOptions) {
     }
 
     if (request.method !== "POST") return error(405, "method", "Use POST to request a repository.");
+    // Requests act for an account, so they are only taken from the website itself
+    const origin = request.headers.get("origin");
+    if (origin !== null && !isAllowedOrigin(origin, options.allowedOrigins ?? [])) {
+      return error(403, "origin", "Request repositories from the EveryRepo website.");
+    }
+    const user = await options.userFor(request);
+    if (!user) {
+      return error(401, "sign-in", "Sign in with GitHub to request a repository.");
+    }
     let body: Record<string, unknown>;
     try {
       const text = await request.text();
@@ -218,18 +232,17 @@ export function createRequestApi(options: RequestApiOptions) {
     const read = readRef(body["repo"]);
     if ("response" in read) return read.response;
     const blocked =
-      limited(`request-hour:${visitor}`, limits.requestsPerHour, HOUR_MS) ??
+      limited(`request-hour:user:${user.id}`, limits.requestsPerHour, HOUR_MS) ??
+      limited(`request-day:user:${user.id}`, limits.requestsPerDay, DAY_MS) ??
       limited(`request-day:${visitor}`, limits.requestsPerDay, DAY_MS);
     if (blocked) return blocked;
     if (!(await verifyTurnstile(body["token"], address))) {
       return error(403, "verification", "The check that you are a person did not pass. Try again.");
     }
-    const client = await clientKey(body["client"]);
-    const owners = client ? [client, `address:${visitor}`] : [`address:${visitor}`];
     try {
-      const result = await options.service.submit(read.ref, { voter: visitor, owners });
+      const result = await options.service.submit(read.ref, { userId: user.id });
       options.log?.(
-        `request ${result.view.repo}: ${result.view.state}${result.view.reason ? ` (${result.view.reason.code})` : ""}${result.counted ? "" : ", not counted"}`,
+        `request ${result.view.repo} by ${user.login}: ${result.view.state}${result.view.reason ? ` (${result.view.reason.code})` : ""}${result.counted ? "" : ", not counted"}`,
       );
       return json(request, result);
     } catch (caught) {

@@ -2,9 +2,10 @@ import { formatRepoRef, readRepoInput, repoInputMessage } from "@everyrepo/core/
 import type { RepoView } from "@everyrepo/core/requests";
 import { ApiProblem, lookupRepo, requestRepo } from "./api.ts";
 import { h, icon } from "./dom.ts";
-import { formatCount, languageName } from "./format.ts";
+import { formatCount, languageName, sourceFileCount } from "./format.ts";
 import { primaryAction, sizeName, statusCopy, statusHref } from "./repo-status.ts";
 import { showOneRequestNotice } from "./notice.ts";
+import { getAccount, isSignInProblem, requestIntentPath, signInPage } from "./session.ts";
 import { prepareTurnstile, turnstileToken } from "./turnstile.ts";
 
 export interface KnownWiki {
@@ -65,7 +66,7 @@ function facts(view: RepoView, wiki: KnownWiki | undefined): HTMLElement | null 
   if (view.github?.language) add(view.github.language);
   else if (view.estimate?.languages[0]) add(languageName(view.estimate.languages[0].language));
   if (view.estimate) {
-    add(icon("files"), `${formatCount(view.estimate.sourceFiles)} source files`);
+    add(icon("files"), sourceFileCount(view.estimate.sourceFiles));
     add(sizeName(view.estimate.sizeTier));
   }
   if (wiki) add(`${wiki.pages} pages`);
@@ -142,6 +143,8 @@ export function mountOpener(form: HTMLFormElement, known: readonly KnownWiki[]):
   let shown: KnownWiki[] = [];
   let active = -1;
   let busy = false;
+  // Unknown until the API answers; requests need a signed-in account
+  let signedIn: boolean | undefined;
 
   const typedRef = () => {
     const parsed = readRepoInput(input.value);
@@ -161,9 +164,11 @@ export function mountOpener(form: HTMLFormElement, known: readonly KnownWiki[]):
       !action || action.kind === "none"
         ? defaultLabel
         : action.kind === "request"
-          ? current!.view.reason
-            ? "Ask for approval"
-            : "Request the wiki"
+          ? signedIn === false
+            ? "Sign in to request"
+            : current!.view.reason
+              ? "Ask for approval"
+              : "Request the wiki"
           : action.kind === "follow"
             ? "See progress"
             : "Open the wiki";
@@ -388,6 +393,8 @@ export function mountOpener(form: HTMLFormElement, known: readonly KnownWiki[]):
         setNote(view.reason?.message ?? "");
         return;
       }
+      const account = await getAccount();
+      if (account.reachable && !account.user) return go(signInPage(requestIntentPath(view.repo)));
       label.textContent = "Requesting";
       const token = await turnstileToken(check);
       const result = await requestRepo(view.repo, token);
@@ -397,7 +404,9 @@ export function mountOpener(form: HTMLFormElement, known: readonly KnownWiki[]):
         error instanceof ApiProblem || error instanceof Error
           ? error.message
           : "Something went wrong. Try again.";
-      if (error instanceof ApiProblem && error.code === "one-at-a-time") {
+      if (isSignInProblem(error)) {
+        go(signInPage(requestIntentPath(current?.view.repo ?? input.value.trim())));
+      } else if (error instanceof ApiProblem && error.code === "one-at-a-time") {
         showOneRequestNotice(error.active, message);
       } else if (error instanceof ApiProblem) {
         renderPreview({ kind: "problem", message });
@@ -414,6 +423,17 @@ export function mountOpener(form: HTMLFormElement, known: readonly KnownWiki[]):
 
   clear.hidden = input.value === "";
   if (input.value) schedule(true);
+
+  const setSignedIn = (value: boolean) => {
+    signedIn = value;
+    updateLabel();
+  };
+  void getAccount().then((account) => {
+    if (account.reachable) setSignedIn(account.user !== null);
+  });
+  window.addEventListener("accountchange", (event) =>
+    setSignedIn((event as CustomEvent<unknown>).detail !== null),
+  );
 }
 
 export function mountOpeners(root: ParentNode = document): void {

@@ -126,7 +126,7 @@ export const repoRequests = sqliteTable(
       .references(() => repos.id, { onDelete: "cascade" }),
     decision: text("decision", { enum: REQUEST_DECISIONS }).notNull(),
     reason: text("reason", { enum: REQUEST_REASONS }),
-    // Distinct people who asked, each counted once a day
+    // Accounts that asked for this repository
     count: integer("count").notNull().default(0),
     estimate: text("estimate", { mode: "json" }).$type<SizeEstimate>(),
     firstAt: timestamp("first_at").notNull(),
@@ -136,22 +136,6 @@ export const repoRequests = sqliteTable(
     decidedBy: text("decided_by", { enum: ["rules", "owner", "existing"] }).notNull(),
   },
   (table) => [index("repo_request_decision").on(table.decision, table.decidedAt)],
-);
-
-// Salted hashes of requesters, kept for a day so repeated clicks count once and no address is stored
-export const requestVoters = sqliteTable(
-  "request_voter",
-  {
-    repoId: integer("repo_id")
-      .notNull()
-      .references(() => repos.id, { onDelete: "cascade" }),
-    voter: text("voter").notNull(),
-    createdAt: createdAt(),
-  },
-  (table) => [
-    primaryKey({ columns: [table.repoId, table.voter] }),
-    index("request_voter_created").on(table.createdAt),
-  ],
 );
 
 // Fixed-window counters keyed by a salted hash of the caller and the action
@@ -165,20 +149,56 @@ export const rateLimits = sqliteTable(
   (table) => [primaryKey({ columns: [table.key, table.windowStart] })],
 );
 
-// Who is waiting on a request, so each person has one request in progress at a time. Owners are a hash of
-// the browser's random id, or the day's salted address hash; neither identifies a person
-export const requestOwners = sqliteTable(
-  "request_owner",
+// People who signed in with GitHub; the GitHub id stays the same when someone renames their login
+export const users = sqliteTable("user", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  githubId: integer("github_id").notNull().unique(),
+  login: text("login").notNull(),
+  name: text("name"),
+  email: text("email"),
+  avatarUrl: text("avatar_url"),
+  createdAt: createdAt(),
+  lastSeenAt: timestamp("last_seen_at").notNull(),
+});
+
+// Signed-in browsers; only a hash of each session token is stored, so a copy of the database signs nobody in
+export const sessions = sqliteTable(
+  "session",
   {
+    tokenHash: text("token_hash").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: createdAt(),
+    expiresAt: timestamp("expires_at").notNull(),
+    lastSeenAt: timestamp("last_seen_at").notNull(),
+  },
+  (table) => [index("session_user").on(table.userId)],
+);
+
+// Sign-ins in progress; GitHub's answer is accepted only by the browser that started the sign-in
+export const authStates = sqliteTable("auth_state", {
+  stateHash: text("state_hash").primaryKey(),
+  verifier: text("verifier").notNull(),
+  returnTo: text("return_to").notNull(),
+  createdAt: createdAt(),
+});
+
+// Who asked for which repository and when, which is each account's request history
+export const userRequests = sqliteTable(
+  "user_request",
+  {
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
     repoId: integer("repo_id")
       .notNull()
       .references(() => repos.id, { onDelete: "cascade" }),
-    owner: text("owner").notNull(),
-    createdAt: createdAt(),
+    requestedAt: timestamp("requested_at").notNull(),
   },
   (table) => [
-    primaryKey({ columns: [table.repoId, table.owner] }),
-    index("request_owner_owner").on(table.owner),
+    primaryKey({ columns: [table.userId, table.repoId] }),
+    index("user_request_repo").on(table.repoId),
   ],
 );
 

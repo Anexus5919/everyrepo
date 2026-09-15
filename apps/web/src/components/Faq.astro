@@ -16,6 +16,11 @@ const questions = [
     answer: `${ready} wikis are ready now and ${waiting} more are being written. Paste any public GitHub repository to request its wiki: small ones are approved automatically, large ones by hand, and a status page follows each build from start to finish.`,
   },
   {
+    question: "Do I need an account?",
+    answer:
+      "Not to read. Wikis, the queue and Ask are open to everyone. Requesting a repository needs a GitHub sign-in, which shares only your public profile and email address, so every request has a person behind it and each person has one request in progress at a time.",
+  },
+  {
     question: "How do I know a sentence is right?",
     answer:
       "Each paragraph cites the lines it was written from, pinned to a commit. Before a page is published, checks remove any paragraph without a source, any name the cited code does not contain and any code that was not copied exactly.",
@@ -33,7 +38,7 @@ const questions = [
   {
     question: "Does it change anything on GitHub?",
     answer:
-      "No. EveryRepo only reads public code, issues and pull requests. It never comments, opens pull requests or needs access to your account.",
+      "No. EveryRepo only reads public code, issues and pull requests. It never comments, opens pull requests or asks for access to your repositories, even when you sign in.",
   },
   {
     question: "Which languages does it understand?",

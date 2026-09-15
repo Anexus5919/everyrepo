@@ -21,8 +21,10 @@ interface Props {
   // Full screen sections that scrolling settles on, used by the home page
   snap?: boolean;
   wide?: boolean;
+  // Pages reached in the middle of a task, such as signing in, do not open the first visit guide
+  guide?: boolean;
 }
-const { title, description, snap = false, wide = false } = Astro.props;
+const { title, description, snap = false, wide = false, guide = true } = Astro.props;
 const paletteIds = PALETTES.map((palette) => palette.id);
 // The repository box suggests these and opens written wikis without asking the API
 const knownWikis = loadRepos().map((repo) => ({
@@ -71,7 +73,7 @@ const knownWikis = loadRepos().map((repo) => ({
       <slot />
     </main>
     <Footer />
-    <Guide />
+    <Guide auto={guide} />
     <RepoDialog />
     <script is:inline type="application/json" id="known-wikis" set:html={JSON.stringify(knownWikis)} />
   </body>

@@ -1,6 +1,7 @@
 import {
   formatRepoRef,
   repoKey,
+  type AccountRequest,
   type BuilderStatus,
   type QueueView,
   type RepoEta,
@@ -20,15 +21,12 @@ import {
   inArray,
   indexJobs,
   isNotNull,
-  like,
-  lt,
   orgs,
   repoRequests,
   repos,
-  requestOwners,
-  requestVoters,
   sql,
   usageBuckets,
+  userRequests,
   type AppDb,
   type RepoRow,
   type UsageBucket,
@@ -87,11 +85,9 @@ export class OneRequestAtATimeError extends Error {
   }
 }
 
+// The signed-in account asking; every request belongs to one
 export interface Requester {
-  // Today's salted hash of the address, which counts each person asking once a day
-  voter: string;
-  // Keys that stay with one person across requests: a hash of the browser's random id and today's address hash
-  owners: readonly string[];
+  userId: number;
 }
 
 export interface RequestServiceOptions {
@@ -121,6 +117,8 @@ export interface RequestService {
   decline(ref: RepoRef): RepoView;
   retry(ref: RepoRef): RepoView;
   requests(): RepoView[];
+  // Everything one account asked for, newest first
+  requestsFor(userId: number): AccountRequest[];
   // Starts the next step for approved requests whose build has no job, such as after a command line run
   reconcile(): number;
 }
@@ -398,15 +396,12 @@ export function createRequestService(options: RequestServiceOptions): RequestSer
       .get();
   }
 
-  // Each requester counts once while their salted hash is kept, which is one day
-  function countRequester(repoId: number, voter: string): boolean {
+  // An account counts once per repository, and the time it first asked is kept as its request history
+  function recordRequester(repoId: number, userId: number): boolean {
     const at = now();
-    db.delete(requestVoters)
-      .where(lt(requestVoters.createdAt, new Date(at.getTime() - DAY_MS)))
-      .run();
     const inserted = db
-      .insert(requestVoters)
-      .values({ repoId, voter, createdAt: at })
+      .insert(userRequests)
+      .values({ userId, repoId, requestedAt: at })
       .onConflictDoNothing()
       .run();
     if (inserted.changes === 0) return false;
@@ -417,38 +412,22 @@ export function createRequestService(options: RequestServiceOptions): RequestSer
     return true;
   }
 
-  function recordOwners(repoId: number, owners: readonly string[]): void {
-    const at = now();
-    for (const owner of owners) {
-      db.insert(requestOwners).values({ repoId, owner, createdAt: at }).onConflictDoNothing().run();
-    }
+  function requestedBy(userId: number): Array<{ repo: RepoRow; requestedAt: Date }> {
+    return db
+      .select({ repo: repos, requestedAt: userRequests.requestedAt })
+      .from(userRequests)
+      .innerJoin(repos, eq(repos.id, userRequests.repoId))
+      .where(eq(userRequests.userId, userId))
+      .orderBy(desc(userRequests.requestedAt))
+      .all();
   }
 
-  // The request this person is still waiting on, if any; finished ones free the person to ask again
-  function activeRequest(owners: readonly string[]): { repo: RepoRow; view: RepoView } | undefined {
-    if (owners.length === 0) return undefined;
-    const at = now();
-    // Address hashes change daily, so they are forgotten after a day like the voters
-    db.delete(requestOwners)
-      .where(
-        and(
-          like(requestOwners.owner, "address:%"),
-          lt(requestOwners.createdAt, new Date(at.getTime() - DAY_MS)),
-        ),
-      )
-      .run();
-    const rows = db
-      .select({ repo: repos, owner: requestOwners })
-      .from(requestOwners)
-      .innerJoin(repos, eq(repos.id, requestOwners.repoId))
-      .where(inArray(requestOwners.owner, [...owners]))
-      .orderBy(desc(requestOwners.createdAt))
-      .all();
+  // The request this account is still waiting on, if any; ready, failed and declined ones free it to ask again
+  function activeRequest(userId: number): { repo: RepoRow; view: RepoView } | undefined {
     const snap = takeSnapshot();
-    for (const { repo } of rows) {
+    for (const { repo } of requestedBy(userId)) {
       const view = viewOf(repo, { snap });
       if (ACTIVE_STATES.has(view.state)) return { repo, view };
-      db.delete(requestOwners).where(eq(requestOwners.repoId, repo.id)).run();
     }
     return undefined;
   }
@@ -483,17 +462,15 @@ export function createRequestService(options: RequestServiceOptions): RequestSer
     if (view.state === "failed" && now().getTime() - failedAt >= FAILED_RETRY_MS) {
       enqueueBuild(db, repo, buildPriority(record.request?.estimate?.sizeTier));
     }
-    const counted = countRequester(repo.id, requester.voter);
-    const joined = viewOf(repo);
-    if (ACTIVE_STATES.has(joined.state)) recordOwners(repo.id, requester.owners);
-    return { view: joined, counted };
+    const counted = recordRequester(repo.id, requester.userId);
+    return { view: viewOf(repo), counted };
   }
 
   const settled = (view: RepoView) => view.state !== "available";
 
   // A second request is refused unless it names the repository the person already waits on, even by an old name
   async function guardOneAtATime(ref: RepoRef, requester: Requester): Promise<void> {
-    const active = activeRequest(requester.owners);
+    const active = activeRequest(requester.userId);
     if (!active) return;
     if (repoKey(ref) === active.repo.key) return;
     if (!findRepo(db, ref) && active.repo.githubId !== null) {
@@ -571,8 +548,7 @@ export function createRequestService(options: RequestServiceOptions): RequestSer
           if (decision.decision === "approved") {
             enqueueBuild(db, repo, buildPriority(inspection.estimate.sizeTier));
           }
-          recordOwners(repo.id, requester.owners);
-          return countRequester(repo.id, requester.voter);
+          return recordRequester(repo.id, requester.userId);
         },
         { behavior: "immediate" },
       );
@@ -698,6 +674,14 @@ export function createRequestService(options: RequestServiceOptions): RequestSer
       }
       enqueueBuild(db, repo, buildPriority(record.request.estimate?.sizeTier));
       return viewOf(repo);
+    },
+
+    requestsFor(userId) {
+      const snap = takeSnapshot();
+      return requestedBy(userId).map(({ repo, requestedAt }) => ({
+        requestedAt: requestedAt.toISOString(),
+        view: viewOf(repo, { snap }),
+      }));
     },
 
     requests() {

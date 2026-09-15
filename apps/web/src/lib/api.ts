@@ -22,27 +22,10 @@ export class ApiProblem extends Error {
   }
 }
 
-const REQUESTER_KEY = "everyrepo.requester";
-let memoryId: string | undefined;
-
-// A random id kept in this browser, so the one request a person has in progress stays with them across days
-export function requesterId(): string {
-  try {
-    const saved = localStorage.getItem(REQUESTER_KEY);
-    if (saved && /^[A-Za-z0-9-]{16,64}$/.test(saved)) return saved;
-    const created = crypto.randomUUID();
-    localStorage.setItem(REQUESTER_KEY, created);
-    return created;
-  } catch {
-    memoryId ??= crypto.randomUUID();
-    return memoryId;
-  }
-}
-
 const OFFLINE_MESSAGE =
   "The request service is not reachable right now. Wikis that are already written still open.";
 
-async function call<T>(
+export async function call<T>(
   path: string,
   init: RequestInit = {},
 ): Promise<{ status: number; body: T | null; etag: string | null }> {
@@ -51,7 +34,8 @@ async function call<T>(
     // A caller's own cancel and a time limit both end the call
     const timeout = AbortSignal.timeout(20_000);
     const signal = init.signal ? AbortSignal.any([init.signal, timeout]) : timeout;
-    response = await fetch(`${API_URL}${path}`, { ...init, signal });
+    // The session cookie goes along, so the API knows who is signed in
+    response = await fetch(`${API_URL}${path}`, { ...init, signal, credentials: "include" });
   } catch (error) {
     if (init.signal?.aborted) throw error;
     throw new ApiProblem(OFFLINE_MESSAGE, 0, "offline");
@@ -93,7 +77,7 @@ export async function requestRepo(repo: string, token?: string): Promise<SubmitR
   const { body } = await call<SubmitResult>("/api/requests", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ repo, client: requesterId(), ...(token ? { token } : {}) }),
+    body: JSON.stringify({ repo, ...(token ? { token } : {}) }),
   });
   return body!;
 }

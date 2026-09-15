@@ -24,6 +24,10 @@ export function formatCount(value: number): string {
   return value.toLocaleString("en-US");
 }
 
+export function sourceFileCount(value: number): string {
+  return `${formatCount(value)} source ${value === 1 ? "file" : "files"}`;
+}
+
 export function shortSha(sha: string | null): string {
   return sha ? sha.slice(0, 7) : "";
 }

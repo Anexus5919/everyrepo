@@ -1,7 +1,7 @@
 import type { QueueView, RepoView } from "@everyrepo/core/requests";
 import { pollQueue, type ApiProblem } from "./api.ts";
 import { h, icon } from "./dom.ts";
-import { formatCount } from "./format.ts";
+import { sourceFileCount } from "./format.ts";
 import { relativeTime, shortReadyTime, sizeName, statusCopy, statusHref } from "./repo-status.ts";
 
 const REVIEW_REASONS: Record<string, string> = {
@@ -18,10 +18,7 @@ function name(repo: string): HTMLElement {
 function meta(view: RepoView): HTMLElement {
   const parts: string[] = [];
   if (view.estimate) {
-    parts.push(
-      sizeName(view.estimate.sizeTier),
-      `${formatCount(view.estimate.sourceFiles)} source files`,
-    );
+    parts.push(sizeName(view.estimate.sizeTier), sourceFileCount(view.estimate.sourceFiles));
   }
   if (view.requests > 0)
     parts.push(`${view.requests} ${view.requests === 1 ? "request" : "requests"}`);

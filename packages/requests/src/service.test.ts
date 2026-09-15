@@ -7,6 +7,7 @@ import {
   openAppDb,
   repoRequests,
   repos,
+  users,
   type AppDb,
 } from "@everyrepo/db";
 import {
@@ -110,7 +111,20 @@ function service(
 
 const ref = parseRepoRef;
 // One person per name, identified the way the API identifies a browser
-const person = (name: string) => ({ voter: name, owners: [`client:${name}`] });
+// Accounts by name, created the first time a test asks for one
+let people = new Map<string, number>();
+const person = (name: string) => {
+  let userId = people.get(name);
+  if (userId === undefined) {
+    userId = db
+      .insert(users)
+      .values({ githubId: 1_000 + people.size, login: name, createdAt: clock, lastSeenAt: clock })
+      .returning()
+      .get().id;
+    people.set(name, userId);
+  }
+  return { userId };
+};
 const jobsFor = (name: string) => {
   const row = db.select().from(repos).where(eq(repos.fullName, name)).get();
   return row ? db.select().from(indexJobs).where(eq(indexJobs.repoId, row.id)).all() : [];
@@ -118,6 +132,7 @@ const jobsFor = (name: string) => {
 
 beforeEach(() => {
   db = openAppDb(":memory:");
+  people = new Map();
   at("2026-09-16T08:00:00Z");
 });
 
@@ -203,10 +218,10 @@ describe("requesting a repository", () => {
     expect(third).toMatchObject({ counted: true, view: { requests: 2 } });
     expect(jobsFor("Acme/App")).toHaveLength(1);
 
-    // The same person counts again on a later day, once their hash has been forgotten
+    // An account counts once for good, however often it asks
     at("2026-09-17T09:00:00Z");
     expect((await requests.submit(ref("acme/app"), person("visitor-1:acme/app"))).counted).toBe(
-      true,
+      false,
     );
   });
 
@@ -410,55 +425,52 @@ describe("following a build", () => {
 });
 
 describe("one request at a time", () => {
-  it("refuses a second repository until the first one is finished", async () => {
+  it("refuses an account a second repository until its first one is finished", async () => {
     const { requests } = service({
       "acme/one": { files: sourceFiles(5_000) },
       "acme/two": { files: sourceFiles(5_000) },
       "acme/three": { files: sourceFiles(5_000) },
     });
-    const visitor = { voter: "v", owners: ["client:browser-1", "address:today-1"] };
-    await requests.submit(ref("acme/one"), visitor);
+    const ada = person("ada");
+    await requests.submit(ref("acme/one"), ada);
 
-    const refused = await requests
-      .submit(ref("acme/two"), visitor)
-      .catch((error: unknown) => error);
+    const refused = await requests.submit(ref("acme/two"), ada).catch((error: unknown) => error);
     expect(refused).toBeInstanceOf(OneRequestAtATimeError);
     expect((refused as OneRequestAtATimeError).active).toMatchObject({
       repo: "acme/one",
       state: "queued",
     });
-    // The same browser from another address, or another browser from the same address, is the same person
-    await expect(
-      requests.submit(ref("acme/two"), { voter: "w", owners: ["client:browser-1"] }),
-    ).rejects.toBeInstanceOf(OneRequestAtATimeError);
-    await expect(
-      requests.submit(ref("acme/two"), { voter: "w", owners: ["address:today-1"] }),
-    ).rejects.toBeInstanceOf(OneRequestAtATimeError);
     expect(jobsFor("acme/two")).toEqual([]);
 
-    // Asking again for the repository already requested is fine
-    expect((await requests.submit(ref("acme/one"), visitor)).view.repo).toBe("acme/one");
+    // Another account is not held back by it, and asking again for the same repository is fine
+    expect((await requests.submit(ref("acme/two"), person("grace"))).view.state).toBe("queued");
+    expect((await requests.submit(ref("acme/one"), ada)).view.repo).toBe("acme/one");
 
     const one = db.select().from(repos).where(eq(repos.fullName, "acme/one")).get()!;
     markPublished(db, one.id, "abc", clock);
-    expect((await requests.submit(ref("acme/two"), visitor)).view.state).toBe("queued");
-
-    // A declined request frees the person too
-    requests.decline(ref("acme/two"));
-    expect((await requests.submit(ref("acme/three"), visitor)).view.state).toBe("queued");
-  });
-
-  it("forgets address hashes after a day", async () => {
-    const { requests } = service({
-      "acme/one": { files: sourceFiles(5_000) },
-      "acme/two": { files: sourceFiles(5_000) },
+    at("2026-09-16T08:10:00Z");
+    expect((await requests.submit(ref("acme/two"), ada)).view).toMatchObject({
+      state: "queued",
+      requests: 2,
     });
-    await requests.submit(ref("acme/one"), { voter: "v", owners: ["address:day-1"] });
-    at("2026-09-17T09:00:00Z");
+
+    // A declined request frees the account too
+    requests.decline(ref("acme/two"));
+    at("2026-09-16T08:20:00Z");
+    expect((await requests.submit(ref("acme/three"), ada)).view.state).toBe("queued");
+
+    // The account keeps its whole request history, newest first
+    at("2026-09-16T09:00:00Z");
     expect(
-      (await requests.submit(ref("acme/two"), { voter: "v2", owners: ["address:day-1"] })).view
-        .state,
-    ).toBe("queued");
+      requests
+        .requestsFor(ada.userId)
+        .map(({ view, requestedAt }) => [view.repo, view.state, requestedAt]),
+    ).toEqual([
+      ["acme/three", "queued", "2026-09-16T08:20:00.000Z"],
+      ["acme/two", "rejected", expect.any(String)],
+      ["acme/one", "ready", expect.any(String)],
+    ]);
+    expect(requests.requestsFor(person("nobody").userId)).toEqual([]);
   });
 });
 

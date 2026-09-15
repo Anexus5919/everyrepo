@@ -1,0 +1,374 @@
+---
+import { API_URL } from "../lib/api.ts";
+
+interface Props {
+  mode: "signin" | "signup";
+}
+const { mode } = Astro.props;
+const signup = mode === "signup";
+
+const shares = [
+  {
+    title: "Your public profile",
+    text: "Username, name and picture, so every request has a person behind it.",
+  },
+  {
+    title: "Your email address",
+    text: "The primary verified one, used only about requests you made.",
+  },
+  {
+    title: "Nothing else",
+    text: "No access to repositories, organizations or private code. EveryRepo never posts, comments or changes anything on GitHub.",
+  },
+];
+
+const gives = [
+  "Request the wiki for any public repository",
+  "Follow your requests and their ready times in one place",
+  "Delete the account and its history whenever you like",
+];
+---
+
+<section class="section auth-page">
+<div class="frame auth-frame">
+<div class="auth" data-auth data-mode={mode}>
+  <section class="auth-main" aria-labelledby="auth-title">
+    <span class="eyebrow">{signup ? "Create an account" : "Sign in"}</span>
+    <h1 id="auth-title" class="auth-title">
+      {signup ? "Create your EveryRepo account" : "Sign in to EveryRepo"}
+    </h1>
+    <p class="auth-context" data-auth-context hidden></p>
+    <p class="auth-lead">
+      {
+        signup
+          ? "Your GitHub account is all it takes. There is no password to set: the account is made the first time you continue."
+          : "Use your GitHub account. Wikis, the queue and Ask stay open to everyone, and signing in lets you request repositories."
+      }
+    </p>
+
+    <p class="auth-problem" role="alert" data-auth-problem hidden></p>
+
+    <div class="auth-signed" data-auth-signed hidden>
+      <span class="auth-signed-text" data-auth-signed-text></span>
+      <div class="auth-signed-actions">
+        <a class="btn btn-solid" href="/account/" data-auth-continue>Continue</a>
+        <a class="btn btn-line" href="/account/">Your account</a>
+      </div>
+    </div>
+
+    <a
+      class="btn btn-solid btn-lg auth-github"
+      href={`${API_URL}/api/auth/github?return=${encodeURIComponent("/account/")}`}
+      data-auth-github
+    >
+      <svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true"
+        ><path
+          d="M8 1.5a6.5 6.5 0 0 0-2.06 12.67c.33.06.44-.14.44-.31v-1.1c-1.8.39-2.18-.87-2.18-.87-.3-.75-.72-.95-.72-.95-.59-.4.04-.39.04-.39.65.05 1 .67 1 .67.58 1 1.52.71 1.89.54.06-.42.23-.71.41-.87-1.44-.16-2.95-.72-2.95-3.2 0-.71.25-1.29.67-1.74-.07-.17-.29-.83.06-1.72 0 0 .55-.18 1.79.66a6.2 6.2 0 0 1 3.26 0c1.24-.84 1.79-.66 1.79-.66.35.89.13 1.55.06 1.72.42.45.67 1.03.67 1.74 0 2.49-1.51 3.04-2.96 3.2.23.2.44.6.44 1.21v1.79c0 .17.12.38.45.31A6.5 6.5 0 0 0 8 1.5z"
+        ></path></svg
+      >
+      <span data-auth-github-label>{signup ? "Sign up with GitHub" : "Continue with GitHub"}</span>
+    </a>
+
+    <p class="auth-fine">
+      Continuing keeps your GitHub username and email address with the requests you make. You can delete
+      the account from your account page at any time.
+    </p>
+
+    <p class="auth-switch">
+      {
+        signup ? (
+          <>
+            Already have an account?{" "}
+            <a href="/signin/" data-auth-switch>
+              Sign in
+            </a>
+          </>
+        ) : (
+          <>
+            New to EveryRepo?{" "}
+            <a href="/signup/" data-auth-switch>
+              Create an account
+            </a>
+          </>
+        )
+      }
+    </p>
+  </section>
+
+  <aside class="auth-side" aria-label="What signing in shares">
+    <div class="auth-block">
+      <h2 class="auth-side-title">What GitHub shares</h2>
+      <ul class="auth-shares">
+        {
+          shares.map((item) => (
+            <li>
+              <span class="auth-share-title">{item.title}</span>
+              <span class="auth-share-text">{item.text}</span>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+    <div class="auth-block">
+      <h2 class="auth-side-title">What an account is for</h2>
+      <ul class="auth-gives">
+        {
+          gives.map((item) => (
+            <li>
+              <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M3.2 8.4l3 3 6.6-6.8" />
+              </svg>
+              {item}
+            </li>
+          ))
+        }
+      </ul>
+      <p class="auth-rule">
+        Each person has one request in progress at a time, which keeps the line fair while builds run on
+        free model allowances.
+      </p>
+    </div>
+  </aside>
+</div>
+</div>
+</section>
+
+<script>
+  import { mountAuthPage } from "../lib/auth-page.ts";
+
+  mountAuthPage();
+</script>
+
+<style>
+  .auth-page {
+    padding-block: 56px 96px;
+  }
+
+  .auth-frame {
+    max-width: 980px;
+  }
+
+  .auth {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--bg-raise);
+    overflow: hidden;
+  }
+
+  .auth-main {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 44px 44px 36px;
+  }
+
+  .auth-title {
+    margin-top: 4px;
+    font-size: var(--t-title);
+    line-height: 1.1;
+    letter-spacing: -0.01em;
+  }
+
+  .auth-context {
+    font-size: var(--t-small);
+    line-height: 1.55;
+    color: var(--accent-2);
+  }
+
+  .auth-context[hidden],
+  .auth-problem[hidden],
+  .auth-signed[hidden] {
+    display: none;
+  }
+
+  .auth-lead {
+    max-width: 460px;
+    font-size: var(--t-small);
+    line-height: 1.65;
+    color: var(--text-2);
+  }
+
+  .auth-problem {
+    width: 100%;
+    padding: 12px 14px;
+    border: 1px solid var(--accent-line);
+    border-radius: var(--radius);
+    background: var(--accent-soft);
+    font-size: var(--t-caption);
+    line-height: 1.55;
+    color: var(--text);
+  }
+
+  .auth-signed {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    padding: 16px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--panel);
+    font-size: var(--t-small);
+    color: var(--text);
+  }
+
+  .auth-signed-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .auth-github {
+    gap: 12px;
+    width: 100%;
+    margin-top: 6px;
+  }
+
+  .auth-github svg {
+    fill: currentColor;
+  }
+
+  .auth-github[aria-disabled="true"] {
+    pointer-events: none;
+    opacity: 0.5;
+  }
+
+  .auth-fine {
+    font-size: var(--t-caption);
+    line-height: 1.6;
+    color: var(--text-3);
+  }
+
+  .auth-switch {
+    margin-top: auto;
+    padding-top: 18px;
+    width: 100%;
+    border-top: 1px solid var(--line-soft);
+    font-size: var(--t-caption);
+    color: var(--text-3);
+  }
+
+  .auth-switch a {
+    color: var(--text);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .auth-switch a:hover {
+    border-color: var(--text-3);
+  }
+
+  .auth-side {
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+    padding: 44px 36px 36px;
+    border-left: 1px solid var(--line-soft);
+    background: var(--panel);
+  }
+
+  .auth-block {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .auth-side-title {
+    font-family: var(--font-sans);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-3);
+  }
+
+  .auth-shares,
+  .auth-gives {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .auth-shares {
+    gap: 14px;
+  }
+
+  .auth-shares li {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding-left: 14px;
+    border-left: 2px solid var(--accent-line);
+  }
+
+  .auth-share-title {
+    font-size: var(--t-small);
+    font-weight: 500;
+    color: var(--text);
+  }
+
+  .auth-share-text {
+    font-size: var(--t-caption);
+    line-height: 1.55;
+    color: var(--text-2);
+  }
+
+  .auth-gives {
+    gap: 10px;
+  }
+
+  .auth-gives li {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    font-size: var(--t-small);
+    line-height: 1.5;
+    color: var(--text);
+  }
+
+  .auth-gives svg {
+    flex-shrink: 0;
+    margin-top: 4px;
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .auth-rule {
+    font-size: var(--t-caption);
+    line-height: 1.6;
+    color: var(--text-3);
+  }
+
+  @media (max-width: 860px) {
+    .auth {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .auth-side {
+      border-left: 0;
+      border-top: 1px solid var(--line-soft);
+    }
+  }
+
+  @media (max-width: 560px) {
+    .auth-page {
+      padding-block: 24px 64px;
+    }
+
+    .auth-main,
+    .auth-side {
+      padding: 28px 20px;
+    }
+
+    .auth-github {
+      white-space: normal;
+    }
+  }
+</style>

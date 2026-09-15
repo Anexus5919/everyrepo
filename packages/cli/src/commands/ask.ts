@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { pruneSessions } from "@everyrepo/accounts";
 import { pruneRateLimits } from "@everyrepo/db";
 import { Command } from "commander";
 import { createAskHandler } from "../ask-server.ts";
@@ -13,6 +14,7 @@ import {
   sendWebResponse,
   toWebRequest,
 } from "../http.ts";
+import { createAuthApi, isAuthRoute } from "../auth-api.ts";
 import { createRequestApi, isRequestRoute, REQUEST_BODY_BYTES } from "../request-api.ts";
 
 export function askCommand(): Command {
@@ -79,7 +81,16 @@ export function serveCommand(): Command {
     .action(async (options: { port: string }) => {
       const context = await openContext();
       const log = (message: string) => console.log(`${timestamp()} ${message}`);
-      const allowedOrigins = allowedOriginsFromEnv();
+      const port = Number(options.port);
+      const siteUrl = (process.env["EVERYREPO_SITE_URL"] ?? "http://127.0.0.1:4323").replace(
+        /\/+$/,
+        "",
+      );
+      const apiUrl = (process.env["EVERYREPO_API_URL"] ?? `http://127.0.0.1:${port}`).replace(
+        /\/+$/,
+        "",
+      );
+      const allowedOrigins = [...allowedOriginsFromEnv(), new URL(siteUrl).origin];
 
       // Ask needs embeddings and models; requests keep working without them
       let session: AskSession | undefined;
@@ -97,12 +108,27 @@ export function serveCommand(): Command {
           "EVERYREPO_REQUEST_SECRET is not set, so requesters are told apart only until a restart",
         );
       }
+      const clientId = process.env["GITHUB_CLIENT_ID"];
+      const clientSecret = process.env["GITHUB_CLIENT_SECRET"];
+      if (!clientId || !clientSecret) {
+        log("GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET are not set, so signing in is off");
+      }
+      const auth = createAuthApi({
+        db: context.appDb,
+        github: clientId && clientSecret ? { clientId, clientSecret } : undefined,
+        siteUrl,
+        apiUrl,
+        allowedOrigins,
+        log,
+      });
       const turnstileSecret = process.env["TURNSTILE_SECRET_KEY"];
       const requests = createRequestApi({
         service: openRequests(context),
         db: context.appDb,
         secret,
         turnstile: turnstileSecret ? { secret: turnstileSecret } : undefined,
+        userFor: (request) => auth.userFor(request),
+        allowedOrigins,
         log,
       });
 
@@ -127,7 +153,9 @@ export function serveCommand(): Command {
           }
           throw error;
         }
-        const reply = await requests(web, clientAddress(request));
+        const reply = isAuthRoute(new URL(web.url).pathname)
+          ? await auth.handle(web)
+          : await requests(web, clientAddress(request));
         if (reply) await sendWebResponse(response, reply);
         else json(response, 404, "not-found", "Not found");
       }
@@ -140,20 +168,23 @@ export function serveCommand(): Command {
 
       const server = createServer((request, response) => {
         const path = new URL(request.url ?? "/", "http://127.0.0.1").pathname;
-        const work = isRequestRoute(path)
-          ? handleRequests(request, response)
-          : ask
-            ? ask(request, response)
-            : handleAskOff(request, response);
+        const work =
+          isRequestRoute(path) || isAuthRoute(path)
+            ? handleRequests(request, response)
+            : ask
+              ? ask(request, response)
+              : handleAskOff(request, response);
         work.catch((error: unknown) => {
           console.error(error);
           if (!response.headersSent) response.writeHead(500);
           response.end();
         });
       });
-      const prune = setInterval(() => pruneRateLimits(context.appDb, 2 * DAY_MS), 3_600_000);
+      const prune = setInterval(() => {
+        pruneRateLimits(context.appDb, 2 * DAY_MS);
+        pruneSessions(context.appDb);
+      }, 3_600_000);
       prune.unref();
-      const port = Number(options.port);
       server.listen(port, "127.0.0.1", () => {
         log(`API listening on http://127.0.0.1:${port}`);
       });

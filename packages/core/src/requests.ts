@@ -163,3 +163,18 @@ export function buildPercent(stage: string, done: number | null, total: number |
   const within = done !== null && total ? Math.min(1, Math.max(0, done / total)) : 0;
   return Math.round(((before + BUILD_STAGES[index]!.weight * within) / all) * 100);
 }
+
+// One repository an account asked for, and when it asked
+export interface AccountRequest {
+  requestedAt: string;
+  view: RepoView;
+}
+
+// What the website knows about the signed-in person
+export interface AccountUser {
+  login: string;
+  name: string | null;
+  email: string | null;
+  avatarUrl: string | null;
+  memberSince: string;
+}

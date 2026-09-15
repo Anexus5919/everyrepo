@@ -9,7 +9,12 @@ import {
   requestsLastDay,
   type AppDb,
 } from "@everyrepo/db";
-import { openConfiguredEmbedder, type ConfiguredEmbedder } from "@everyrepo/embed";
+import {
+  createWorkersAiReranker,
+  openConfiguredEmbedder,
+  type ConfiguredEmbedder,
+  type Reranker,
+} from "@everyrepo/embed";
 import { createRouterFromConfig, type LlmRouter } from "@everyrepo/llm";
 
 export interface CliContext {
@@ -33,6 +38,25 @@ export async function openEmbedder(context: CliContext): Promise<ConfiguredEmbed
     onUsage: (usage) => recordUsage(context.appDb, { provider: config.provider, model, ...usage }),
     neuronsUsedLastDay: () => neuronsUsedLastDay(context.appDb, config.provider),
   });
+}
+
+// The reranker shares the Workers AI credentials and daily neuron budget with embeddings
+export function openReranker(context: CliContext): Reranker {
+  const config = context.config.embeddings;
+  const accountId = process.env["CLOUDFLARE_ACCOUNT_ID"];
+  const apiToken = process.env["CLOUDFLARE_API_TOKEN"];
+  if (config?.provider !== "workers-ai" || !accountId || !apiToken) {
+    throw new Error("Reranking needs Workers AI embeddings and Cloudflare credentials in .env");
+  }
+  const budget = config.dailyNeuronBudget;
+  const reranker = createWorkersAiReranker({
+    accountId,
+    apiToken,
+    canSpend: () => neuronsUsedLastDay(context.appDb, config.provider) < budget,
+    onUsage: (usage) =>
+      recordUsage(context.appDb, { provider: config.provider, model: reranker.model, ...usage }),
+  });
+  return reranker;
 }
 
 export interface OpenLlm {

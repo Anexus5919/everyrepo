@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { fuseRankings } from "./hybrid.ts";
 import { ftsQuery } from "./keyword.ts";
+import { applyRerank } from "./rerank.ts";
 
 describe("ftsQuery", () => {
   it("quotes terms, splits camelCase and drops stop words", () => {
@@ -30,5 +31,24 @@ describe("fuseRankings", () => {
     ];
     expect(fuseRankings(lists, 1)[0]?.chunkId).toBe(1);
     expect(fuseRankings(lists, 1, { weights: [1, 2] })[0]?.chunkId).toBe(3);
+  });
+});
+
+describe("applyRerank", () => {
+  const hit = (fileId: number) => ({
+    fileId,
+    path: `f${fileId}.ts`,
+    kind: "src",
+    score: 0,
+    chunkIds: [],
+  });
+
+  it("keeps the first order at blend 0 and follows the reranker at blend 1", () => {
+    const hits = [hit(1), hit(2), hit(3), hit(4)];
+    const scores = [0.1, 0.9, 0.5];
+    const order = (blend: number) =>
+      applyRerank(hits, scores, { top: 3, blend }).map((item) => item.fileId);
+    expect(order(0)).toEqual([1, 2, 3, 4]);
+    expect(order(1)).toEqual([2, 3, 1, 4]);
   });
 });

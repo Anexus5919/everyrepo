@@ -20,6 +20,12 @@ export {
 } from "./local.ts";
 export { dot, fromBlob, normalize, toBlob } from "./vector.ts";
 export {
+  createWorkersAiReranker,
+  WORKERS_AI_RERANK_MODEL,
+  type Reranker,
+  type WorkersAiRerankerOptions,
+} from "./workers-ai-rerank.ts";
+export {
   createWorkersAiEmbedder,
   EmbeddingBudgetError,
   WORKERS_AI_MAX_BATCH,

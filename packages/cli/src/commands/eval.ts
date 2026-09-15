@@ -8,7 +8,7 @@ import {
   openEngineDb,
   queryCachePath,
 } from "@everyrepo/db";
-import { fromBlob, toBlob, type Embedder } from "@everyrepo/embed";
+import { fromBlob, toBlob, type Embedder, type Reranker } from "@everyrepo/embed";
 import {
   distinctPaths,
   loadGoldSets,
@@ -17,6 +17,8 @@ import {
   type QuestionScore,
 } from "@everyrepo/eval";
 import {
+  applyRerank,
+  filePassages,
   loadVectorIndex,
   rankFiles,
   searchHybrid,
@@ -25,10 +27,12 @@ import {
   type SearchHit,
 } from "@everyrepo/search";
 import { Command } from "commander";
-import { openContext, openEmbedder } from "../context.ts";
+import { openContext, openEmbedder, openReranker } from "../context.ts";
 
-const MODES = ["keyword", "vector", "hybrid", "files"] as const;
-type Mode = (typeof MODES)[number];
+const MODES = ["keyword", "vector", "hybrid", "files", "rerank"] as const;
+type BaseMode = (typeof MODES)[number];
+// Rerank runs once per blend value, so its results are labelled with the blend
+type Mode = Exclude<BaseMode, "rerank"> | `rerank@${string}`;
 const CANDIDATE_CHUNKS = 50;
 
 interface EvalOptions {
@@ -42,6 +46,8 @@ interface EvalOptions {
   neighbors: string;
   neighborSources: string;
   dampen: boolean;
+  rerankTop: string;
+  rerankBlend: string;
   details: boolean;
   out?: string;
 }
@@ -85,8 +91,28 @@ async function embedQueries(
   return hashes.map((hash) => fromBlob(found.get(hash.toString("hex"))!));
 }
 
+// Reranker scores are cached by query and passages, so trying other blends costs nothing
+async function rerankScores(
+  getReranker: () => Reranker,
+  cache: EmbeddingCache,
+  query: string,
+  passages: readonly string[],
+): Promise<number[]> {
+  const reranker = getReranker();
+  const hash = createHash("sha256")
+    .update(JSON.stringify([reranker.model, query, passages]))
+    .digest()
+    .subarray(0, 16);
+  const key = `${reranker.model}:rerank`;
+  const found = cache.getMany(key, [hash]).get(hash.toString("hex"));
+  if (found) return [...fromBlob(found)];
+  const scores = await reranker.rerank(query, passages);
+  cache.putMany(key, [[hash, toBlob(Float32Array.from(scores))]]);
+  return scores;
+}
+
 function formatRow(cells: Array<string | number>): string {
-  const widths = [36, 8, 5, 6, 6, 7, 6];
+  const widths = [36, 12, 5, 6, 6, 7, 6];
   return cells
     .map((cell, index) => {
       const text = typeof cell === "number" ? cell.toFixed(2) : cell;
@@ -101,7 +127,7 @@ export function evalCommand(): Command {
     .argument("[repos...]", "limit to these repositories")
     .option(
       "--modes <list>",
-      "comma separated: keyword, vector, hybrid, files",
+      "comma separated: keyword, vector, hybrid, files, rerank",
       "keyword,hybrid,files",
     )
     .option("--dims <n>", "truncate vectors to this many dimensions")
@@ -113,13 +139,23 @@ export function evalCommand(): Command {
     .option("--neighbors <w>", "files mode: share of score passed to imported files", "0.25")
     .option("--neighbor-sources <n>", "files mode: top files that pass score", "10")
     .option("--no-dampen", "files mode: do not dampen widely imported files")
+    .option("--rerank-top <n>", "rerank mode: top files sent to the reranker", "30")
+    .option(
+      "--rerank-blend <list>",
+      "rerank mode: comma separated weights of the reranker order, 1 uses it alone",
+      "1",
+    )
     .option("--details", "print the rank of every question", false)
     .option("--out <file>", "write per-question results as JSON")
     .action(async (repoArgs: string[], options: EvalOptions) => {
-      const modes = options.modes.split(",").map((mode) => mode.trim()) as Mode[];
-      for (const mode of modes) {
+      const requested = options.modes.split(",").map((mode) => mode.trim()) as BaseMode[];
+      for (const mode of requested) {
         if (!MODES.includes(mode)) throw new Error(`Unknown mode "${mode}"`);
       }
+      const blends = options.rerankBlend.split(",").map((value) => value.trim());
+      const modes: Mode[] = requested.flatMap((mode): Mode[] =>
+        mode === "rerank" ? blends.map((blend): Mode => `rerank@${blend}`) : [mode],
+      );
       const wanted = new Set(repoArgs.map((arg) => formatRepoRef(parseRepoRef(arg)).toLowerCase()));
       const sets = (await loadGoldSets()).filter(
         (set) =>
@@ -134,6 +170,8 @@ export function evalCommand(): Command {
         ? new EmbeddingCache(queryCachePath(context.config.dataDir))
         : undefined;
       let configured: Awaited<ReturnType<typeof openEmbedder>>;
+      let reranker: Reranker | undefined;
+      const getReranker = () => (reranker ??= openReranker(context));
       const getEmbedder = async () => {
         configured ??= await openEmbedder(context);
         if (!configured) throw new Error("Vector modes need embeddings in the config");
@@ -178,18 +216,38 @@ export function evalCommand(): Command {
               const scores: QuestionScore[] = [];
               for (const [position, question] of set.questions.entries()) {
                 let hits: Array<Pick<SearchHit, "path">>;
-                if (mode === "files") {
-                  hits = rankFiles(engine, index!, question.question, queries[position]!, {
-                    limit: CANDIDATE_CHUNKS,
-                    candidates: Number(options.candidates),
-                    vectorWeight: Number(options.vectorWeight),
-                    chunkDecay: options.decay.split(",").map(Number),
-                    centralityWeight: Number(options.centrality),
-                    docsWeight: Number(options.docsWeight),
-                    neighborWeight: Number(options.neighbors),
-                    neighborSources: Number(options.neighborSources),
-                    dampenPopular: options.dampen,
-                  });
+                if (mode === "files" || mode.startsWith("rerank@")) {
+                  const fileHits = rankFiles(
+                    engine,
+                    index!,
+                    question.question,
+                    queries[position]!,
+                    {
+                      limit: CANDIDATE_CHUNKS,
+                      candidates: Number(options.candidates),
+                      vectorWeight: Number(options.vectorWeight),
+                      chunkDecay: options.decay.split(",").map(Number),
+                      centralityWeight: Number(options.centrality),
+                      docsWeight: Number(options.docsWeight),
+                      neighborWeight: Number(options.neighbors),
+                      neighborSources: Number(options.neighborSources),
+                      dampenPopular: options.dampen,
+                    },
+                  );
+                  hits = fileHits;
+                  if (mode.startsWith("rerank@")) {
+                    const top = Number(options.rerankTop);
+                    const scores = await rerankScores(
+                      getReranker,
+                      queryCache!,
+                      question.question,
+                      filePassages(engine, fileHits.slice(0, top)),
+                    );
+                    hits = applyRerank(fileHits, scores, {
+                      top,
+                      blend: Number(mode.slice("rerank@".length)),
+                    });
+                  }
                 } else if (mode === "keyword") {
                   hits = searchKeyword(engine, question.question, CANDIDATE_CHUNKS);
                 } else if (mode === "vector") {

@@ -25,8 +25,10 @@ TypeScript source directly and run with tsx. Tests use Vitest.
     `embeddings` is not configured
   - `report <owner/repo> [--json]` summarizes the latest snapshot
   - `search <owner/repo> <query...> [--limit <n>]` runs keyword search over indexed chunks
-  - `eval [repos...] [--modes keyword,hybrid,files] [--dims <n>] [--details]` scores retrieval
-    against the gold question sets in `packages/eval/gold`
+  - `eval [repos...] [--modes keyword,hybrid,files,rerank] [--dims <n>] [--details]` scores retrieval
+    against the gold question sets in `packages/eval/gold`; `rerank` reorders the top files with the
+    Workers AI reranker (`--rerank-top`, `--rerank-blend`). It lowered recall on the gold sets, so file
+    ranking does not use it
   - `llm <task> <prompt...>` sends one prompt through the models configured for a task
   - `wiki <owner/repo> [--until <stage>]` generates wiki content for the indexed snapshot (stages:
     summarize, plan, write, glossary); a used-up model allowance pauses the job and a rerun resumes it

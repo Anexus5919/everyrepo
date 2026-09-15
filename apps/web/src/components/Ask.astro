@@ -99,7 +99,8 @@ const name = repo.split("/")[1] ?? repo;
     const input = panel.querySelector<HTMLTextAreaElement>("[data-ask-input]")!;
     const send = panel.querySelector<HTMLButtonElement>("[data-ask-send]")!;
     const clear = panel.querySelector<HTMLButtonElement>("[data-ask-clear]")!;
-    const storageKey = `ask:${repo}`;
+    // The version in the key keeps answers saved in an older shape from being read back
+    const storageKey = `ask:v2:${repo}`;
     let turns: Turn[] = [];
     let busy = false;
 
@@ -113,7 +114,15 @@ const name = repo.split("/")[1] ?? repo;
     };
     const restore = (): Turn[] => {
       try {
-        return JSON.parse(sessionStorage.getItem(storageKey) ?? "[]") as Turn[];
+        const saved = JSON.parse(sessionStorage.getItem(storageKey) ?? "[]") as unknown;
+        if (!Array.isArray(saved)) return [];
+        return (saved as Array<Partial<Turn> | null>).filter(
+          (turn): turn is Turn =>
+            typeof turn?.question === "string" &&
+            typeof turn.answer?.markdown === "string" &&
+            Array.isArray(turn.answer.sources) &&
+            Array.isArray(turn.answer.otherIssues),
+        );
       } catch {
         return [];
       }
@@ -366,8 +375,31 @@ const name = repo.split("/")[1] ?? repo;
       document.documentElement.classList.remove("ask-open");
     }
 
-    turns = restore();
-    for (const turn of turns) log.append(turnElement(turn));
+    // Question boxes elsewhere on the page are wired first, so nothing below can leave them submitting the page
+    document.addEventListener("click", (event) => {
+      const trigger = (event.target as HTMLElement).closest<HTMLElement>("[data-ask-open]");
+      if (!trigger) return;
+      event.preventDefault();
+      open(trigger.dataset.askQuestion);
+    });
+    document.querySelectorAll<HTMLFormElement>("[data-ask-launch]").forEach((launch) => {
+      launch.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const field = launch.querySelector<HTMLInputElement>("input");
+        const question = field?.value.trim() ?? "";
+        if (field) field.value = "";
+        open(question.length >= 3 ? question : undefined);
+      });
+    });
+
+    turns = restore().filter((turn) => {
+      try {
+        log.append(turnElement(turn));
+        return true;
+      } catch {
+        return false;
+      }
+    });
     empty.hidden = turns.length > 0;
     clear.hidden = turns.length === 0;
 
@@ -449,21 +481,15 @@ const name = repo.split("/")[1] ?? repo;
     log.addEventListener("mouseover", (event) => linkRows(event, true));
     log.addEventListener("mouseout", (event) => linkRows(event, false));
 
-    document.addEventListener("click", (event) => {
-      const trigger = (event.target as HTMLElement).closest<HTMLElement>("[data-ask-open]");
-      if (!trigger) return;
-      event.preventDefault();
-      open(trigger.dataset.askQuestion);
-    });
-    document.querySelectorAll<HTMLFormElement>("[data-ask-launch]").forEach((launch) => {
-      launch.addEventListener("submit", (event) => {
-        event.preventDefault();
-        const field = launch.querySelector<HTMLInputElement>("input");
-        const question = field?.value.trim() ?? "";
-        if (field) field.value = "";
-        open(question.length >= 3 ? question : undefined);
-      });
-    });
+    // A question box that submitted before this script ran leaves its question in the address
+    const pending = new URLSearchParams(window.location.search).get("question");
+    if (pending) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("question");
+      history.replaceState(history.state, "", url);
+      if (pending.trim().length >= 3) open(pending);
+    }
+
   }
 </script>
 

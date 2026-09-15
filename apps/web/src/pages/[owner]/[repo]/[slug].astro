@@ -652,10 +652,10 @@ const suggestions = [
     padding: 8px 8px 8px 18px;
     border: 1px solid var(--line);
     border-radius: 12px;
-    background: color-mix(in srgb, var(--panel) 88%, transparent);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    box-shadow: var(--shadow);
+    background: var(--panel);
+    box-shadow:
+      0 -24px 32px -8px var(--bg),
+      var(--shadow);
     transition:
       border-color 160ms ease,
       opacity 160ms ease;

@@ -1,0 +1,312 @@
+---
+import type { SiteWiki } from "@everyrepo/core";
+import WikiTree from "../../../components/WikiTree.astro";
+import Base from "../../../layouts/Base.astro";
+import { hubHref, readyWikis } from "../../../lib/wiki.ts";
+
+export function getStaticPaths() {
+  return readyWikis().map((wiki) => ({
+    params: { owner: wiki.owner, repo: wiki.name },
+    props: { wiki },
+  }));
+}
+
+interface Props {
+  wiki: SiteWiki;
+}
+const { wiki } = Astro.props;
+
+const letters = [
+  ...new Set(wiki.glossary.map((term) => term.term.charAt(0).toUpperCase())),
+].sort();
+---
+
+<Base
+  wide
+  title={`Glossary · ${wiki.name} wiki · EveryRepo`}
+  description={`Terms used across the ${wiki.repo} wiki, each defined from a line of its code.`}
+>
+  <div class="glossary-page">
+    <aside class="glossary-tree">
+      <WikiTree wiki={wiki} />
+    </aside>
+
+    <div class="glossary-main">
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <a href={hubHref(wiki)}>{wiki.repo}</a>
+        <span class="sep">/</span>
+        <span>Glossary</span>
+      </nav>
+      <header class="glossary-header">
+        <h1>Glossary</h1>
+        <p>
+          {wiki.glossary.length} names and ideas you will meet in the {wiki.name} code. Each definition
+          links to the lines it was written from.
+        </p>
+        <label class="term-filter">
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            aria-hidden="true"
+          >
+            <circle cx="11" cy="11" r="6.5"></circle>
+            <path d="M16 16l4.5 4.5"></path>
+          </svg>
+          <span class="sr-only">Filter terms</span>
+          <input type="search" placeholder="Filter terms" data-term-filter />
+          <span class="term-count mono" data-term-count>{wiki.glossary.length}</span>
+        </label>
+        <nav class="letters" aria-label="Jump to letter">
+          {letters.map((letter) => <a href={`#letter-${letter}`}>{letter}</a>)}
+        </nav>
+      </header>
+
+      <div class="term-list">
+        {
+          letters.map((letter) => (
+            <section class="letter-group" id={`letter-${letter}`} data-letter-group>
+              <h2 class="letter">{letter}</h2>
+              <dl>
+                {wiki.glossary
+                  .filter((term) => term.term.charAt(0).toUpperCase() === letter)
+                  .map((term) => (
+                    <div class="entry" data-term={`${term.term} ${term.definition}`.toLowerCase()}>
+                      <dt class="mono">{term.term}</dt>
+                      <dd>
+                        <p>{term.definition}</p>
+                        {term.url && term.path && (
+                          <a class="entry-source mono" href={term.url} target="_blank" rel="noopener">
+                            {term.path}
+                          </a>
+                        )}
+                      </dd>
+                    </div>
+                  ))}
+              </dl>
+            </section>
+          ))
+        }
+        <p class="term-empty" data-term-empty hidden>No term matches</p>
+      </div>
+    </div>
+  </div>
+</Base>
+
+<script>
+  const input = document.querySelector<HTMLInputElement>("[data-term-filter]");
+  const count = document.querySelector<HTMLElement>("[data-term-count]");
+  const empty = document.querySelector<HTMLElement>("[data-term-empty]");
+  input?.addEventListener("input", () => {
+    const query = input.value.trim().toLowerCase();
+    let shown = 0;
+    document.querySelectorAll<HTMLElement>("[data-letter-group]").forEach((group) => {
+      let inGroup = 0;
+      group.querySelectorAll<HTMLElement>("[data-term]").forEach((entry) => {
+        const match = !query || (entry.dataset.term ?? "").includes(query);
+        entry.hidden = !match;
+        if (match) inGroup += 1;
+      });
+      group.hidden = inGroup === 0;
+      shown += inGroup;
+    });
+    if (count) count.textContent = String(shown);
+    if (empty) empty.hidden = shown > 0;
+  });
+</script>
+
+<style>
+  .glossary-page {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: 280px minmax(0, 1fr);
+    max-width: 1640px;
+    margin: 0 auto;
+  }
+
+  .glossary-tree {
+    position: sticky;
+    top: var(--header);
+    height: calc(100svh - var(--header));
+    border-right: 1px solid var(--line-soft);
+    background: var(--bg-raise);
+  }
+
+  .glossary-main {
+    min-width: 0;
+    max-width: 920px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 36px clamp(24px, 4vw, 64px) 80px;
+  }
+
+  .crumbs {
+    display: flex;
+    gap: 8px;
+    font-size: var(--t-ui);
+    color: var(--text-3);
+  }
+
+  .crumbs a:hover {
+    color: var(--text);
+  }
+
+  .crumbs .sep {
+    color: var(--line);
+  }
+
+  .glossary-header {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-top: 18px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  h1 {
+    font-size: var(--t-title);
+    line-height: 1.08;
+  }
+
+  .glossary-header p {
+    max-width: 620px;
+    font-size: var(--t-small);
+    line-height: 1.6;
+    color: var(--text-2);
+  }
+
+  .term-filter {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    max-width: 420px;
+    height: 40px;
+    padding: 0 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    color: var(--text-3);
+  }
+
+  .term-filter:focus-within {
+    border-color: var(--text-3);
+  }
+
+  .term-filter input {
+    flex-grow: 1;
+    min-width: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    font-size: var(--t-small);
+    color: var(--text);
+  }
+
+  .term-count {
+    font-size: var(--t-label);
+  }
+
+  .letters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .letters a {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius);
+    font-size: var(--t-caption);
+    color: var(--text-2);
+  }
+
+  .letters a:hover {
+    background: var(--panel-2);
+    color: var(--text);
+  }
+
+  .letter-group {
+    display: grid;
+    grid-template-columns: 56px minmax(0, 1fr);
+    padding-top: 20px;
+    scroll-margin-top: calc(var(--header) + 16px);
+  }
+
+  .letter {
+    font-size: var(--t-h2);
+    line-height: 1.2;
+    color: var(--text-3);
+  }
+
+  dl {
+    margin: 0;
+  }
+
+  .entry {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.6fr);
+    gap: 24px;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .entry dt {
+    padding-top: 2px;
+    font-size: var(--t-ui);
+    color: var(--text);
+    overflow-wrap: anywhere;
+  }
+
+  .entry dd {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0;
+  }
+
+  .entry dd p {
+    font-size: var(--t-small);
+    line-height: 1.6;
+    color: var(--text-2);
+  }
+
+  .entry-source {
+    font-size: var(--t-label);
+    color: var(--text-3);
+    overflow-wrap: anywhere;
+  }
+
+  .entry-source:hover {
+    color: var(--accent);
+  }
+
+  .term-empty {
+    padding: 20px 0;
+    color: var(--text-3);
+  }
+
+  @media (max-width: 1100px) {
+    .glossary-page {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .glossary-tree {
+      display: none;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .letter-group,
+    .entry {
+      grid-template-columns: 1fr;
+      gap: 6px;
+    }
+  }
+</style>

@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { Command } from "commander";
+import { askCommand, serveCommand } from "./commands/ask.ts";
 import { dbCommand } from "./commands/db.ts";
 import { evalCommand } from "./commands/eval.ts";
 import { exportCommand } from "./commands/export.ts";
@@ -29,6 +30,8 @@ program.addCommand(llmCommand());
 program.addCommand(wikiCommand());
 program.addCommand(exportCommand());
 program.addCommand(siteCommand());
+program.addCommand(askCommand());
+program.addCommand(serveCommand());
 
 try {
   await program.parseAsync();

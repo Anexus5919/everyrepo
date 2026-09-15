@@ -8,18 +8,21 @@ import "@fontsource/ibm-plex-mono/400.css";
 import "@fontsource/ibm-plex-mono/500.css";
 import "../styles/global.css";
 import Footer from "../components/Footer.astro";
+import Guide from "../components/Guide.astro";
 import Header from "../components/Header.astro";
 
 interface Props {
   title: string;
   description: string;
-  status?: string;
+  // Full screen sections that scrolling settles on, used by the home page
+  snap?: boolean;
+  wide?: boolean;
 }
-const { title, description, status } = Astro.props;
+const { title, description, snap = false, wide = false } = Astro.props;
 ---
 
 <!doctype html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="dark" data-snap={snap ? "true" : undefined}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -30,15 +33,20 @@ const { title, description, status } = Astro.props;
       try {
         const saved = localStorage.getItem("theme");
         if (saved === "light" || saved === "dark") document.documentElement.dataset.theme = saved;
+        if (saved === "system") {
+          const light = window.matchMedia("(prefers-color-scheme: light)").matches;
+          document.documentElement.dataset.theme = light ? "light" : "dark";
+        }
       } catch {}
     </script>
   </head>
   <body>
     <div class="rails" aria-hidden="true"></div>
-    <Header status={status} />
+    <Header wide={wide} />
     <main>
       <slot />
     </main>
     <Footer />
+    <Guide />
   </body>
 </html>

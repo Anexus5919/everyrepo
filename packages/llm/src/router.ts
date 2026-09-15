@@ -49,6 +49,10 @@ export class LlmRouter {
     private readonly cache?: ResponseCache,
   ) {}
 
+  hasTask(task: string): boolean {
+    return (this.tasks[task]?.length ?? 0) > 0;
+  }
+
   models(task: string): readonly ChatModel[] {
     const models = this.tasks[task];
     if (!models || models.length === 0) throw new Error(`No models configured for task "${task}"`);

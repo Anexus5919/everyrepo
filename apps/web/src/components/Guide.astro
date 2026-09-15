@@ -1,0 +1,990 @@
+---
+import { loadRepos } from "../lib/site-data.ts";
+
+const ready = loadRepos().filter((repo) => repo.status === "ready");
+// A short name other than the one the home page leads with keeps the drawings readable
+const typed =
+  [...ready].sort((a, b) => a.repo.length - b.repo.length).find((repo) => repo !== ready[0])?.repo ??
+  ready[0]?.repo ??
+  "owner/repo";
+const question = "Where is the configuration loaded?";
+
+const steps = [
+  {
+    label: "Welcome",
+    title: "A wiki for any public repository",
+    text: "EveryRepo reads a repository's code and writes a wiki about it: how it is organized, what each part does and where to start reading.",
+  },
+  {
+    label: "Open a repository",
+    title: "Start from its hub",
+    text: "Type a name or paste a GitHub link. The hub shows what the project is, the files to open first and every section of its wiki.",
+  },
+  {
+    label: "Citations",
+    title: "Every sentence has a source",
+    text: "The small numbers are citations. Point at one to see the lines it was written from, or click it to open those lines on GitHub at the same commit.",
+  },
+  {
+    label: "Diagrams",
+    title: "See how files connect",
+    text: "Diagrams show which files import which. Click one to open it larger, then pick a file to follow its links.",
+  },
+  {
+    label: "Ask",
+    title: "Ask about the code",
+    text: "Ask a question about a repository and get an answer written from its code, with the same citations.",
+  },
+];
+
+// Monospace glyphs are 0.6em wide, so the typing cover can be sized from the text length
+const cover = (text: string, size: number) => Math.ceil(text.length * size * 0.6) + 6;
+---
+
+<dialog class="guide" aria-labelledby="guide-title" data-guide>
+  <div class="stage" aria-hidden="true">
+    <svg class="scene" data-scene="0" viewBox="0 0 640 240">
+      <g class="s1-repo">
+        <rect class="card" x="40" y="78" width="210" height="84" rx="8"></rect>
+        <path
+          class="glyph"
+          d="M60 100h9a3 3 0 0 1 3 3v15h-9a3 3 0 0 0-3 3zM84 100h-9a3 3 0 0 0-3 3v15h9a3 3 0 0 1 3 3z"
+        ></path>
+        <text class="mono-text" x="94" y="114">{typed}</text>
+        <rect class="bar" x="60" y="132" width="150" height="6" rx="3"></rect>
+        <rect class="bar" x="60" y="145" width="104" height="6" rx="3"></rect>
+      </g>
+      <path class="link s1-link" pathLength="1" d="M250 120 C 290 120, 300 127, 340 127"></path>
+      <rect class="card back" x="356" y="40" width="244" height="160" rx="8"></rect>
+      <rect class="card back" x="348" y="47" width="244" height="160" rx="8"></rect>
+      <g class="s1-page">
+        <rect class="card" x="340" y="54" width="244" height="160" rx="8"></rect>
+        <rect class="bar strong s1-line" x="360" y="76" width="118" height="10" rx="3" style="--d: 520ms"
+        ></rect>
+        <rect class="bar s1-line" x="360" y="104" width="196" height="6" rx="3" style="--d: 660ms"></rect>
+        <rect class="bar s1-line" x="360" y="120" width="176" height="6" rx="3" style="--d: 760ms"></rect>
+        <rect class="bar s1-line" x="360" y="136" width="120" height="6" rx="3" style="--d: 860ms"></rect>
+        <rect class="chip s1-chip" x="486" y="132" width="14" height="14" rx="3"></rect>
+        <rect class="bar s1-line" x="360" y="164" width="184" height="6" rx="3" style="--d: 960ms"></rect>
+        <rect class="bar s1-line" x="360" y="180" width="140" height="6" rx="3" style="--d: 1060ms"></rect>
+      </g>
+    </svg>
+
+    <svg class="scene" data-scene="1" viewBox="0 0 640 240">
+      <rect class="field s2-field" x="120" y="28" width="400" height="44" rx="6"></rect>
+      <g class="s2-search">
+        <circle class="icon-line" cx="145" cy="49" r="6"></circle>
+        <path class="icon-line" d="M149.5 53.5l4 4"></path>
+      </g>
+      <path class="icon-line accent s2-check" pathLength="1" d="M139 50.5l4.5 4.5 9-9.5"></path>
+      <text class="mono-text big" x="166" y="55">{typed}</text>
+      <rect
+        class="type-cover s2-cover"
+        x="163"
+        y="36"
+        width={cover(typed, 14)}
+        height="28"
+        style={`animation-timing-function: steps(${typed.length})`}></rect>
+      <g class="s2-hub">
+        <rect class="card" x="120" y="88" width="400" height="136" rx="8"></rect>
+        <text class="label-text" x="140" y="114">OPEN THESE FILES FIRST</text>
+        <g class="s2-row" style="--d: 1500ms">
+          <text class="num-text" x="140" y="143">01</text>
+          <rect class="bar strong" x="168" y="135" width="140" height="8" rx="3"></rect>
+          <rect class="bar" x="168" y="148" width="220" height="5" rx="2.5"></rect>
+        </g>
+        <g class="s2-row" style="--d: 1620ms">
+          <text class="num-text" x="140" y="175">02</text>
+          <rect class="bar strong" x="168" y="167" width="112" height="8" rx="3"></rect>
+          <rect class="bar" x="168" y="180" width="190" height="5" rx="2.5"></rect>
+        </g>
+        <g class="s2-row" style="--d: 1740ms">
+          <text class="num-text" x="140" y="207">03</text>
+          <rect class="bar strong" x="168" y="199" width="156" height="8" rx="3"></rect>
+          <rect class="bar" x="168" y="212" width="160" height="5" rx="2.5"></rect>
+        </g>
+      </g>
+    </svg>
+
+    <svg class="scene" data-scene="2" viewBox="0 0 640 240">
+      <rect class="bar" x="40" y="66" width="270" height="7" rx="3.5"></rect>
+      <rect class="bar" x="40" y="88" width="250" height="7" rx="3.5"></rect>
+      <rect class="bar" x="40" y="110" width="226" height="7" rx="3.5"></rect>
+      <g class="s3-chip">
+        <rect class="chip" x="272" y="105" width="18" height="17" rx="4"></rect>
+        <text class="chip-text" x="281" y="117.5">2</text>
+      </g>
+      <rect class="bar" x="40" y="132" width="244" height="7" rx="3.5"></rect>
+      <rect class="bar" x="40" y="154" width="160" height="7" rx="3.5"></rect>
+      <path class="link s3-link" pathLength="1" d="M292 113 C 322 113, 330 104, 360 104"></path>
+      <g class="s3-code">
+        <rect class="card" x="360" y="30" width="248" height="184" rx="8"></rect>
+        <text class="mono-text small" x="376" y="52">src/config/load.ts</text>
+        <text class="mono-text small faint" x="540" y="52">45-47</text>
+        <path class="rule" d="M360 64h248"></path>
+        <rect class="highlight s3-highlight" x="361" y="92" width="246" height="52"></rect>
+        <g class="code-lines">
+          <text class="line-no" x="376" y="82">44</text>
+          <rect class="bar" x="400" y="77" width="120" height="5" rx="2.5"></rect>
+          <text class="line-no" x="376" y="100">45</text>
+          <rect class="bar code-hot" x="400" y="95" width="168" height="5" rx="2.5"></rect>
+          <text class="line-no" x="376" y="118">46</text>
+          <rect class="bar code-hot" x="412" y="113" width="140" height="5" rx="2.5"></rect>
+          <text class="line-no" x="376" y="136">47</text>
+          <rect class="bar code-hot" x="412" y="131" width="96" height="5" rx="2.5"></rect>
+          <text class="line-no" x="376" y="154">48</text>
+          <rect class="bar" x="400" y="149" width="60" height="5" rx="2.5"></rect>
+          <text class="line-no" x="376" y="172">49</text>
+          <rect class="bar" x="400" y="167" width="150" height="5" rx="2.5"></rect>
+          <text class="line-no" x="376" y="190">50</text>
+          <rect class="bar" x="412" y="185" width="110" height="5" rx="2.5"></rect>
+        </g>
+      </g>
+      <g class="s3-cursor">
+        <path class="cursor" d="M0 0v17l4.6-4.2 3.2 6.9 2.9-1.3-3.1-6.7h6.2z"></path>
+      </g>
+    </svg>
+
+    <svg class="scene" data-scene="3" viewBox="0 0 640 240">
+      <g class="edges">
+        <path class="edge s4-edge hot-later" pathLength="1" d="M180 120 C 205 120, 205 64, 230 64" style="--d: 360ms"
+        ></path>
+        <path
+          class="edge s4-edge dim-later"
+          pathLength="1"
+          d="M180 120 C 205 120, 205 176, 230 176"
+          style="--d: 420ms"></path>
+        <path class="edge s4-edge hot-later" pathLength="1" d="M380 64 L 430 64" style="--d: 620ms"
+        ></path>
+        <path
+          class="edge s4-edge hot-later"
+          pathLength="1"
+          d="M380 64 C 405 64, 405 176, 430 176"
+          style="--d: 680ms"></path>
+        <path
+          class="edge s4-edge dim-later"
+          pathLength="1"
+          d="M380 176 L 430 176"
+          style="--d: 740ms"></path>
+      </g>
+      <g class="node s4-node linked-later" style="--d: 0ms">
+        <rect x="30" y="100" width="150" height="40" rx="6"></rect>
+        <text class="mono-text small" x="44" y="124">index.ts</text>
+      </g>
+      <g class="node s4-node selected-later" style="--d: 180ms">
+        <rect x="230" y="44" width="150" height="40" rx="6"></rect>
+        <text class="mono-text small" x="244" y="68">router.ts</text>
+      </g>
+      <g class="node s4-node dim-later" style="--d: 220ms">
+        <rect x="230" y="156" width="150" height="40" rx="6"></rect>
+        <text class="mono-text small" x="244" y="180">store.ts</text>
+      </g>
+      <g class="node s4-node linked-later" style="--d: 440ms">
+        <rect x="430" y="44" width="150" height="40" rx="6"></rect>
+        <text class="mono-text small" x="444" y="68">handlers.ts</text>
+      </g>
+      <g class="node s4-node linked-later" style="--d: 480ms">
+        <rect x="430" y="156" width="150" height="40" rx="6"></rect>
+        <text class="mono-text small" x="444" y="180">types.ts</text>
+      </g>
+      <circle class="s4-press" cx="330" cy="64" r="10"></circle>
+    </svg>
+
+    <svg class="scene" data-scene="4" viewBox="0 0 640 240">
+      <rect class="field s5-field" x="80" y="24" width="480" height="44" rx="6"></rect>
+      <text class="mono-text big" x="100" y="51">{question}</text>
+      <rect
+        class="type-cover s5-cover"
+        x="97"
+        y="32"
+        width={cover(question, 14)}
+        height="28"
+        style={`animation-timing-function: steps(${question.length})`}></rect>
+      <g class="s5-send">
+        <rect class="send" x="516" y="32" width="36" height="28" rx="5"></rect>
+        <path class="send-arrow" d="M528 46h12M535 41l5 5-5 5"></path>
+      </g>
+      <g class="s5-answer">
+        <rect class="card" x="80" y="84" width="480" height="144" rx="8"></rect>
+        <text class="label-text" x="100" y="108">ANSWER</text>
+        <rect class="bar s5-line" x="100" y="124" width="330" height="7" rx="3.5" style="--d: 1650ms"
+        ></rect>
+        <g class="s5-line" style="--d: 1750ms">
+          <rect class="chip" x="436" y="119" width="16" height="16" rx="4"></rect>
+          <text class="chip-text" x="444" y="131">1</text>
+        </g>
+        <rect class="bar s5-line" x="100" y="144" width="300" height="7" rx="3.5" style="--d: 1800ms"
+        ></rect>
+        <rect class="bar s5-line" x="100" y="164" width="220" height="7" rx="3.5" style="--d: 1900ms"
+        ></rect>
+        <g class="s5-line" style="--d: 2000ms">
+          <rect class="chip" x="326" y="159" width="16" height="16" rx="4"></rect>
+          <text class="chip-text" x="334" y="171">2</text>
+        </g>
+        <g class="s5-line" style="--d: 2150ms">
+          <rect class="pill" x="100" y="190" width="104" height="22" rx="11"></rect>
+          <text class="mono-text tiny" x="114" y="205">config/load.ts</text>
+          <rect class="pill" x="212" y="190" width="92" height="22" rx="11"></rect>
+          <text class="mono-text tiny" x="226" y="205">env/parse.ts</text>
+        </g>
+      </g>
+    </svg>
+  </div>
+
+  <div class="body">
+    <div class="copy" data-guide-copy aria-live="polite">
+      <span class="step-label"><span class="mono" data-guide-count>1 of {steps.length}</span> <span data-guide-label
+        >{steps[0]!.label}</span
+      ></span>
+      <h2 id="guide-title" data-guide-title>{steps[0]!.title}</h2>
+      <p data-guide-text>{steps[0]!.text}</p>
+    </div>
+
+    <div class="controls">
+      <div class="progress" aria-hidden="true">
+        {steps.map(() => <span class="segment" />)}
+      </div>
+      <button class="text-btn" type="button" data-guide-skip>Skip</button>
+      <button class="btn btn-line" type="button" data-guide-back>Back</button>
+      <button class="btn btn-solid" type="button" data-guide-next>Next</button>
+    </div>
+  </div>
+
+  <button class="guide-close" type="button" aria-label="Close the guide" data-guide-skip>
+    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"
+      ><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+      ></path></svg
+    >
+  </button>
+
+  <script is:inline type="application/json" data-guide-steps set:html={JSON.stringify(steps)} />
+</dialog>
+
+<script>
+  const guide = document.querySelector<HTMLDialogElement>("[data-guide]");
+  if (guide) {
+    const steps = JSON.parse(guide.querySelector("[data-guide-steps]")?.textContent ?? "[]") as Array<{
+      label: string;
+      title: string;
+      text: string;
+    }>;
+    const scenes = [...guide.querySelectorAll<SVGSVGElement>("[data-scene]")];
+    const segments = [...guide.querySelectorAll<HTMLElement>(".segment")];
+    const copy = guide.querySelector<HTMLElement>("[data-guide-copy]")!;
+    const count = guide.querySelector<HTMLElement>("[data-guide-count]")!;
+    const label = guide.querySelector<HTMLElement>("[data-guide-label]")!;
+    const title = guide.querySelector<HTMLElement>("[data-guide-title]")!;
+    const text = guide.querySelector<HTMLElement>("[data-guide-text]")!;
+    const back = guide.querySelector<HTMLButtonElement>("[data-guide-back]")!;
+    const next = guide.querySelector<HTMLButtonElement>("[data-guide-next]")!;
+    let step = 0;
+
+    const remember = () => {
+      try {
+        localStorage.setItem("guide.done", "true");
+      } catch {
+        // Without storage the guide simply shows again on the next visit
+      }
+    };
+
+    // Each scene replays from its start whenever its step is shown
+    function show(index: number) {
+      step = Math.max(0, Math.min(steps.length - 1, index));
+      const current = steps[step]!;
+      scenes.forEach((scene, position) => {
+        scene.classList.remove("is-active");
+        if (position === step) {
+          void scene.getBoundingClientRect();
+          scene.classList.add("is-active");
+        }
+      });
+      segments.forEach((segment, position) => segment.classList.toggle("is-done", position <= step));
+      count.textContent = `${step + 1} of ${steps.length}`;
+      label.textContent = current.label;
+      title.textContent = current.title;
+      text.textContent = current.text;
+      copy.classList.remove("is-changing");
+      void copy.offsetWidth;
+      copy.classList.add("is-changing");
+      back.hidden = step === 0;
+      next.textContent = step === steps.length - 1 ? "Ok, let's get started" : "Next";
+    }
+
+    function open() {
+      if (!guide!.open) guide!.showModal();
+      show(0);
+      next.focus();
+    }
+
+    function close() {
+      remember();
+      guide!.close();
+    }
+
+    next.addEventListener("click", () => (step === steps.length - 1 ? close() : show(step + 1)));
+    back.addEventListener("click", () => show(step - 1));
+    guide.querySelectorAll("[data-guide-skip]").forEach((button) => button.addEventListener("click", close));
+    guide.addEventListener("close", remember);
+    guide.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowRight" && step < steps.length - 1) show(step + 1);
+      if (event.key === "ArrowLeft") show(step - 1);
+    });
+
+    document.addEventListener("click", (event) => {
+      if ((event.target as Element).closest("[data-guide-open]")) {
+        event.preventDefault();
+        open();
+      }
+    });
+
+    let seen = false;
+    try {
+      seen = localStorage.getItem("guide.done") === "true";
+    } catch {
+      seen = false;
+    }
+    if (!seen || new URLSearchParams(window.location.search).has("guide")) {
+      // The page settles first so the guide opens over something to look at
+      window.setTimeout(open, 700);
+    }
+  }
+</script>
+
+<style>
+  .guide {
+    width: min(680px, calc(100vw - 32px));
+    max-width: none;
+    max-height: calc(100svh - 32px);
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--bg-raise);
+    color: var(--text);
+    box-shadow: var(--shadow);
+    overflow: hidden auto;
+  }
+
+  .guide::backdrop {
+    background: rgba(8, 7, 6, 0.55);
+    backdrop-filter: blur(3px);
+  }
+
+  .guide[open] {
+    animation: guide-open 260ms var(--ease-out);
+  }
+
+  @keyframes guide-open {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+  }
+
+  .stage {
+    position: relative;
+    height: 260px;
+    border-bottom: 1px solid var(--line-soft);
+    background:
+      radial-gradient(circle, var(--line-soft) 1px, transparent 1.2px) 0 0 / 20px 20px,
+      var(--bg);
+  }
+
+  .scene {
+    position: absolute;
+    inset: 10px 0;
+    width: 100%;
+    height: calc(100% - 20px);
+    opacity: 0;
+    transition: opacity 180ms ease;
+  }
+
+  .scene.is-active {
+    opacity: 1;
+  }
+
+  .body {
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+    padding: 24px 28px 22px;
+  }
+
+  .copy {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 132px;
+  }
+
+  .copy.is-changing {
+    animation: copy-in 240ms ease-out;
+  }
+
+  @keyframes copy-in {
+    from {
+      opacity: 0;
+    }
+  }
+
+  .step-label {
+    display: flex;
+    gap: 10px;
+    font-size: var(--t-label);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-3);
+  }
+
+  .step-label .mono {
+    color: var(--accent);
+    letter-spacing: 0;
+    text-transform: none;
+  }
+
+  .copy h2 {
+    font-size: var(--t-h3);
+    line-height: 1.2;
+  }
+
+  .copy p {
+    max-width: 560px;
+    font-size: var(--t-small);
+    line-height: 1.6;
+    color: var(--text-2);
+  }
+
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .progress {
+    display: flex;
+    gap: 6px;
+    margin-right: auto;
+  }
+
+  .segment {
+    position: relative;
+    width: 22px;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--line);
+    overflow: hidden;
+  }
+
+  .segment::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: var(--accent);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 260ms var(--ease-out);
+  }
+
+  .segment.is-done::after {
+    transform: scaleX(1);
+  }
+
+  .text-btn {
+    height: 40px;
+    padding: 0 12px;
+    border: 0;
+    background: transparent;
+    font-size: var(--t-ui);
+    color: var(--text-3);
+    cursor: pointer;
+  }
+
+  .text-btn:hover {
+    color: var(--text);
+  }
+
+  .guide-close {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--bg-raise);
+    color: var(--text-2);
+    cursor: pointer;
+  }
+
+  .guide-close:hover {
+    color: var(--text);
+    border-color: var(--text-3);
+  }
+
+  /* Shared drawing parts */
+  .card {
+    fill: var(--panel);
+    stroke: var(--line);
+  }
+
+  .card.back {
+    opacity: 0.55;
+  }
+
+  .field {
+    fill: var(--panel);
+    stroke: var(--line);
+  }
+
+  .bar {
+    fill: var(--line);
+  }
+
+  .bar.strong {
+    fill: var(--text-3);
+  }
+
+  .chip {
+    fill: var(--accent-soft);
+    stroke: var(--accent-line);
+  }
+
+  .chip-text {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-anchor: middle;
+    fill: var(--accent);
+  }
+
+  .mono-text {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    fill: var(--text);
+  }
+
+  .mono-text.big {
+    font-size: 14px;
+  }
+
+  .mono-text.small {
+    font-size: 12px;
+  }
+
+  .mono-text.tiny {
+    font-size: 10px;
+    fill: var(--text-2);
+  }
+
+  .mono-text.faint {
+    fill: var(--text-3);
+  }
+
+  .label-text {
+    font-family: var(--font-sans);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    fill: var(--text-3);
+  }
+
+  .num-text,
+  .line-no {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    fill: var(--accent);
+  }
+
+  .line-no {
+    fill: var(--text-3);
+  }
+
+  .glyph,
+  .icon-line {
+    fill: none;
+    stroke: var(--text-3);
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .icon-line.accent {
+    stroke: var(--accent);
+  }
+
+  .link {
+    fill: none;
+    stroke: var(--accent-line);
+    stroke-width: 1.5;
+  }
+
+  .rule {
+    stroke: var(--line-soft);
+  }
+
+  .highlight {
+    fill: var(--accent-soft);
+  }
+
+  .pill {
+    fill: var(--panel-2);
+    stroke: var(--line);
+  }
+
+  .type-cover {
+    fill: var(--panel);
+    transform-box: fill-box;
+    transform-origin: right;
+    transform: scaleX(0);
+  }
+
+  .send {
+    fill: var(--accent);
+  }
+
+  .send-arrow {
+    fill: none;
+    stroke: var(--accent-ink);
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .cursor {
+    fill: var(--text);
+    stroke: var(--bg);
+    stroke-width: 1.2;
+    stroke-linejoin: round;
+  }
+
+  .node rect {
+    fill: var(--panel);
+    stroke: var(--line);
+  }
+
+  .edge {
+    fill: none;
+    stroke: var(--text-3);
+    stroke-width: 1.3;
+  }
+
+  .s2-check {
+    opacity: 0;
+  }
+
+  .s3-cursor {
+    transform: translate(287px, 119px);
+  }
+
+  .s4-press {
+    fill: none;
+    stroke: var(--accent);
+    opacity: 0;
+  }
+
+  /* Welcome: a repository is read and its pages are written line by line */
+  .is-active .s1-repo {
+    animation: fade 320ms ease-out both;
+  }
+
+  .is-active .s1-link {
+    stroke-dasharray: 1;
+    animation: draw 420ms var(--ease-out) 240ms both;
+  }
+
+  .is-active .s1-page {
+    animation: fade 320ms ease-out 420ms both;
+  }
+
+  .s1-line {
+    transform-box: fill-box;
+    transform-origin: left;
+  }
+
+  .is-active .s1-line {
+    animation: write 360ms var(--ease-out) var(--d) both;
+  }
+
+  .is-active .s1-chip {
+    animation: fade 240ms ease-out 1160ms both;
+  }
+
+  /* Hub: the name is typed, recognized, then the hub lists the files to open first */
+  .is-active .s2-cover {
+    animation-name: type;
+    animation-duration: 900ms;
+    animation-delay: 200ms;
+    animation-fill-mode: both;
+  }
+
+  .is-active .s2-field {
+    animation: field-match 1ms linear 1180ms both;
+  }
+
+  .is-active .s2-search {
+    animation: fade-out 160ms ease-out 1180ms both;
+  }
+
+  .is-active .s2-check {
+    opacity: 1;
+    stroke-dasharray: 1;
+    animation: draw 320ms var(--ease-out) 1200ms both;
+  }
+
+  .is-active .s2-hub {
+    animation: fade 320ms ease-out 1380ms both;
+  }
+
+  .is-active .s2-row {
+    animation: fade 280ms ease-out var(--d) both;
+  }
+
+  /* Citations: the pointer reaches a number and the lines it cites light up */
+  .is-active .s3-cursor {
+    animation: point 700ms var(--ease) 200ms both;
+  }
+
+  .is-active .s3-chip .chip {
+    animation: chip-on 1ms linear 920ms both;
+  }
+
+  .is-active .s3-chip .chip-text {
+    animation: chip-text-on 1ms linear 920ms both;
+  }
+
+  .is-active .s3-link {
+    stroke-dasharray: 1;
+    animation: draw 380ms var(--ease-out) 960ms both;
+  }
+
+  .s3-highlight {
+    opacity: 0;
+  }
+
+  .is-active .s3-highlight {
+    opacity: 1;
+    animation: fade 260ms ease-out 1260ms both;
+  }
+
+  .is-active .code-hot {
+    animation: hot 1ms linear 1260ms both;
+  }
+
+  /* Diagrams: files appear by layer, links draw, then one file is picked and its links stand out */
+  .is-active .s4-node {
+    animation: fade 300ms ease-out var(--d) both;
+  }
+
+  .is-active .s4-edge {
+    stroke-dasharray: 1;
+    animation: draw 420ms var(--ease-out) var(--d) both;
+  }
+
+  .is-active .s4-press {
+    animation: press 420ms ease-out 1250ms forwards;
+  }
+
+  .is-active .selected-later rect {
+    animation: selected 1ms linear 1300ms both;
+  }
+
+  .is-active .linked-later rect {
+    animation: linked 1ms linear 1300ms both;
+  }
+
+  .is-active .edge.hot-later {
+    animation:
+      draw 420ms var(--ease-out) var(--d) both,
+      edge-hot 1ms linear 1300ms forwards;
+  }
+
+  .is-active .dim-later {
+    animation:
+      fade 300ms ease-out var(--d) both,
+      dim 240ms ease-out 1300ms forwards;
+  }
+
+  .is-active .edge.dim-later {
+    animation:
+      draw 420ms var(--ease-out) var(--d) both,
+      dim 240ms ease-out 1300ms forwards;
+  }
+
+  /* Ask: a question is typed and sent, then a cited answer is written */
+  .is-active .s5-cover {
+    animation-name: type;
+    animation-duration: 1200ms;
+    animation-delay: 200ms;
+    animation-fill-mode: both;
+  }
+
+  .is-active .s5-send {
+    animation: fade-in-hold 200ms ease-out 1300ms both;
+  }
+
+  .s5-send {
+    opacity: 0.35;
+  }
+
+  .is-active .s5-answer {
+    animation: fade 300ms ease-out 1450ms both;
+  }
+
+  .s5-line {
+    transform-box: fill-box;
+    transform-origin: left;
+  }
+
+  .is-active .s5-line {
+    animation: write 320ms var(--ease-out) var(--d) both;
+  }
+
+  @keyframes fade {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @keyframes fade-in-hold {
+    from {
+      opacity: 0.35;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes fade-out {
+    to {
+      opacity: 0;
+    }
+  }
+
+  @keyframes draw {
+    from {
+      stroke-dashoffset: 1;
+    }
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+
+  @keyframes write {
+    from {
+      transform: scaleX(0);
+    }
+  }
+
+  @keyframes type {
+    from {
+      transform: scaleX(1);
+    }
+    to {
+      transform: scaleX(0);
+    }
+  }
+
+  @keyframes field-match {
+    to {
+      stroke: var(--accent);
+    }
+  }
+
+  @keyframes point {
+    from {
+      transform: translate(196px, 204px);
+    }
+    to {
+      transform: translate(287px, 119px);
+    }
+  }
+
+  @keyframes chip-on {
+    to {
+      fill: var(--accent);
+    }
+  }
+
+  @keyframes chip-text-on {
+    to {
+      fill: var(--accent-ink);
+    }
+  }
+
+  @keyframes hot {
+    to {
+      fill: var(--accent-line);
+    }
+  }
+
+  @keyframes press {
+    from {
+      opacity: 0.9;
+      r: 6px;
+    }
+    to {
+      opacity: 0;
+      r: 20px;
+    }
+  }
+
+  @keyframes selected {
+    to {
+      fill: var(--accent-soft);
+      stroke: var(--accent);
+    }
+  }
+
+  @keyframes linked {
+    to {
+      stroke: var(--accent-line);
+    }
+  }
+
+  @keyframes edge-hot {
+    to {
+      stroke: var(--accent);
+    }
+  }
+
+  @keyframes dim {
+    to {
+      opacity: 0.3;
+    }
+  }
+
+  @media (max-height: 640px) {
+    .stage {
+      height: 180px;
+    }
+
+    .copy {
+      min-height: 0;
+    }
+  }
+
+  @media (max-width: 560px) {
+    .stage {
+      height: 200px;
+    }
+
+    .body {
+      padding: 20px 18px 18px;
+    }
+
+    .copy {
+      min-height: 150px;
+    }
+
+    .progress {
+      display: none;
+    }
+  }
+
+  /* Without motion each drawing shows its finished state straight away */
+  @media (prefers-reduced-motion: reduce) {
+    .scene *,
+    .copy {
+      animation-delay: 0ms !important;
+    }
+  }
+</style>

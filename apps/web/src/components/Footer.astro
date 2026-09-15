@@ -1,43 +1,245 @@
 ---
+import BookIcon from "./BookIcon.astro";
 import Logo from "./Logo.astro";
+import Wordmark from "./Wordmark.astro";
+import { loadRepos } from "../lib/site-data.ts";
+
+const repos = loadRepos();
+const ready = repos.filter((repo) => repo.status === "ready");
+const waiting = repos.filter((repo) => repo.status !== "ready");
+const year = new Date().getFullYear();
 ---
 
-<footer class="section site-footer">
-  <div class="frame">
-    <span class="cross l"></span><span class="cross r"></span>
-    <div class="cols">
-      <div class="about">
-        <a class="brand" href="/"><Logo /> EveryRepo</a>
-        <p>
-          A wiki for public GitHub repositories. Every sentence links to the lines of code it was
-          written from.
-        </p>
+<footer class="site-footer snap">
+  <div class="panel">
+    <div class="inner">
+      <div class="cta">
+        <h2 class="cta-title">Understand the next codebase you open.</h2>
+        <div class="cta-actions">
+          <a class="btn btn-line btn-lg" href="/#wiki">See a sample page</a>
+          <a class="btn btn-solid btn-lg book-trigger" href="/#open">Open a repository <BookIcon /></a>
+        </div>
       </div>
-      <nav class="links" aria-label="Footer">
-        <a href="/#guide">Repositories</a>
-        <a href="/#wiki">A wiki page</a>
-        <a href="/#method">Method</a>
-        <a href="/#open">Open a repository</a>
-      </nav>
+
+      <div class="grid">
+        <div class="about">
+          <a class="brand" href="/"><Logo /> EveryRepo</a>
+          <p>
+            Wikis for public GitHub repositories, with every sentence linked to the lines of code it
+            was written from.
+          </p>
+          <span class="status"
+            ><span class="dot"></span>{ready.length} wikis ready, {waiting.length} being written</span
+          >
+        </div>
+
+        <nav class="column" aria-label="Product">
+          <h3 class="heading">Product</h3>
+          <a href="/#wiki">A wiki page</a>
+          <a href="/#guide">Repositories</a>
+          <a href="/#method">How a page is made</a>
+          <a href="/#open">Open a repository</a>
+          <a href="?guide" data-guide-open>How to use it</a>
+        </nav>
+
+        <nav class="column" aria-label="Wikis">
+          <h3 class="heading">Wikis</h3>
+          {
+            ready.map((repo) => (
+              <a href={`/${repo.repo}`}>
+                <span class="owner">{repo.owner} /</span> {repo.name}
+              </a>
+            ))
+          }
+        </nav>
+
+        <div class="column">
+          <h3 class="heading">Being written</h3>
+          {
+            waiting.map((repo) => (
+              <span class="waiting">
+                <span>
+                  <span class="owner">{repo.owner} /</span> {repo.name}
+                </span>
+                <span class="badge">{repo.status === "indexing" ? "Reading" : "Queued"}</span>
+              </span>
+            ))
+          }
+        </div>
+      </div>
+
+      <div class="meta">
+        <span>&copy; {year} EveryRepo</span>
+        <span class="note">Pages are written from public code at the commit shown on each page.</span>
+        <div class="theme-switch" role="radiogroup" aria-label="Color theme" data-theme-switch>
+          <button type="button" role="radio" data-mode="system" aria-label="Match the system">
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+              ><rect x="3" y="4" width="18" height="12" rx="2"></rect><path d="M8 20h8M12 16v4"
+              ></path></svg
+            >
+          </button>
+          <button type="button" role="radio" data-mode="light" aria-label="Light">
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              aria-hidden="true"
+              ><circle cx="12" cy="12" r="4"></circle><path
+                d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"
+              ></path></svg
+            >
+          </button>
+          <button type="button" role="radio" data-mode="dark" aria-label="Dark">
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"></path></svg
+            >
+          </button>
+        </div>
+      </div>
     </div>
-    <div class="wordmark" aria-hidden="true">EveryRepo</div>
-    <div class="legal">
-      <span>Pages are written from public code at the commit shown on each page.</span>
-      <span class="mono">everyrepo.me</span>
+
+    <div class="mark">
+      <Wordmark />
     </div>
   </div>
 </footer>
 
+<script>
+  import { changeTheme } from "../lib/theme.ts";
+
+  type Mode = "system" | "light" | "dark";
+
+  const root = document.documentElement;
+  const system = window.matchMedia("(prefers-color-scheme: light)");
+
+  const savedMode = (): Mode => {
+    try {
+      const saved = localStorage.getItem("theme");
+      return saved === "light" || saved === "dark" || saved === "system" ? saved : "dark";
+    } catch {
+      return "dark";
+    }
+  };
+
+  function reflect(mode: Mode) {
+    document.querySelectorAll<HTMLButtonElement>("[data-theme-switch] button").forEach((button) => {
+      button.setAttribute("aria-checked", String(button.dataset.mode === mode));
+    });
+  }
+
+  const resolve = (mode: Mode) => (mode === "system" ? (system.matches ? "light" : "dark") : mode);
+
+  function apply(mode: Mode) {
+    root.dataset.theme = resolve(mode);
+    try {
+      localStorage.setItem("theme", mode);
+    } catch {
+      // Storage can be blocked, so the choice lasts only for this page view
+    }
+    reflect(mode);
+  }
+
+  reflect(savedMode());
+  document.querySelectorAll<HTMLElement>("[data-theme-switch]").forEach((group) => {
+    group.addEventListener("click", (event) => {
+      const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-mode]");
+      if (!button) return;
+      const mode = button.dataset.mode as Mode;
+      changeTheme(resolve(mode), () => apply(mode), button);
+    });
+  });
+  system.addEventListener("change", () => {
+    if (savedMode() === "system") apply("system");
+  });
+  // The header toggle picks light or dark directly
+  window.addEventListener("themechange", () => reflect(savedMode()));
+</script>
+
 <style>
   .site-footer {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    padding: 16px;
+    background: var(--bg);
+  }
+
+  .panel {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--line-soft);
+    border-radius: 24px;
+    background: var(--bg-raise);
     overflow: hidden;
   }
 
-  .cols {
+  /* Content lines up with the page frame; spacing grows with the screen height and the rows stay centered */
+  .inner {
+    --rhythm: clamp(18px, 4svh, 56px);
+    flex: 1 0 auto;
     display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: var(--rhythm);
+    width: min(100% - 2 * var(--gutter), var(--frame));
+    margin-inline: auto;
+    padding: var(--rhythm) 24px clamp(16px, 3svh, 32px);
+  }
+
+  .cta {
+    display: flex;
+    align-items: center;
     justify-content: space-between;
-    gap: 48px;
-    padding: 56px 24px 40px;
+    gap: 32px;
+    padding-bottom: var(--rhythm);
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .cta-title {
+    font-size: var(--t-h2);
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+  }
+
+  .cta-actions {
+    display: flex;
+    gap: 10px;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.8fr) minmax(0, 1.15fr) minmax(0, 1.15fr);
+    gap: 40px;
+  }
+
+  .about {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+    padding-right: 24px;
   }
 
   .brand {
@@ -50,55 +252,171 @@ import Logo from "./Logo.astro";
   }
 
   .about p {
-    margin-top: 14px;
-    max-width: 380px;
+    max-width: 330px;
     font-size: var(--t-small);
+    line-height: 1.6;
     color: var(--text-2);
   }
 
-  .links {
-    display: grid;
-    grid-template-columns: repeat(2, auto);
-    gap: 10px 48px;
-    align-content: start;
-    font-size: var(--t-ui);
+  .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+    padding: 5px 12px 5px 10px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    font-size: var(--t-caption);
     color: var(--text-2);
   }
 
-  .links a:hover {
+  .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: var(--accent);
+  }
+
+  .column {
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+    font-size: var(--t-small);
+  }
+
+  .heading {
+    margin-bottom: 4px;
+    font-family: var(--font-sans);
+    font-size: var(--t-label);
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-3);
+  }
+
+  .column a {
+    white-space: nowrap;
+    color: var(--text-2);
+    transition: color 140ms ease;
+  }
+
+  .column a:hover {
     color: var(--text);
   }
 
-  .wordmark {
-    padding: 0 16px;
-    font-family: var(--font-serif);
-    font-size: clamp(88px, 17.5vw, 232px);
-    line-height: 0.78;
-    font-weight: 500;
-    letter-spacing: -0.045em;
-    color: transparent;
-    -webkit-text-stroke: 1px var(--line);
-    user-select: none;
+  .owner {
+    color: var(--text-3);
+  }
+
+  .waiting {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    color: var(--text-2);
+  }
+
+  .badge {
+    padding: 1px 8px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    font-size: 11px;
+    color: var(--text-3);
     white-space: nowrap;
   }
 
-  .legal {
-    position: relative;
+  .meta {
     display: flex;
-    justify-content: space-between;
+    align-items: center;
     gap: 24px;
-    padding: 20px 24px 28px;
+    padding-top: 20px;
     border-top: 1px solid var(--line-soft);
-    background: var(--bg);
     font-size: var(--t-caption);
     color: var(--text-3);
   }
 
-  @media (max-width: 720px) {
-    .cols,
-    .legal {
+  .note {
+    flex-grow: 1;
+  }
+
+  .theme-switch {
+    display: flex;
+    padding: 3px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+  }
+
+  .theme-switch button {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 26px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-3);
+    cursor: pointer;
+    transition:
+      background-color 160ms ease,
+      color 160ms ease;
+  }
+
+  .theme-switch button:hover {
+    color: var(--text);
+  }
+
+  .theme-switch button[aria-checked="true"] {
+    background: var(--panel-2);
+    color: var(--text);
+  }
+
+  /* The wordmark spans the whole panel, wider than the content above it */
+  .mark {
+    display: flex;
+    padding: 0 32px;
+  }
+
+  @media (min-width: 1000px) and (max-height: 820px) {
+    .column {
+      gap: 9px;
+    }
+  }
+
+  @media (max-width: 1000px) {
+    .grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .cta {
       flex-direction: column;
-      padding-inline: 0;
+      align-items: flex-start;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .site-footer {
+      padding: 8px;
+    }
+
+    .inner {
+      padding: 36px 4px 24px;
+    }
+
+    .mark {
+      padding: 0 4px;
+    }
+
+    .grid {
+      grid-template-columns: 1fr;
+    }
+
+    .cta-actions {
+      flex-direction: column;
+      width: 100%;
+    }
+
+    .meta {
+      flex-wrap: wrap;
     }
   }
 </style>

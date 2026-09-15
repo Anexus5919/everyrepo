@@ -1,0 +1,1164 @@
+---
+import { shortSha } from "../lib/format.ts";
+
+interface Props {
+  repo: string;
+  sha: string;
+  suggestions: string[];
+  // Slug of the wiki page the panel opens on, sent so answers know where the reader is
+  page?: string;
+}
+const { repo, sha, suggestions, page } = Astro.props;
+const name = repo.split("/")[1] ?? repo;
+---
+
+<dialog class="ask" aria-labelledby="ask-title" data-ask data-repo={repo} data-page={page}>
+  <div class="ask-shell">
+    <header class="ask-head">
+      <div class="ask-heading">
+        <h2 id="ask-title">Ask about {name}</h2>
+        <p>
+          Answers are written from the code at commit <span class="mono">{shortSha(sha)}</span>, and
+          every claim links to the lines it came from.
+        </p>
+      </div>
+      <button class="ask-clear" type="button" data-ask-clear hidden>Clear</button>
+      <button class="ask-close" type="button" aria-label="Close" data-ask-close>
+        <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"
+          ><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+          ></path></svg
+        >
+      </button>
+    </header>
+
+    <div class="ask-log" data-ask-log>
+      <div class="ask-empty" data-ask-empty>
+        <span class="ask-label">Try asking</span>
+        {
+          suggestions.map((text) => (
+            <button class="suggestion" type="button" data-ask-suggest>
+              {text}
+            </button>
+          ))
+        }
+      </div>
+    </div>
+
+    <form class="ask-form" data-ask-form>
+      <label class="sr-only" for="ask-input">Your question</label>
+      <textarea
+        id="ask-input"
+        rows="1"
+        maxlength="300"
+        placeholder={`Ask about ${name}`}
+        autocomplete="off"
+        data-ask-input></textarea>
+      <button class="ask-send" type="submit" aria-label="Send the question" data-ask-send>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"
+          ><path
+            d="M3 8h10M9 4l4 4-4 4"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round"
+            stroke-linejoin="round"></path></svg
+        >
+      </button>
+    </form>
+  </div>
+</dialog>
+
+<script>
+  import {
+    escapeHtml,
+    excerptLines,
+    plainAnswer,
+    renderAnswer,
+    takeLines,
+    type AskAnswer,
+    type AskDiagram,
+    type AskStreamLine,
+    type IssueCard,
+  } from "../lib/ask-render.ts";
+
+  interface Turn {
+    question: string;
+    answer?: AskAnswer;
+    error?: string;
+  }
+
+  const ASK_URL = (import.meta.env.PUBLIC_ASK_URL as string | undefined) ?? "http://127.0.0.1:8787";
+  const LOCAL_API = /^http:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?$/.test(ASK_URL);
+  const KEPT_TURNS = 8;
+
+  const panel = document.querySelector<HTMLDialogElement>("[data-ask]");
+  if (panel) {
+    const repo = panel.dataset.repo!;
+    const page = panel.dataset.page ?? null;
+    const log = panel.querySelector<HTMLElement>("[data-ask-log]")!;
+    const empty = panel.querySelector<HTMLElement>("[data-ask-empty]")!;
+    const form = panel.querySelector<HTMLFormElement>("[data-ask-form]")!;
+    const input = panel.querySelector<HTMLTextAreaElement>("[data-ask-input]")!;
+    const send = panel.querySelector<HTMLButtonElement>("[data-ask-send]")!;
+    const clear = panel.querySelector<HTMLButtonElement>("[data-ask-clear]")!;
+    // The version in the key keeps answers saved in an older shape from being read back
+    const storageKey = `ask:v2:${repo}`;
+    let turns: Turn[] = [];
+    let busy = false;
+
+    // Questions and answers last for the visit, so moving between pages keeps the conversation
+    const save = () => {
+      try {
+        sessionStorage.setItem(storageKey, JSON.stringify(turns.slice(-KEPT_TURNS)));
+      } catch {
+        // The conversation then lasts only for this page
+      }
+    };
+    const restore = (): Turn[] => {
+      try {
+        const saved = JSON.parse(sessionStorage.getItem(storageKey) ?? "[]") as unknown;
+        if (!Array.isArray(saved)) return [];
+        return (saved as Array<Partial<Turn> | null>).filter(
+          (turn): turn is Turn =>
+            typeof turn?.question === "string" &&
+            typeof turn.answer?.markdown === "string" &&
+            Array.isArray(turn.answer.sources) &&
+            Array.isArray(turn.answer.otherIssues),
+        );
+      } catch {
+        return [];
+      }
+    };
+
+    const fileParts = (path: string) => ({
+      name: path.split("/").pop() ?? path,
+      folder: path.split("/").slice(0, -1).join("/"),
+    });
+
+    const KIND_LABELS = {
+      issue: "GitHub issue",
+      page: "Wiki page",
+      summary: "Repository overview",
+      diagram: "Diagram on the page",
+    };
+    const chevron = `<svg class="chevron" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>`;
+
+    const sourceRow = (source: AskAnswer["sources"][number]) => {
+      if (source.kind !== "code") {
+        const external = source.url.startsWith("https://");
+        const preview = source.excerpt.split("\n").filter(Boolean).slice(0, 8).join("\n");
+        return `<li class="source" data-source="${source.number}">
+          <button type="button" class="source-row" aria-expanded="false" data-source-toggle>
+            <span class="cite">${source.number}</span>
+            <span class="source-file"><span>${escapeHtml(source.title)}</span><span class="source-folder">${KIND_LABELS[source.kind]}</span></span>
+            ${chevron}
+          </button>
+          <div class="source-excerpt" hidden>
+            <p class="source-text">${escapeHtml(preview)}</p>
+            <a class="source-link" href="${escapeHtml(source.url)}"${external ? ' target="_blank" rel="noopener"' : ""}>${source.kind === "issue" ? "Open the issue on GitHub" : "Open in the wiki"}</a>
+          </div>
+        </li>`;
+      }
+      const { name, folder } = fileParts(source.path);
+      const { lines, more } = excerptLines(source);
+      const code = lines
+        .map((line) => `<span class="ln">${line.number}</span>${escapeHtml(line.text)}`)
+        .join("\n");
+      return `<li class="source" data-source="${source.number}">
+        <button type="button" class="source-row" aria-expanded="false" data-source-toggle>
+          <span class="cite">${source.number}</span>
+          <span class="source-file"><span class="mono">${escapeHtml(name)}</span><span class="source-folder mono">${escapeHtml(folder)}</span></span>
+          <span class="source-lines mono">${source.startLine}-${source.endLine}</span>
+          ${chevron}
+        </button>
+        <div class="source-excerpt" hidden>
+          <pre>${code}</pre>
+          <a class="source-link" href="${escapeHtml(source.url)}" target="_blank" rel="noopener">${more > 0 ? `${more} more lines on GitHub` : "Open on GitHub"}</a>
+        </div>
+      </li>`;
+    };
+
+    const shortDate = (iso: string) =>
+      new Date(iso).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" });
+
+    const issueCardHtml = (issue: IssueCard) =>
+      `<a class="issue-card" href="${escapeHtml(issue.url)}" target="_blank" rel="noopener">
+        <span class="issue-top"><span class="ask-label">Suggested issue</span><span class="issue-number mono">#${issue.number}</span></span>
+        <span class="issue-title">${escapeHtml(issue.title)}</span>
+        <span class="issue-meta">${issue.labels
+          .slice(0, 4)
+          .map((label) => `<span class="issue-label">${escapeHtml(label)}</span>`)
+          .join("")}<span>${issue.comments} ${issue.comments === 1 ? "comment" : "comments"}, updated ${shortDate(issue.updatedAt)}</span></span>
+      </a>`;
+
+    const otherIssuesBlock = (answer: AskAnswer) =>
+      answer.otherIssues.length === 0
+        ? ""
+        : `<div class="answer-issues"><span class="ask-label">Other open issues for newcomers</span>${answer.otherIssues
+            .map(
+              (issue) =>
+                `<a class="issue-row" href="${escapeHtml(issue.url)}" target="_blank" rel="noopener"><span class="mono">#${issue.number}</span><span>${escapeHtml(issue.title)}</span></a>`,
+            )
+            .join("")}</div>`;
+
+    const suggestionTexts = [
+      ...panel.querySelectorAll<HTMLButtonElement>("[data-ask-suggest]"),
+    ].map((button) => button.textContent?.trim() ?? "");
+
+    const pagesBlock = (answer: AskAnswer) =>
+      answer.pages.length === 0
+        ? ""
+        : `<div class="answer-pages"><span class="ask-label">Read more in the wiki</span>${answer.pages
+            .map(
+              (page) =>
+                `<a href="/${repo}/${encodeURIComponent(page.slug)}">${escapeHtml(page.title)}</a>`,
+            )
+            .join("")}</div>`;
+
+    const readBlock = (files: AskAnswer["files"]) =>
+      files.length === 0
+        ? ""
+        : `<details class="turn-read"><summary>Read ${files.length} ${files.length === 1 ? "file" : "files"}</summary><div class="file-chips">${files
+            .map(
+              (file) =>
+                `<a class="file-chip mono" href="${escapeHtml(file.url)}" target="_blank" rel="noopener">${escapeHtml(fileParts(file.path).name)}</a>`,
+            )
+            .join("")}</div></details>`;
+
+    function answerHtml(answer: AskAnswer): string {
+      const issue = answer.issue ? issueCardHtml(answer.issue) : "";
+      if (answer.status === "off-topic") {
+        return `<p class="ask-note">${escapeHtml(answer.note)}</p>
+          <div class="ask-empty inline"><span class="ask-label">Try asking</span>${suggestionTexts
+            .map(
+              (text) =>
+                `<button class="suggestion" type="button" data-ask-suggest>${escapeHtml(text)}</button>`,
+            )
+            .join("")}</div>`;
+      }
+      if (answer.status === "not-found") {
+        const issueSearch =
+          answer.intent === "contribute" && !answer.issue
+            ? `<a class="source-link" href="https://github.com/${repo}/issues?q=${encodeURIComponent('is:issue is:open label:"good first issue"')}" target="_blank" rel="noopener">Browse newcomer issues on GitHub</a>`
+            : "";
+        return `${issue}${readBlock(answer.files)}
+          <p class="ask-note">${escapeHtml(answer.note || "The code that was read does not answer this.")}</p>
+          ${issueSearch}${otherIssuesBlock(answer)}${pagesBlock(answer)}`;
+      }
+      const sources =
+        answer.sources.length === 0
+          ? ""
+          : `<div class="answer-sources"><span class="ask-label">Sources</span><ol>${answer.sources.map(sourceRow).join("")}</ol></div>`;
+      return `${issue}${readBlock(answer.files)}
+        <div class="answer-prose">${renderAnswer(answer.markdown)}</div>
+        ${sources}${otherIssuesBlock(answer)}${pagesBlock(answer)}`;
+    }
+
+    const errorHtml = (message: string, offline: boolean) =>
+      `<div class="turn-error"><p>${escapeHtml(message)}</p>${
+        offline && LOCAL_API
+          ? `<p class="hint">Start it on this machine with <code>pnpm everyrepo serve</code>.</p>`
+          : ""
+      }<button type="button" class="btn btn-line" data-ask-retry>Try again</button></div>`;
+
+    function turnElement(turn: Turn): HTMLElement {
+      const article = document.createElement("article");
+      article.className = "turn";
+      article.innerHTML = `<p class="turn-question">${escapeHtml(turn.question)}</p><div class="turn-body"></div>`;
+      const body = article.querySelector<HTMLElement>(".turn-body")!;
+      if (turn.answer) body.innerHTML = answerHtml(turn.answer);
+      else if (turn.error) body.innerHTML = errorHtml(turn.error, false);
+      return article;
+    }
+
+    const stepsHtml = () =>
+      `<ol class="steps"></ol><div class="file-chips reading" hidden></div>`;
+
+    // Each stage the server reports becomes a step; earlier steps are marked done
+    function showStage(body: HTMLElement, stage: string, label: string, files?: string[]) {
+      const list = body.querySelector<HTMLElement>(".steps");
+      if (!list) return;
+      let item = list.querySelector<HTMLElement>(`[data-step="${stage}"]`);
+      list.querySelectorAll<HTMLElement>("[data-step]").forEach((step) => {
+        if (step !== item) step.dataset.state = "done";
+      });
+      if (!item) {
+        item = document.createElement("li");
+        item.dataset.step = stage;
+        item.innerHTML = `<span class="step-mark" aria-hidden="true"></span><span class="step-text"></span>`;
+        list.append(item);
+      }
+      item.dataset.state = "active";
+      item.querySelector(".step-text")!.textContent = label;
+      if (files) {
+        const chips = body.querySelector<HTMLElement>(".file-chips.reading")!;
+        // Files appear one after another, in the order they ranked
+        chips.innerHTML = files
+          .map(
+            (path, index) =>
+              `<span class="file-chip mono" style="animation-delay:${index * 60}ms">${escapeHtml(fileParts(path).name)}</span>`,
+          )
+          .join("");
+        chips.hidden = files.length === 0;
+      }
+    }
+
+    const scrollToEnd = (element: HTMLElement) =>
+      log.scrollTo({ top: element.offsetTop - 12, behavior: "smooth" });
+
+    const diagrams = new WeakMap<HTMLElement, AskDiagram>();
+
+    async function ask(question: string, replace?: HTMLElement, diagram?: AskDiagram) {
+      const text = question.replace(/\s+/g, " ").trim();
+      if (busy || text.length < 3) return;
+      busy = true;
+      send.disabled = true;
+      empty.hidden = true;
+      clear.hidden = false;
+      const article = turnElement({ question: text });
+      const body = article.querySelector<HTMLElement>(".turn-body")!;
+      body.innerHTML = stepsHtml();
+      if (replace) replace.replaceWith(article);
+      else log.append(article);
+      if (diagram) diagrams.set(article, diagram);
+      showStage(
+        body,
+        diagram ? "reading" : "understanding",
+        diagram ? "Reading the diagram" : "Understanding the question",
+      );
+      scrollToEnd(article);
+
+      const turn: Turn = { question: text };
+      // Recent answered turns let follow-up questions refer back to them
+      const history = turns
+        .filter((earlier) => earlier.answer)
+        .slice(-3)
+        .map((earlier) => ({ question: earlier.question, answer: plainAnswer(earlier.answer!) }));
+      let offline = false;
+      try {
+        const response = await fetch(`${ASK_URL}/api/ask`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ repo, question: text, page, history, diagram: diagram ?? null }),
+        }).catch(() => {
+          offline = true;
+          throw new Error("Ask is offline right now.");
+        });
+        if (!response.ok || !response.body) {
+          const payload = (await response.json().catch(() => ({}))) as { error?: string };
+          throw new Error(payload.error ?? "Ask could not answer right now.");
+        }
+        const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+        let buffer = "";
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          const parsed = takeLines(buffer + value);
+          buffer = parsed.rest;
+          for (const line of parsed.lines as AskStreamLine[]) {
+            if (line.type === "stage") showStage(body, line.stage, line.label, line.files);
+            if (line.type === "answer") turn.answer = line.answer;
+            if (line.type === "error") throw new Error(line.message);
+          }
+        }
+        if (!turn.answer) throw new Error("Ask stopped before it finished. Try again.");
+        body.innerHTML = answerHtml(turn.answer);
+        body.classList.add("is-arriving");
+      } catch (error) {
+        turn.error = error instanceof Error ? error.message : "Ask could not answer right now.";
+        body.innerHTML = errorHtml(turn.error, offline);
+      } finally {
+        if (turn.answer) {
+          turns.push(turn);
+          save();
+        }
+        busy = false;
+        send.disabled = false;
+      }
+    }
+
+    function open(question?: string, diagram?: AskDiagram) {
+      if (!panel!.open) panel!.show();
+      document.documentElement.classList.add("ask-open");
+      if (question) void ask(question, undefined, diagram);
+      else input.focus({ preventScroll: true });
+    }
+
+    function close() {
+      panel!.close();
+      document.documentElement.classList.remove("ask-open");
+    }
+
+    // Diagrams offer their explain button only on pages that have this panel
+    document.documentElement.classList.add("has-ask");
+    document.addEventListener("click", (event) => {
+      const button = (event.target as Element).closest<HTMLElement>("[data-diagram-ask]");
+      if (!button) return;
+      event.preventDefault();
+      const svg =
+        button.closest("[data-diagram]")?.querySelector(".diagram-scroll svg") ??
+        button.closest("dialog")?.querySelector("[data-stage-inner] svg");
+      if (!svg) return;
+      const diagram: AskDiagram = {
+        nodes: [...svg.querySelectorAll<SVGGElement>(".node")].map((node) => ({
+          id: Number(node.dataset.node),
+          label: node.querySelector("title")?.textContent ?? "",
+        })),
+        edges: [...svg.querySelectorAll<SVGPathElement>(".edge")].map((edge) => ({
+          from: Number(edge.dataset.from),
+          to: Number(edge.dataset.to),
+        })),
+      };
+      button.closest("dialog")?.close();
+      open("Explain this diagram in simple words", diagram);
+    });
+
+    // Question boxes elsewhere on the page are wired first, so nothing below can leave them submitting the page
+    document.addEventListener("click", (event) => {
+      const trigger = (event.target as HTMLElement).closest<HTMLElement>("[data-ask-open]");
+      if (!trigger) return;
+      event.preventDefault();
+      open(trigger.dataset.askQuestion);
+    });
+    document.querySelectorAll<HTMLFormElement>("[data-ask-launch]").forEach((launch) => {
+      launch.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const field = launch.querySelector<HTMLInputElement>("input");
+        const question = field?.value.trim() ?? "";
+        if (field) field.value = "";
+        open(question.length >= 3 ? question : undefined);
+      });
+    });
+
+    turns = restore().filter((turn) => {
+      try {
+        log.append(turnElement(turn));
+        return true;
+      } catch {
+        return false;
+      }
+    });
+    empty.hidden = turns.length > 0;
+    clear.hidden = turns.length === 0;
+
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const question = input.value;
+      if (question.trim().length < 3 || busy) return;
+      input.value = "";
+      input.style.height = "";
+      void ask(question);
+    });
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        form.requestSubmit();
+      }
+    });
+    input.addEventListener("input", () => {
+      input.style.height = "";
+      input.style.height = `${Math.min(input.scrollHeight, 160)}px`;
+    });
+    panel.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") close();
+    });
+    panel.querySelector("[data-ask-close]")!.addEventListener("click", close);
+    clear.addEventListener("click", () => {
+      turns = [];
+      save();
+      log.querySelectorAll(".turn").forEach((item) => item.remove());
+      empty.hidden = false;
+      clear.hidden = true;
+    });
+
+    log.addEventListener("click", (event) => {
+      const target = event.target as HTMLElement;
+      const suggestion = target.closest<HTMLButtonElement>("[data-ask-suggest]");
+      if (suggestion) void ask(suggestion.textContent ?? "");
+
+      const toggle = target.closest<HTMLButtonElement>("[data-source-toggle]");
+      if (toggle) {
+        const excerpt = toggle.nextElementSibling as HTMLElement;
+        excerpt.hidden = !excerpt.hidden;
+        toggle.setAttribute("aria-expanded", String(!excerpt.hidden));
+      }
+
+      const retry = target.closest<HTMLButtonElement>("[data-ask-retry]");
+      if (retry) {
+        const article = retry.closest<HTMLElement>(".turn")!;
+        void ask(
+          article.querySelector(".turn-question")?.textContent ?? "",
+          article,
+          diagrams.get(article),
+        );
+      }
+
+      // A number in the answer opens its lines below; with a modifier key it opens GitHub
+      const cite = target.closest<HTMLAnchorElement>(".answer-prose a.cite");
+      if (cite && !(event as MouseEvent).metaKey && !(event as MouseEvent).ctrlKey) {
+        event.preventDefault();
+        const row = cite
+          .closest(".turn")
+          ?.querySelector<HTMLElement>(`[data-source="${cite.dataset.cite}"]`);
+        if (!row) return;
+        const rowToggle = row.querySelector<HTMLButtonElement>("[data-source-toggle]")!;
+        const excerpt = row.querySelector<HTMLElement>(".source-excerpt")!;
+        excerpt.hidden = false;
+        rowToggle.setAttribute("aria-expanded", "true");
+        row.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        row.classList.remove("is-flashed");
+        void row.offsetWidth;
+        row.classList.add("is-flashed");
+      }
+    });
+
+    const linkRows = (event: Event, on: boolean) => {
+      const cite = (event.target as HTMLElement).closest<HTMLElement>(".answer-prose a.cite");
+      if (!cite) return;
+      cite
+        .closest(".turn")
+        ?.querySelector(`[data-source="${cite.dataset.cite}"]`)
+        ?.classList.toggle("is-linked", on);
+    };
+    log.addEventListener("mouseover", (event) => linkRows(event, true));
+    log.addEventListener("mouseout", (event) => linkRows(event, false));
+
+    // A question box that submitted before this script ran leaves its question in the address
+    const pending = new URLSearchParams(window.location.search).get("question");
+    if (pending) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("question");
+      history.replaceState(history.state, "", url);
+      if (pending.trim().length >= 3) open(pending);
+    }
+
+  }
+</script>
+
+<style>
+  .ask {
+    position: fixed;
+    inset: var(--header) 0 0 auto;
+    z-index: 70;
+    width: min(560px, 100vw);
+    height: auto;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-left: 1px solid var(--line);
+    background: var(--bg-raise);
+    color: var(--text);
+    box-shadow: -40px 0 80px -48px rgba(0, 0, 0, 0.55);
+  }
+
+  /* The panel comes in from the edge it is attached to */
+  .ask[open] {
+    animation: ask-in 240ms var(--ease-out);
+  }
+
+  @keyframes ask-in {
+    from {
+      opacity: 0;
+      transform: translateX(16px);
+    }
+  }
+
+  .ask-shell {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    height: 100%;
+  }
+
+  .ask-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 18px 16px 16px 24px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .ask-heading {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-right: auto;
+  }
+
+  .ask-heading h2 {
+    font-size: var(--t-h4);
+    line-height: 1.25;
+  }
+
+  .ask-heading p {
+    font-size: var(--t-caption);
+    line-height: 1.5;
+    color: var(--text-3);
+  }
+
+  .ask-close,
+  .ask-clear {
+    display: grid;
+    place-items: center;
+    height: 32px;
+    min-width: 32px;
+    padding: 0 10px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: transparent;
+    font-size: var(--t-caption);
+    color: var(--text-2);
+    cursor: pointer;
+  }
+
+  .ask-close:hover,
+  .ask-clear:hover {
+    color: var(--text);
+    border-color: var(--text-3);
+  }
+
+  .ask-log {
+    overflow-y: auto;
+    padding: 8px 24px 24px;
+    overscroll-behavior: contain;
+  }
+
+  .ask-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding-top: 16px;
+  }
+
+  .suggestion {
+    max-width: 100%;
+    padding: 9px 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--panel);
+    font-size: var(--t-ui);
+    text-align: left;
+    color: var(--text-2);
+    cursor: pointer;
+    transition:
+      border-color 140ms ease,
+      color 140ms ease;
+  }
+
+  .suggestion:hover {
+    border-color: var(--text-3);
+    color: var(--text);
+  }
+
+  .ask-form {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    margin: 0 16px 16px;
+    padding: 8px 8px 8px 14px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--panel);
+    transition: border-color 140ms ease;
+  }
+
+  .ask-form:focus-within {
+    border-color: var(--text-3);
+  }
+
+  .ask-form textarea {
+    flex-grow: 1;
+    min-height: 34px;
+    max-height: 160px;
+    padding: 7px 0;
+    border: 0;
+    outline: 0;
+    resize: none;
+    background: transparent;
+    font: inherit;
+    font-size: var(--t-small);
+    line-height: 1.4;
+    color: var(--text);
+  }
+
+  .ask-send {
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: 34px;
+    height: 34px;
+    border: 0;
+    border-radius: var(--radius);
+    background: var(--button-bg);
+    color: var(--button-ink);
+    cursor: pointer;
+  }
+
+  .ask-send:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  .ask-send:not(:disabled):hover path {
+    animation: nudge 260ms var(--ease-out);
+  }
+
+  @keyframes nudge {
+    50% {
+      transform: translateX(2px);
+    }
+  }
+
+  @media (max-width: 640px) {
+    .ask {
+      width: 100vw;
+      border-left: 0;
+    }
+  }
+</style>
+
+<style is:global>
+  .ask .ask-label {
+    font-size: var(--t-label);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-3);
+  }
+
+  .ask .turn {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 20px 0;
+  }
+
+  .ask .turn + .turn {
+    border-top: 1px solid var(--line-soft);
+  }
+
+  .ask .turn-question {
+    font-family: var(--font-serif);
+    font-size: 20px;
+    line-height: 1.3;
+    color: var(--text);
+  }
+
+  .ask .turn-body {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .ask .turn-body.is-arriving {
+    animation: answer-in 280ms ease-out;
+  }
+
+  @keyframes answer-in {
+    from {
+      opacity: 0;
+    }
+  }
+
+  .ask .steps {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .ask .steps li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: var(--t-caption);
+    color: var(--text-3);
+    transition: color 160ms ease;
+  }
+
+  .ask .steps li[data-state="active"] {
+    color: var(--text);
+  }
+
+  .ask .steps li[data-state="done"] {
+    color: var(--text-2);
+  }
+
+  .ask .step-mark {
+    position: relative;
+    width: 14px;
+    height: 14px;
+    border: 1.5px solid var(--line);
+    border-radius: 50%;
+  }
+
+  /* The step in progress turns; a finished step becomes a check */
+  .ask [data-state="active"] .step-mark {
+    border-color: var(--line);
+    border-top-color: var(--accent);
+    animation: step-turn 800ms linear infinite;
+  }
+
+  .ask [data-state="done"] .step-mark {
+    border-color: var(--accent);
+    background: var(--accent);
+  }
+
+  .ask [data-state="done"] .step-mark::after {
+    content: "";
+    position: absolute;
+    left: 3.5px;
+    top: 1px;
+    width: 3px;
+    height: 6px;
+    border: solid var(--accent-ink);
+    border-width: 0 1.5px 1.5px 0;
+    transform: rotate(45deg);
+  }
+
+  @keyframes step-turn {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .ask .file-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .ask .file-chips.reading {
+    padding-left: 24px;
+  }
+
+  .ask .file-chip {
+    padding: 3px 8px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    font-size: 11px;
+    color: var(--text-2);
+  }
+
+  .ask .file-chips.reading .file-chip {
+    animation: chip-in 220ms ease-out both;
+  }
+
+  a.file-chip:hover {
+    border-color: var(--text-3);
+    color: var(--text);
+  }
+
+  @keyframes chip-in {
+    from {
+      opacity: 0;
+    }
+  }
+
+  .ask .turn-read summary {
+    width: fit-content;
+    font-size: var(--t-caption);
+    color: var(--text-3);
+    cursor: pointer;
+  }
+
+  .ask .turn-read summary:hover {
+    color: var(--text);
+  }
+
+  .ask .turn-read .file-chips {
+    margin-top: 8px;
+  }
+
+  .ask .answer-prose {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    font-size: var(--t-small);
+    line-height: 1.7;
+    color: var(--text-2);
+  }
+
+  .ask .answer-prose p,
+  .ask .answer-prose ul,
+  .ask .answer-prose ol {
+    margin: 0;
+  }
+
+  .ask .answer-prose ul,
+  .ask .answer-prose ol {
+    padding-left: 20px;
+  }
+
+  .ask .answer-prose strong {
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .ask .answer-code {
+    margin: 0;
+    padding: 12px 14px;
+    overflow-x: auto;
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius);
+    background: var(--bg);
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: var(--code-foreground);
+  }
+
+  .ask .answer-sources ol {
+    display: flex;
+    flex-direction: column;
+    margin: 8px 0 0;
+    padding: 0;
+    list-style: none;
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius);
+  }
+
+  .ask .source + .source {
+    border-top: 1px solid var(--line-soft);
+  }
+
+  .ask .source-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 9px 12px;
+    border: 0;
+    background: transparent;
+    text-align: left;
+    color: var(--text-2);
+    cursor: pointer;
+    transition: background-color 140ms ease;
+  }
+
+  .ask .source-row:hover,
+  .ask .source.is-linked .source-row {
+    background: var(--panel-2);
+  }
+
+  .ask .source.is-flashed .source-row {
+    animation: source-flash 700ms ease-out;
+  }
+
+  @keyframes source-flash {
+    from {
+      background: var(--accent-soft);
+    }
+  }
+
+  .ask .source-row .cite {
+    flex-shrink: 0;
+    vertical-align: 0;
+  }
+
+  .ask .source-file {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    margin-right: auto;
+    font-size: var(--t-caption);
+    color: var(--text);
+  }
+
+  .ask .source-folder {
+    overflow: hidden;
+    font-size: 11px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: var(--text-3);
+  }
+
+  .ask .source-lines {
+    flex-shrink: 0;
+    font-size: 11px;
+    color: var(--text-3);
+  }
+
+  .ask .chevron {
+    flex-shrink: 0;
+    color: var(--text-3);
+    transition: transform 160ms var(--ease-out);
+  }
+
+  .ask [aria-expanded="true"] .chevron {
+    transform: rotate(180deg);
+  }
+
+  .ask .source-excerpt {
+    padding: 0 12px 12px;
+  }
+
+  .ask .source-excerpt pre {
+    margin: 0;
+    padding: 10px 12px;
+    overflow-x: auto;
+    border-radius: var(--radius);
+    background: var(--bg);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--code-foreground);
+  }
+
+  .ask .source-excerpt .ln {
+    display: inline-block;
+    width: 3.2em;
+    padding-right: 1em;
+    text-align: right;
+    color: var(--text-3);
+    user-select: none;
+  }
+
+  .ask .source-link {
+    display: inline-block;
+    margin-top: 8px;
+    font-size: var(--t-caption);
+    color: var(--text-3);
+  }
+
+  .ask .source-link:hover {
+    color: var(--accent);
+  }
+
+  .ask .answer-pages {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .ask .answer-pages a {
+    font-size: var(--t-ui);
+    color: var(--text);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .ask .answer-pages a:hover {
+    border-color: var(--accent);
+  }
+
+  .ask .ask-note,
+  .ask .turn-error p {
+    font-size: var(--t-small);
+    line-height: 1.6;
+    color: var(--text-2);
+  }
+
+  .ask .ask-empty.inline {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .ask .issue-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 14px 16px;
+    border: 1px solid var(--accent-line);
+    border-radius: 10px;
+    background: var(--accent-soft);
+    transition: border-color 140ms ease;
+  }
+
+  .ask .issue-card:hover {
+    border-color: var(--accent);
+  }
+
+  .ask .issue-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .ask .issue-number {
+    font-size: var(--t-caption);
+    color: var(--accent);
+  }
+
+  .ask .issue-title {
+    font-size: var(--t-small);
+    font-weight: 500;
+    line-height: 1.45;
+    color: var(--text);
+  }
+
+  .ask .issue-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 8px;
+    font-size: 11px;
+    color: var(--text-3);
+  }
+
+  .ask .issue-label {
+    padding: 1px 7px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--bg-raise);
+    color: var(--text-2);
+  }
+
+  .ask .answer-issues {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .ask .issue-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 10px;
+    font-size: var(--t-ui);
+    line-height: 1.45;
+    color: var(--text-2);
+  }
+
+  .ask .issue-row .mono {
+    font-size: var(--t-caption);
+    color: var(--text-3);
+  }
+
+  .ask .issue-row:hover {
+    color: var(--text);
+  }
+
+  .ask .source-text {
+    margin: 0;
+    padding: 10px 12px;
+    border-radius: var(--radius);
+    background: var(--bg);
+    font-size: var(--t-caption);
+    line-height: 1.6;
+    white-space: pre-line;
+    color: var(--text-2);
+  }
+
+  .ask .turn-error {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .ask .turn-error .hint {
+    font-size: var(--t-caption);
+    color: var(--text-3);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ask [data-state="active"] .step-mark {
+      animation: none;
+      border-color: var(--accent);
+    }
+  }
+</style>

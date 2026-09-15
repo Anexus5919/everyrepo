@@ -1,0 +1,55 @@
+---
+interface Props {
+  size?: number;
+}
+const { size = 16 } = Astro.props;
+---
+
+<svg
+  class="book-icon"
+  width={size}
+  height={size}
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="1.7"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+  aria-hidden="true"
+>
+  <g class="closed">
+    <path d="M5 19V5.5A2.5 2.5 0 0 1 7.5 3H19v14H7.5A2.5 2.5 0 0 0 5 19.5z"></path>
+    <path d="M5 19.5A2.5 2.5 0 0 0 7.5 22H19v-5"></path>
+  </g>
+  <g class="open">
+    <path pathLength="1" d="M2.5 5.5c3.2-1.4 6.4-1.4 9.5 0v14c-3.1-1.4-6.3-1.4-9.5 0z"></path>
+    <path pathLength="1" d="M21.5 5.5c-3.2-1.4-6.4-1.4-9.5 0v14c3.1-1.4 6.3-1.4 9.5 0z"></path>
+  </g>
+</svg>
+
+<style>
+  .book-icon {
+    flex-shrink: 0;
+  }
+
+  .closed {
+    transition: opacity 140ms ease;
+  }
+
+  .open path {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    transition: stroke-dashoffset 380ms var(--ease-out) 80ms;
+  }
+
+  /* Opening the book is the preview of opening the wiki */
+  :global(.book-trigger:hover) .closed,
+  :global(.book-trigger:focus-visible) .closed {
+    opacity: 0;
+  }
+
+  :global(.book-trigger:hover) .open path,
+  :global(.book-trigger:focus-visible) .open path {
+    stroke-dashoffset: 0;
+  }
+</style>

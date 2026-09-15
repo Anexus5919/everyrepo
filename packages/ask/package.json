@@ -1,0 +1,16 @@
+{
+  "name": "@everyrepo/ask",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@everyrepo/db": "workspace:*",
+    "@everyrepo/llm": "workspace:*",
+    "@everyrepo/search": "workspace:*",
+    "@everyrepo/wiki": "workspace:*",
+    "zod": "^4.6.4"
+  }
+}

@@ -1,0 +1,716 @@
+---
+import type { PipelineItem } from "../lib/showcase.ts";
+
+interface Props {
+  items: PipelineItem[];
+}
+const { items } = Astro.props;
+const names = [...new Set(items.map((item) => item.repo))].join(", ");
+---
+
+<div class="pipeline" data-pipeline data-items={JSON.stringify(items)}>
+  <canvas aria-hidden="true"></canvas>
+  <p class="sr-only">
+    Pages from {names} come off their repositories one at a time. Each page is organized into a
+    section, explained in plain English, linked to the exact lines of code it came from, checked
+    against that code, and filed into its wiki.
+  </p>
+</div>
+
+<style>
+  .pipeline {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 640 / 470;
+  }
+
+  canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+</style>
+
+<script>
+  interface Item {
+    repo: string;
+    files: string;
+    title: string;
+    file: string;
+    lines: string;
+  }
+
+  interface Faces {
+    top: string;
+    left: string;
+    right: string;
+  }
+
+  type Point = [number, number];
+
+  const K = Math.sqrt(3) / 2;
+  const STATIONS = ["organized", "explained", "linked", "checked"];
+  const LAST = STATIONS.length;
+  const STEP = 2;
+  const MOVE = 0.3;
+  const TILE = 0.8;
+  const TILE_Y = 0.22;
+  const TILE_H = 0.1;
+  const STACK_W = 1.1;
+  const STACK_X = -2.75;
+  const STACK_Y = TILE_Y + TILE / 2 - STACK_W / 2;
+  const SLABS = 12;
+  const SLAB = 0.09;
+  const STACK_TOP = SLABS * SLAB;
+  const SPACING = 1.6;
+  const STATION_W = 1.15;
+  const STATION_Y = -1.45;
+  const STATION_D = 0.9;
+  const STATION_TOP = 0.75;
+  const WIKI_X = SPACING * LAST;
+  const WIKI_W = 1.3;
+  const WIKI_TOP = 0.9;
+  const TRACK_X0 = STACK_X - 0.25;
+  const TRACK_X1 = WIKI_X + WIKI_W + 0.1;
+
+  // Rows of a page: evenly spaced raw code first, grouped into paragraphs once organized
+  const EVEN = [0.14, 0.29, 0.44, 0.59, 0.74];
+  const GROUPED = [0.14, 0.28, 0.47, 0.66, 0.8];
+  const INDENT = [0.08, 0.16, 0.24, 0.16, 0.08];
+  const PROSE = [0.8, 0.5, 0.74, 0.8, 0.46];
+  const CITED = [1, 4];
+  const UNSUPPORTED = 2;
+
+  const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+  const clamp = (v: number) => Math.max(0, Math.min(1, v));
+  const span = (v: number, a: number, b: number) => clamp((v - a) / (b - a));
+  const seeded = (k: number, n: number) => {
+    const x = Math.sin(k * 127.1 + n * 311.7) * 43758.5453;
+    return x - Math.floor(x);
+  };
+
+  function rgba(color: string, alpha: number): string {
+    const hex = color.trim().replace("#", "");
+    if (hex.length !== 6) return color;
+    const value = parseInt(hex, 16);
+    return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, ${alpha})`;
+  }
+
+  function start(host: HTMLElement) {
+    const canvas = host.querySelector("canvas");
+    const context = canvas?.getContext("2d");
+    if (!canvas || !context) return;
+    const ctx = context;
+    const items = JSON.parse(host.dataset.items ?? "[]") as Item[];
+    if (items.length === 0) return;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+    let width = 0;
+    let height = 0;
+    let ratio = 1;
+    let scale = 40;
+    let ox = 0;
+    let oy = 0;
+    let colors = read();
+    let back: HTMLCanvasElement | null = null;
+    let front: HTMLCanvasElement | null = null;
+    let visible = true;
+    let clock = 0;
+    let last = performance.now();
+
+    function read() {
+      const style = getComputedStyle(document.documentElement);
+      const get = (name: string) => style.getPropertyValue(name).trim();
+      return {
+        floor: get("--line"),
+        trackTop: get("--iso-track-top"),
+        trackLeft: get("--iso-track-left"),
+        trackRight: get("--iso-track-right"),
+        paperTop: get("--iso-paper-top"),
+        paperLeft: get("--iso-paper-left"),
+        paperRight: get("--iso-paper-right"),
+        stackTop: get("--iso-stack-top"),
+        stackLeft: get("--iso-stack-left"),
+        stackRight: get("--iso-stack-right"),
+        ink: get("--iso-ink"),
+        stationTop: get("--cube-top-b"),
+        stationLeft: get("--cube-left-b"),
+        stationRight: get("--cube-right-b"),
+        glyph: get("--cube-label"),
+        faceInk: get("--iso-face-ink"),
+        lit: get("--iso-lit"),
+        blockTop: get("--iso-block-top"),
+        blockLeft: get("--iso-block-left"),
+        blockRight: get("--iso-block-right"),
+        edge: get("--cube-edge"),
+        accent: get("--accent"),
+        accent2: get("--accent-2"),
+        accentInk: get("--accent-ink"),
+        text: get("--text"),
+        text2: get("--text-2"),
+        text3: get("--text-3"),
+        panel: get("--panel"),
+        line: get("--line"),
+      };
+    }
+
+    const project = (x: number, y: number, z: number): Point => [
+      ox + (x - y) * K * scale,
+      oy + (x + y) * 0.5 * scale - z * scale,
+    ];
+
+    function fit() {
+      const rect = canvas!.getBoundingClientRect();
+      ratio = Math.min(window.devicePixelRatio || 1, 2);
+      width = rect.width;
+      height = rect.height;
+      canvas!.width = Math.round(width * ratio);
+      canvas!.height = Math.round(height * ratio);
+      const corners: Array<[number, number, number]> = [];
+      const addBox = (x: number, y: number, z: number, dx: number, dy: number, dz: number) => {
+        for (const cx of [x, x + dx])
+          for (const cy of [y, y + dy]) for (const cz of [z, z + dz]) corners.push([cx, cy, cz]);
+      };
+      addBox(TRACK_X0, -0.45, -0.3, TRACK_X1 - TRACK_X0, 1.75, 0.3);
+      addBox(STACK_X, STACK_Y, 0, STACK_W, STACK_W, STACK_TOP + 0.4);
+      addBox(-0.175, STATION_Y, -0.3, SPACING * (LAST - 1) + STATION_W, STATION_D, STATION_TOP + 0.3);
+      addBox(WIKI_X, -0.35, -0.3, WIKI_W, 1.75, WIKI_TOP + 0.3);
+      let minX = Infinity;
+      let maxX = -Infinity;
+      let minY = Infinity;
+      let maxY = -Infinity;
+      for (const [x, y, z] of corners) {
+        const sx = (x - y) * K;
+        const sy = (x + y) * 0.5 - z;
+        minX = Math.min(minX, sx);
+        maxX = Math.max(maxX, sx);
+        minY = Math.min(minY, sy);
+        maxY = Math.max(maxY, sy);
+      }
+      const side = 8;
+      const topPad = 52;
+      const bottomPad = 50;
+      scale = Math.min(
+        (width - side * 2) / (maxX - minX),
+        (height - topPad - bottomPad) / (maxY - minY),
+      );
+      ox = side + (width - side * 2 - (maxX - minX) * scale) / 2 - minX * scale;
+      oy = topPad + (height - topPad - bottomPad - (maxY - minY) * scale) / 2 - minY * scale;
+      back = layer(drawBack);
+      front = layer(drawFront);
+    }
+
+    function layer(paint: (target: CanvasRenderingContext2D) => void): HTMLCanvasElement {
+      const element = document.createElement("canvas");
+      element.width = canvas!.width;
+      element.height = canvas!.height;
+      const target = element.getContext("2d")!;
+      target.setTransform(ratio, 0, 0, ratio, 0, 0);
+      paint(target);
+      return element;
+    }
+
+    function quad(target: CanvasRenderingContext2D, points: Point[], fill: string, stroke?: string) {
+      target.beginPath();
+      target.moveTo(points[0]![0], points[0]![1]);
+      for (const point of points.slice(1)) target.lineTo(point[0], point[1]);
+      target.closePath();
+      target.fillStyle = fill;
+      target.fill();
+      if (stroke) {
+        target.strokeStyle = stroke;
+        target.lineWidth = 0.8;
+        target.stroke();
+      }
+    }
+
+    function box(
+      target: CanvasRenderingContext2D,
+      x: number,
+      y: number,
+      z: number,
+      dx: number,
+      dy: number,
+      dz: number,
+      faces: Faces,
+      stroke?: string,
+    ) {
+      const P = project;
+      quad(target, [P(x + dx, y, z), P(x + dx, y + dy, z), P(x + dx, y + dy, z + dz), P(x + dx, y, z + dz)], faces.right, stroke);
+      quad(target, [P(x, y + dy, z), P(x + dx, y + dy, z), P(x + dx, y + dy, z + dz), P(x, y + dy, z + dz)], faces.left, stroke);
+      quad(target, [P(x, y, z + dz), P(x + dx, y, z + dz), P(x + dx, y + dy, z + dz), P(x, y + dy, z + dz)], faces.top, stroke);
+    }
+
+    function segment(target: CanvasRenderingContext2D, a: Point, b: Point, color: string, lineWidth: number) {
+      target.beginPath();
+      target.moveTo(a[0], a[1]);
+      target.lineTo(b[0], b[1]);
+      target.strokeStyle = color;
+      target.lineWidth = lineWidth;
+      target.lineCap = "round";
+      target.stroke();
+    }
+
+    // Text lying on a horizontal surface, running along the x axis
+    function flatText(target: CanvasRenderingContext2D, text: string, x: number, y: number, z: number, size: number, color: string, weight = 400) {
+      const [px, py] = project(x, y, z);
+      target.save();
+      target.translate(px, py);
+      target.transform(K, 0.5, -K, 0.5, 0, 0);
+      target.font = `${weight} ${size}px "IBM Plex Mono", monospace`;
+      target.fillStyle = color;
+      target.textBaseline = "middle";
+      target.fillText(text, 0, 0);
+      target.restore();
+    }
+
+    // Text printed on the side of a block that faces the line
+    function faceText(target: CanvasRenderingContext2D, text: string, x: number, y: number, z: number, size: number, color: string) {
+      const [px, py] = project(x, y, z);
+      target.save();
+      target.translate(px, py);
+      target.transform(K, 0.5, 0, 1, 0, 0);
+      target.font = `600 ${size}px "IBM Plex Sans", sans-serif`;
+      target.fillStyle = color;
+      target.textBaseline = "middle";
+      target.fillText(text, 0, 0);
+      target.restore();
+    }
+
+    const stationX = (index: number) => index * SPACING;
+    const stationTop = (index: number, u: number, v: number): Point =>
+      project(stationX(index) - 0.175 + u * STATION_W, STATION_Y + v * STATION_D, STATION_TOP);
+
+    function drawGlyph(target: CanvasRenderingContext2D, index: number, color: string) {
+      const S = (u: number, v: number) => stationTop(index, u, v);
+      const width = Math.max(1.3, scale * 0.036);
+      if (index === 0) {
+        segment(target, S(0.2, 0.26), S(0.78, 0.26), color, width * 1.3);
+        segment(target, S(0.28, 0.36), S(0.28, 0.74), color, width);
+        segment(target, S(0.28, 0.52), S(0.72, 0.52), color, width);
+        segment(target, S(0.28, 0.74), S(0.62, 0.74), color, width);
+      } else if (index === 1) {
+        segment(target, S(0.2, 0.26), S(0.8, 0.26), color, width);
+        segment(target, S(0.2, 0.42), S(0.8, 0.42), color, width);
+        segment(target, S(0.2, 0.58), S(0.74, 0.58), color, width);
+        segment(target, S(0.2, 0.74), S(0.5, 0.74), color, width);
+      } else if (index === 2) {
+        for (const [u0, v0] of [
+          [0.16, 0.26],
+          [0.44, 0.44],
+        ] as const) {
+          const corners = [S(u0, v0), S(u0 + 0.4, v0), S(u0 + 0.4, v0 + 0.3), S(u0, v0 + 0.3)];
+          target.beginPath();
+          target.moveTo(corners[0]![0], corners[0]![1]);
+          for (const corner of corners.slice(1)) target.lineTo(corner[0], corner[1]);
+          target.closePath();
+          target.strokeStyle = color;
+          target.lineWidth = width;
+          target.lineJoin = "round";
+          target.stroke();
+        }
+      } else {
+        segment(target, S(0.24, 0.5), S(0.42, 0.72), color, width * 1.4);
+        segment(target, S(0.42, 0.72), S(0.8, 0.26), color, width * 1.4);
+      }
+    }
+
+    function drawBack(target: CanvasRenderingContext2D) {
+      const grid = document.createElement("canvas");
+      grid.width = canvas!.width;
+      grid.height = canvas!.height;
+      const g = grid.getContext("2d")!;
+      g.setTransform(ratio, 0, 0, ratio, 0, 0);
+      g.strokeStyle = colors.floor;
+      g.lineWidth = 1;
+      for (let n = -8; n <= 12; n += 1) {
+        const a = project(n, -5, -0.3);
+        const b = project(n, 6, -0.3);
+        const c = project(-8, n - 3, -0.3);
+        const d = project(12, n - 3, -0.3);
+        g.beginPath();
+        g.moveTo(a[0], a[1]);
+        g.lineTo(b[0], b[1]);
+        g.moveTo(c[0], c[1]);
+        g.lineTo(d[0], d[1]);
+        g.stroke();
+      }
+      const center = project(2.2, 0, 0);
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      const fade = g.createRadialGradient(center[0] * ratio, center[1] * ratio, 0, center[0] * ratio, center[1] * ratio, width * 0.6 * ratio);
+      fade.addColorStop(0, "rgba(0,0,0,0.9)");
+      fade.addColorStop(1, "rgba(0,0,0,0)");
+      g.globalCompositeOperation = "destination-in";
+      g.fillStyle = fade;
+      g.fillRect(0, 0, grid.width, grid.height);
+      target.save();
+      target.setTransform(1, 0, 0, 1, 0, 0);
+      target.drawImage(grid, 0, 0);
+      target.restore();
+
+      const station: Faces = { top: colors.stationTop, left: colors.stationLeft, right: colors.stationRight };
+      STATIONS.forEach((name, index) => {
+        box(target, stationX(index) - 0.175, STATION_Y, -0.3, STATION_W, STATION_D, STATION_TOP + 0.3, station, colors.edge);
+        drawGlyph(target, index, colors.glyph);
+        faceText(target, name, stationX(index) - 0.1, STATION_Y + STATION_D, 0.2, Math.max(10, scale * 0.19), colors.faceInk);
+      });
+
+      const track: Faces = { top: colors.trackTop, left: colors.trackLeft, right: colors.trackRight };
+      box(target, TRACK_X0, -0.45, -0.3, TRACK_X1 - TRACK_X0, 1.75, 0.3, track, colors.edge);
+
+      target.save();
+      target.setLineDash([3, 5]);
+      segment(target, project(STACK_X + STACK_W + 0.15, TILE_Y + TILE / 2, 0), project(WIKI_X - 0.1, TILE_Y + TILE / 2, 0), rgba(colors.text3, 0.35), 1);
+      target.restore();
+
+      const slab: Faces = { top: colors.stackTop, left: colors.stackLeft, right: colors.stackRight };
+      for (let level = 0; level < SLABS; level += 1) {
+        const inset = seeded(level, 3) * 0.03;
+        box(target, STACK_X + inset, STACK_Y + inset, level * SLAB, STACK_W - inset * 2, STACK_W - inset * 2, SLAB, slab, colors.edge);
+      }
+      // Lines of code on the file at the top of the repository
+      for (let row = 0; row < 6; row += 1) {
+        const y = STACK_Y + 0.16 + row * 0.15;
+        const indent = [0.12, 0.22, 0.32, 0.22, 0.12, 0.22][row]!;
+        const length = 0.3 + seeded(row, 5) * 0.35;
+        segment(target, project(STACK_X + indent, y, STACK_TOP), project(STACK_X + indent + length, y, STACK_TOP), rgba(colors.ink, 0.4), Math.max(1, scale * 0.026));
+      }
+    }
+
+    function drawFront(target: CanvasRenderingContext2D) {
+      const block: Faces = { top: colors.blockTop, left: colors.blockLeft, right: colors.blockRight };
+      box(target, WIKI_X, -0.35, -0.3, WIKI_W, 1.75, WIKI_TOP + 0.3, block, colors.edge);
+      const T = (u: number, v: number) => project(WIKI_X + u * WIKI_W, -0.35 + v * 1.75, WIKI_TOP);
+      const pageLeft = [T(0.2, 0.3), T(0.5, 0.38), T(0.5, 0.8), T(0.2, 0.72)];
+      const pageRight = [T(0.5, 0.38), T(0.8, 0.3), T(0.8, 0.72), T(0.5, 0.8)];
+      for (const page of [pageLeft, pageRight]) {
+        target.beginPath();
+        target.moveTo(page[0]![0], page[0]![1]);
+        for (const point of page.slice(1)) target.lineTo(point[0], point[1]);
+        target.closePath();
+        target.strokeStyle = colors.accent;
+        target.lineWidth = Math.max(1.3, scale * 0.04);
+        target.lineJoin = "round";
+        target.stroke();
+      }
+      flatText(target, "wiki", WIKI_X + 0.12, -0.22, WIKI_TOP + 0.001, Math.max(9, scale * 0.2), colors.text2);
+    }
+
+    interface PageState {
+      organize: number;
+      explain: number;
+      link: number;
+      check: number;
+      scanning: boolean;
+    }
+
+    const rowV = (index: number, group: number) =>
+      EVEN[index]! + (GROUPED[index]! - EVEN[index]!) * group;
+
+    function chipPoint(x: number, z: number, row: number, group: number): Point {
+      const at = INDENT[0]! + PROSE[row]! + 0.05;
+      return project(x + (at + 0.045) * TILE, TILE_Y + rowV(row, group) * TILE, z + TILE_H);
+    }
+
+    function drawPage(key: number, x: number, z: number, state: PageState) {
+      const paper: Faces = { top: colors.paperTop, left: colors.paperLeft, right: colors.paperRight };
+      const top = z + TILE_H;
+      const line = Math.max(1.1, scale * 0.028);
+      const tab = span(state.organize, 0.1, 0.45);
+      const group = ease(span(state.organize, 0.3, 0.8));
+      const codeFade = span(state.explain, 0.15, 0.45);
+      const prose = span(state.explain, 0.35, 0.85);
+      const chips = span(state.link, 0.5, 0.65);
+      const strike = span(state.check, 0.35, 0.55);
+      const removed = span(state.check, 0.55, 0.75);
+      const badge = span(state.check, 0.72, 0.95);
+
+      if (tab > 0) {
+        ctx.save();
+        ctx.globalAlpha = tab;
+        box(ctx, x + 0.1, TILE_Y - 0.1, z, 0.26, 0.1, TILE_H, { top: colors.accent2, left: colors.accent, right: colors.accent }, colors.edge);
+        ctx.restore();
+      }
+      box(ctx, x, TILE_Y, z, TILE, TILE, TILE_H, paper, colors.edge);
+
+      for (let row = 0; row < EVEN.length; row += 1) {
+        const y = TILE_Y + rowV(row, group) * TILE;
+        if (codeFade < 1) {
+          const indent = INDENT[row]!;
+          const length = 0.22 + seeded(key, row) * 0.3;
+          segment(ctx, project(x + indent * TILE, y, top), project(x + (indent + length) * TILE, y, top), rgba(colors.ink, 0.5 * (1 - codeFade)), line);
+        }
+        if (prose > 0) {
+          const shown = span(prose, row * 0.12, row * 0.12 + 0.4);
+          const fade = row === UNSUPPORTED ? 1 - 0.85 * removed : 1;
+          if (shown > 0) {
+            segment(ctx, project(x + INDENT[0]! * TILE, y, top), project(x + (INDENT[0]! + PROSE[row]! * shown) * TILE, y, top), rgba(colors.ink, 0.62 * fade), line);
+          }
+        }
+      }
+
+      if (chips > 0) {
+        for (const row of CITED) {
+          const y = TILE_Y + rowV(row, group) * TILE;
+          const at = INDENT[0]! + PROSE[row]! + 0.05;
+          segment(ctx, project(x + at * TILE, y, top), project(x + (at + 0.09) * TILE, y, top), rgba(colors.accent, chips), Math.max(2.2, scale * 0.065));
+        }
+      }
+
+      if (strike > 0) {
+        const y = TILE_Y + rowV(UNSUPPORTED, group) * TILE;
+        const reach = INDENT[0]! - 0.03 + (PROSE[UNSUPPORTED]! + 0.06) * strike;
+        segment(ctx, project(x + (INDENT[0]! - 0.03) * TILE, y, top), project(x + reach * TILE, y, top), colors.accent, line);
+      }
+
+      if (state.scanning) {
+        const v = span(state.check, 0.02, 0.62);
+        if (v > 0 && v < 1) {
+          const y = TILE_Y + v * TILE;
+          segment(ctx, project(x + 0.02 * TILE, y, top), project(x + 0.98 * TILE, y, top), rgba(colors.accent2, 0.9), Math.max(1.4, scale * 0.035));
+        }
+      }
+
+      // The page number counts pages since the site was opened
+      const label = String(key);
+      const size = Math.max(8, scale * 0.15);
+      ctx.save();
+      ctx.font = `500 ${size}px "IBM Plex Mono", monospace`;
+      const labelUnits = ctx.measureText(label).width / scale;
+      ctx.restore();
+      flatText(ctx, label, x + TILE * 0.94 - labelUnits, TILE_Y + TILE * 0.92, top + 0.001, size, rgba(colors.ink, 0.7), 500);
+
+      if (badge > 0) {
+        const [cx, cy] = project(x + TILE, TILE_Y, top + 0.3);
+        const radius = Math.max(7, scale * 0.16);
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        ctx.fillStyle = rgba(colors.accent, badge);
+        ctx.fill();
+        const a: Point = [cx - radius * 0.45, cy + radius * 0.02];
+        const b: Point = [cx - radius * 0.1, cy + radius * 0.38];
+        const c: Point = [cx + radius * 0.5, cy - radius * 0.35];
+        const draw = span(badge, 0.3, 1);
+        ctx.beginPath();
+        ctx.moveTo(a[0], a[1]);
+        if (draw < 0.4) {
+          const t = draw / 0.4;
+          ctx.lineTo(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t);
+        } else {
+          const t = (draw - 0.4) / 0.6;
+          ctx.lineTo(b[0], b[1]);
+          ctx.lineTo(b[0] + (c[0] - b[0]) * t, b[1] + (c[1] - b[1]) * t);
+        }
+        ctx.strokeStyle = rgba(colors.accentInk, badge);
+        ctx.lineWidth = Math.max(1.6, scale * 0.045);
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.stroke();
+      }
+    }
+
+    // Two files in the repository that a page at the linked station cites
+    function citedSlabs(key: number) {
+      return [
+        { level: 1 + Math.floor(seeded(key, 11) * 4), from: 0.14 + seeded(key, 17) * 0.3 },
+        { level: 6 + Math.floor(seeded(key, 13) * 4), from: 0.2 + seeded(key, 19) * 0.3 },
+      ];
+    }
+
+    function drawThreads(key: number, x: number, progress: number): Point | null {
+      const reach = ease(span(progress, 0.08, 0.48));
+      const glow = span(progress, 0.44, 0.52) * (1 - span(progress, 0.86, 1));
+      const fade = 1 - span(progress, 0.86, 1);
+      const face = STACK_X + STACK_W;
+      let firstTarget: Point | null = null;
+      citedSlabs(key).forEach((slab, index) => {
+        const zMid = (slab.level + 0.5) * SLAB;
+        const y0 = STACK_Y + slab.from;
+        const y1 = y0 + 0.42;
+        const targetPoint = project(face, (y0 + y1) / 2, zMid);
+        if (index === 0) firstTarget = targetPoint;
+        if (glow > 0) {
+          quad(ctx, [project(face, STACK_Y, slab.level * SLAB), project(face, STACK_Y + STACK_W, slab.level * SLAB), project(face, STACK_Y + STACK_W, (slab.level + 1) * SLAB), project(face, STACK_Y, (slab.level + 1) * SLAB)], rgba(colors.accent, 0.4 * glow));
+          segment(ctx, project(face, y0, zMid), project(face, y1, zMid), rgba(colors.accent2, glow), Math.max(2, scale * 0.05));
+        }
+        if (reach <= 0 || fade <= 0) return;
+        const from = chipPoint(x, 0, CITED[index]!, 1);
+        const control: Point = [(from[0] + targetPoint[0]) / 2, Math.min(from[1], targetPoint[1]) - scale * 1.5];
+        ctx.beginPath();
+        ctx.moveTo(from[0], from[1]);
+        const samples = 36;
+        for (let n = 1; n <= samples; n += 1) {
+          const t = (n / samples) * reach;
+          const u = 1 - t;
+          ctx.lineTo(u * u * from[0] + 2 * u * t * control[0] + t * t * targetPoint[0], u * u * from[1] + 2 * u * t * control[1] + t * t * targetPoint[1]);
+        }
+        ctx.strokeStyle = rgba(colors.accent, 0.85 * fade);
+        ctx.lineWidth = 1.3;
+        ctx.lineCap = "round";
+        ctx.stroke();
+      });
+      return firstTarget;
+    }
+
+    function tag(anchor: Point, offset: Point, label: string, value: string, boxAlpha: number, valueAlpha: number) {
+      if (boxAlpha <= 0) return;
+      ctx.save();
+      ctx.globalAlpha = boxAlpha;
+      ctx.font = `11px "IBM Plex Mono", monospace`;
+      const labelWidth = ctx.measureText(label).width;
+      const valueWidth = ctx.measureText(value).width;
+      const boxWidth = labelWidth + valueWidth + 30;
+      const boxHeight = 24;
+      const bx = Math.max(4, Math.min(width - boxWidth - 4, anchor[0] + offset[0]));
+      const by = Math.max(4, Math.min(height - boxHeight - 4, anchor[1] + offset[1]));
+      ctx.setLineDash([2, 3]);
+      ctx.beginPath();
+      ctx.moveTo(anchor[0], anchor[1]);
+      ctx.lineTo(anchor[0], by + boxHeight / 2);
+      ctx.lineTo(bx + (anchor[0] > bx + boxWidth / 2 ? boxWidth : 0), by + boxHeight / 2);
+      ctx.strokeStyle = rgba(colors.text3, 0.8);
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.arc(anchor[0], anchor[1], 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = colors.accent;
+      ctx.fill();
+      ctx.beginPath();
+      ctx.roundRect(bx, by, boxWidth, boxHeight, 4);
+      ctx.fillStyle = colors.panel;
+      ctx.fill();
+      ctx.strokeStyle = colors.line;
+      ctx.stroke();
+      ctx.textBaseline = "middle";
+      ctx.globalAlpha = boxAlpha * valueAlpha;
+      ctx.fillStyle = colors.text3;
+      ctx.fillText(label, bx + 10, by + boxHeight / 2 + 0.5);
+      ctx.fillStyle = colors.text;
+      ctx.fillText(value, bx + 20 + labelWidth, by + boxHeight / 2 + 0.5);
+      ctx.restore();
+    }
+
+    const itemFor = (key: number) =>
+      items[(((Math.max(1, key) - 1) % items.length) + items.length) % items.length]!;
+
+    function render(time: number) {
+      const step = Math.floor(Math.max(0, time) / STEP);
+      const phase = Math.max(0, time) / STEP - step;
+      const moving = phase < MOVE;
+      const travel = ease(moving ? phase / MOVE : 1);
+      const dwell = moving ? 0 : (phase - MOVE) / (1 - MOVE);
+
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, canvas!.width, canvas!.height);
+      if (back) ctx.drawImage(back, 0, 0);
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+
+      const newest = step + 1;
+      const oldest = Math.max(1, newest - LAST);
+      let linkingKey = 0;
+      let linkingX = 0;
+
+      // A station lights up only while a page is being worked on in front of it
+      for (let key = newest; key >= oldest; key -= 1) {
+        const pos = step - (key - 1);
+        if (!moving && pos < LAST) {
+          drawGlyph(ctx, pos, rgba(colors.lit, 0.9 * Math.sin(Math.PI * dwell)));
+        }
+      }
+
+      const parkX = (index: number) => (index < LAST ? stationX(index) : WIKI_X + 0.25);
+      for (let key = newest; key >= oldest; key -= 1) {
+        const pos = step - (key - 1);
+        if (pos === LAST && !moving) continue;
+        let x = parkX(pos);
+        let z = 0;
+        if (moving) {
+          if (pos === 0) {
+            x = STACK_X + 0.15 + (parkX(0) - STACK_X - 0.15) * travel;
+            z = STACK_TOP * (1 - travel) + Math.sin(travel * Math.PI) * 0.3;
+          } else {
+            x = parkX(pos - 1) + (parkX(pos) - parkX(pos - 1)) * travel;
+          }
+        }
+        const done = (index: number) => (pos > index ? 1 : pos === index && !moving ? dwell : 0);
+        drawPage(key, x, z, {
+          organize: done(0),
+          explain: done(1),
+          link: done(2),
+          check: done(3),
+          scanning: pos === 3 && !moving,
+        });
+        if (pos === 2 && !moving) {
+          linkingKey = key;
+          linkingX = x;
+        }
+      }
+
+      let sourceAnchor: Point | null = null;
+      if (linkingKey > 0) sourceAnchor = drawThreads(linkingKey, linkingX, dwell);
+
+      if (front) {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.drawImage(front, 0, 0);
+        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      }
+
+      // The repository label follows the page leaving the stack
+      const lifting = itemFor(step + 1);
+      const labelAlpha = moving ? span(phase, 0, 0.14) : 1;
+      tag(project(STACK_X + STACK_W / 2, STACK_Y + STACK_W / 2, STACK_TOP + 0.02), [-30, -scale * 1.25], lifting.repo, lifting.files, 1, labelAlpha);
+
+      if (sourceAnchor && linkingKey > 0) {
+        const item = itemFor(linkingKey);
+        const alpha = span(dwell, 0.45, 0.55) * (1 - span(dwell, 0.86, 1));
+        tag(sourceAnchor, [-scale * 2.6, scale * 2.4], item.file, item.lines, alpha, 1);
+      }
+
+      const lastFiled = moving ? step - LAST : step - LAST + 1;
+      if (lastFiled >= 1) {
+        const arriving = !moving && lastFiled === step - LAST + 1;
+        const valueAlpha = arriving ? span(dwell, 0, 0.2) : 1;
+        const boxAlpha = lastFiled === 1 && arriving ? span(dwell, 0, 0.2) : 1;
+        const filed = itemFor(lastFiled);
+        const shortName = filed.repo.split("/").pop() ?? filed.repo;
+        tag(project(WIKI_X + WIKI_W, 0.95, -0.3), [-300, scale * 0.35], `page ${lastFiled}`, `${shortName} · ${filed.title}`, boxAlpha, valueAlpha);
+      }
+    }
+
+    // The next frame is booked first so a failed draw can never stop the loop
+    function frame(now: number) {
+      requestAnimationFrame(frame);
+      const delta = Math.min(Math.max(0, now - last), 64) / 1000;
+      last = now;
+      if (!document.hidden && !reduced.matches) {
+        clock += delta;
+        if (visible) render(clock);
+      }
+    }
+
+    // With reduced motion a single frame shows every station in use
+    const still = STEP * 6 + STEP * (MOVE + (1 - MOVE) * 0.55);
+
+    function refresh() {
+      fit();
+      render(reduced.matches ? still : clock);
+    }
+
+    void document.fonts.ready.then(refresh);
+    refresh();
+    requestAnimationFrame(frame);
+
+    new ResizeObserver(refresh).observe(host);
+    new IntersectionObserver(([entry]) => {
+      visible = entry?.isIntersecting ?? true;
+    }).observe(host);
+    new MutationObserver(() => {
+      colors = read();
+      refresh();
+    }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  }
+
+  document.querySelectorAll<HTMLElement>("[data-pipeline]").forEach(start);
+</script>

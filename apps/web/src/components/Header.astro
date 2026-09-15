@@ -1,25 +1,25 @@
 ---
-import Arrow from "./Arrow.astro";
+import BookIcon from "./BookIcon.astro";
 import Logo from "./Logo.astro";
 
 interface Props {
-  status?: string | undefined;
+  // Reader pages span wider than the home page frame
+  wide?: boolean;
 }
-const { status } = Astro.props;
+const { wide = false } = Astro.props;
 ---
 
 <header class="site-header">
-  <div class="frame bar">
+  <div class:list={["bar", wide ? "wide" : "frame"]}>
     <a class="brand" href="/">
       <Logo />
       <span>EveryRepo</span>
     </a>
     <nav class="nav" aria-label="Main">
-      <a href="/#guide">Repositories</a>
       <a href="/#wiki">A wiki page</a>
+      <a href="/#guide">Repositories</a>
       <a href="/#method">Method</a>
     </nav>
-    {status && <div class="status">{status}</div>}
     <div class="actions">
       <button
         class="icon-btn"
@@ -37,7 +37,8 @@ const { status } = Astro.props;
           stroke-width="1.6"
           stroke-linecap="round"
           stroke-linejoin="round"
-          aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"></path></svg
+          aria-hidden="true"
+          ><path pathLength="1" d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"></path></svg
         >
         <svg
           class="sun"
@@ -49,12 +50,19 @@ const { status } = Astro.props;
           stroke-width="1.6"
           stroke-linecap="round"
           aria-hidden="true"
-          ><circle cx="12" cy="12" r="4"></circle><path
-            d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"
-          ></path></svg
         >
+          <circle pathLength="1" cx="12" cy="12" r="4"></circle>
+          <path pathLength="1" d="M12 2v2" style="--n: 0"></path>
+          <path pathLength="1" d="M17.7 6.3l1.4-1.4" style="--n: 1"></path>
+          <path pathLength="1" d="M20 12h2" style="--n: 2"></path>
+          <path pathLength="1" d="M17.7 17.7l1.4 1.4" style="--n: 3"></path>
+          <path pathLength="1" d="M12 20v2" style="--n: 4"></path>
+          <path pathLength="1" d="M4.9 19.1l1.4-1.4" style="--n: 5"></path>
+          <path pathLength="1" d="M2 12h2" style="--n: 6"></path>
+          <path pathLength="1" d="M4.9 4.9l1.4 1.4" style="--n: 7"></path>
+        </svg>
       </button>
-      <a class="btn btn-solid" href="/#open">Open a repository <Arrow /></a>
+      <a class="btn btn-solid book-trigger" href="/#open">Open a repository <BookIcon /></a>
     </div>
   </div>
 </header>
@@ -73,16 +81,22 @@ const { status } = Astro.props;
 
   .bar {
     display: flex;
-    align-items: stretch;
+    align-items: center;
+    gap: 40px;
     height: 100%;
+    padding: 0 24px;
+  }
+
+  .bar.wide {
+    width: min(100%, 1640px);
+    margin-inline: auto;
+    padding: 0 20px;
   }
 
   .brand {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 0 28px 0 20px;
-    border-right: 1px solid var(--line-soft);
     font-family: var(--font-serif);
     font-size: 21px;
     font-weight: 600;
@@ -91,48 +105,23 @@ const { status } = Astro.props;
 
   .nav {
     display: flex;
-    align-items: stretch;
+    gap: 28px;
+    font-size: var(--t-ui);
   }
 
   .nav a {
-    display: flex;
-    align-items: center;
-    padding: 0 20px;
-    border-right: 1px solid var(--line-soft);
-    font-size: var(--t-ui);
     color: var(--text-2);
-    transition:
-      color 140ms ease,
-      background-color 140ms ease;
+    transition: color 140ms ease;
   }
 
   .nav a:hover {
     color: var(--text);
-    background: var(--bg-raise);
-  }
-
-  .status {
-    display: flex;
-    align-items: center;
-    margin-left: auto;
-    padding: 0 20px;
-    font-family: var(--font-mono);
-    font-size: var(--t-label);
-    letter-spacing: 0.04em;
-    color: var(--text-3);
-    border-left: 1px solid var(--line-soft);
-    white-space: nowrap;
   }
 
   .actions {
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 0 20px 0 16px;
-    border-left: 1px solid var(--line-soft);
-  }
-
-  .nav + .actions {
     margin-left: auto;
   }
 
@@ -146,11 +135,24 @@ const { status } = Astro.props;
     background: transparent;
     color: var(--text-2);
     cursor: pointer;
+    transition:
+      color 140ms ease,
+      border-color 140ms ease;
   }
 
   .icon-btn:hover {
     color: var(--text);
     border-color: var(--text-3);
+  }
+
+  .icon-btn svg {
+    grid-area: 1 / 1;
+  }
+
+  .icon-btn path,
+  .icon-btn circle {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 0;
   }
 
   .sun {
@@ -165,13 +167,23 @@ const { status } = Astro.props;
     display: none;
   }
 
-  @media (max-width: 1100px) {
-    .status {
-      display: none;
-    }
+  /* After a switch the new icon draws itself: the moon as one stroke, the sun core then its rays */
+  .icon-btn.switched .moon path,
+  .icon-btn.switched .sun circle {
+    animation: draw-in 420ms var(--ease-out) both;
+  }
 
-    .actions {
-      margin-left: auto;
+  .icon-btn.switched .sun path {
+    animation: draw-in 240ms var(--ease-out) both;
+    animation-delay: calc(260ms + var(--n) * 35ms);
+  }
+
+  @keyframes draw-in {
+    from {
+      stroke-dashoffset: 1;
+    }
+    to {
+      stroke-dashoffset: 0;
     }
   }
 
@@ -180,14 +192,8 @@ const { status } = Astro.props;
       display: none;
     }
 
-    .brand {
-      border-right: 0;
-      padding-left: 0;
-    }
-
-    .actions {
-      border-left: 0;
-      padding-right: 0;
+    .bar {
+      padding: 0;
     }
   }
 
@@ -199,14 +205,26 @@ const { status } = Astro.props;
 </style>
 
 <script>
+  import { changeTheme } from "../lib/theme.ts";
+
   const toggle = document.querySelector<HTMLButtonElement>("[data-theme-toggle]");
   toggle?.addEventListener("click", () => {
     const next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
-    document.documentElement.dataset.theme = next;
-    try {
-      localStorage.setItem("theme", next);
-    } catch {
-      // Storage can be blocked, so the choice lasts only for this page view
-    }
+    changeTheme(
+      next,
+      () => {
+        document.documentElement.dataset.theme = next;
+        toggle.classList.remove("switched");
+        void toggle.offsetWidth;
+        toggle.classList.add("switched");
+        try {
+          localStorage.setItem("theme", next);
+        } catch {
+          // Storage can be blocked, so the choice lasts only for this page view
+        }
+        window.dispatchEvent(new Event("themechange"));
+      },
+      toggle,
+    );
   });
 </script>

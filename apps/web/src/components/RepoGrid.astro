@@ -1,24 +1,30 @@
 ---
 import type { SiteRepo } from "@everyrepo/core";
-import Arrow from "./Arrow.astro";
+import BookIcon from "./BookIcon.astro";
 import { formatCount, languageName } from "../lib/format.ts";
 
 interface Props {
   repos: SiteRepo[];
+  outlines: Record<string, string[]>;
 }
-const { repos } = Astro.props;
+const { repos, outlines } = Astro.props;
 
 const SHADES = ["var(--accent)", "var(--accent-2)", "var(--text-3)", "var(--line)"];
+const PEEK = 3;
 
 const cards = repos.map((repo) => {
   const total = repo.languages.reduce((sum, language) => sum + language.files, 0) || 1;
   const top = repo.languages.slice(0, 3);
   const rest = total - top.reduce((sum, language) => sum + language.files, 0);
   const segments = [
-    ...top.map((language) => ({ name: languageName(language.language), share: language.files / total })),
+    ...top.map((language) => ({
+      name: languageName(language.language),
+      share: language.files / total,
+    })),
     ...(rest > 0 ? [{ name: "Other", share: rest / total }] : []),
   ].map((segment, index) => ({ ...segment, color: SHADES[index] ?? "var(--line)" }));
-  return { ...repo, segments };
+  const outline = outlines[repo.repo] ?? [];
+  return { ...repo, segments, outline };
 });
 
 const order = { ready: 0, indexing: 1, queued: 2 } as const;
@@ -29,10 +35,23 @@ cards.sort((a, b) => order[a.status] - order[b.status]);
   {
     cards.map((repo) =>
       repo.status === "ready" ? (
-        <a class="repo" href={`/${repo.repo}`}>
+        <a class="repo book-trigger" href={`/${repo.repo}`}>
           <span class="owner mono">{repo.owner}</span>
           <span class="name">{repo.name}</span>
-          <p class="summary">{repo.summary}</p>
+          <div class="swap">
+            <p class="summary">{repo.summary}</p>
+            <div class="outline" aria-hidden="true">
+              <span class="outline-label">Sections</span>
+              <ul>
+                {repo.outline.slice(0, PEEK).map((title) => (
+                  <li>{title}</li>
+                ))}
+              </ul>
+              {repo.outline.length > PEEK && (
+                <span class="outline-more">and {repo.outline.length - PEEK} more</span>
+              )}
+            </div>
+          </div>
           <span class="bar" aria-hidden="true">
             {repo.segments.map((segment) => (
               <span style={`flex-grow:${segment.share};background:${segment.color}`} />
@@ -40,7 +59,7 @@ cards.sort((a, b) => order[a.status] - order[b.status]);
           </span>
           <span class="languages">
             {repo.segments
-              .filter((segment) => segment.name !== "Other")
+              .filter((segment) => segment.name !== "Other" && segment.share >= 0.01)
               .map((segment) => `${segment.name} ${Math.round(segment.share * 100)}%`)
               .join("  ")}
           </span>
@@ -48,7 +67,7 @@ cards.sort((a, b) => order[a.status] - order[b.status]);
             <span>{repo.pages} pages</span>
             <span>{formatCount(repo.files)} files</span>
             <span class="go">
-              <Arrow />
+              <BookIcon />
             </span>
           </span>
         </a>
@@ -57,10 +76,9 @@ cards.sort((a, b) => order[a.status] - order[b.status]);
           <span class="owner mono">{repo.owner}</span>
           <span class="name">{repo.name}</span>
           <span class="state">
-            <span class="pulse" />
+            <span class="dot" />
             {repo.status === "indexing" ? "Reading the code" : "Queued for writing"}
           </span>
-          <span class="progress" aria-hidden="true" />
           <span class="languages">
             {repo.segments
               .filter((segment) => segment.name !== "Other")
@@ -76,14 +94,14 @@ cards.sort((a, b) => order[a.status] - order[b.status]);
       ),
     )
   }
-  <a class="repo is-cta" href="#open">
+  <a class="repo is-cta book-trigger" href="#open">
     <span class="owner mono">your/repository</span>
     <span class="name">Missing one?</span>
     <p class="summary">Paste a public GitHub link and its wiki joins the queue.</p>
     <span class="stats">
       <span>Open a repository</span>
       <span class="go">
-        <Arrow />
+        <BookIcon />
       </span>
     </span>
   </a>
@@ -102,30 +120,16 @@ cards.sort((a, b) => order[a.status] - order[b.status]);
     position: relative;
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    min-height: 300px;
-    padding: 26px 24px 22px;
+    gap: 8px;
+    min-height: clamp(220px, calc((100svh - var(--header) - 380px) / 2), 300px);
+    padding: 20px 24px 18px;
     background: var(--bg);
-    transition: background-color 180ms ease;
+    transition: background-color 200ms ease;
   }
 
-  a.repo:hover {
+  a.repo:hover,
+  a.repo:focus-visible {
     background: var(--bg-raise);
-  }
-
-  a.repo::before {
-    content: "";
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 0;
-    height: 2px;
-    background: var(--accent);
-    transition: width 320ms var(--ease-out);
-  }
-
-  a.repo:hover::before {
-    width: 100%;
   }
 
   .owner {
@@ -142,6 +146,16 @@ cards.sort((a, b) => order[a.status] - order[b.status]);
     overflow-wrap: anywhere;
   }
 
+  .swap {
+    display: grid;
+  }
+
+  .swap > * {
+    grid-area: 1 / 1;
+    align-self: start;
+    transition: opacity 220ms ease;
+  }
+
   .summary {
     font-size: var(--t-small);
     line-height: 1.55;
@@ -150,6 +164,47 @@ cards.sort((a, b) => order[a.status] - order[b.status]);
     -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
+  }
+
+  .outline {
+    opacity: 0;
+    font-size: var(--t-caption);
+    color: var(--text-2);
+  }
+
+  .outline-label {
+    font-size: var(--t-label);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-3);
+  }
+
+  .outline ul {
+    margin: 4px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .outline li {
+    padding: 1px 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .outline-more {
+    color: var(--text-3);
+  }
+
+  /* Hovering a written wiki shows what is inside it instead of its summary */
+  a.repo:hover .summary,
+  a.repo:focus-visible .summary {
+    opacity: 0;
+  }
+
+  a.repo:hover .outline,
+  a.repo:focus-visible .outline {
+    opacity: 1;
   }
 
   .bar {
@@ -171,27 +226,29 @@ cards.sort((a, b) => order[a.status] - order[b.status]);
     display: flex;
     align-items: center;
     gap: 16px;
-    padding-top: 14px;
+    padding-top: 12px;
     border-top: 1px solid var(--line-soft);
     font-size: var(--t-caption);
     color: var(--text-2);
   }
 
   .go {
+    display: flex;
     margin-left: auto;
     color: var(--text-3);
-    transition:
-      transform 240ms var(--ease-out),
-      color 160ms ease;
+    transition: color 160ms ease;
   }
 
   a.repo:hover .go {
     color: var(--accent);
-    transform: translateX(4px);
   }
 
   .is-waiting .name {
     color: var(--text-2);
+  }
+
+  .is-waiting .languages {
+    margin-top: auto;
   }
 
   .state {
@@ -202,36 +259,16 @@ cards.sort((a, b) => order[a.status] - order[b.status]);
     color: var(--text-2);
   }
 
-  .pulse {
-    width: 7px;
-    height: 7px;
+  .dot {
+    width: 6px;
+    height: 6px;
     border-radius: 999px;
     background: var(--accent);
-    box-shadow: 0 0 0 0 var(--accent-line);
-    animation: pulse 2.2s ease-out infinite;
-  }
-
-  .progress {
-    position: relative;
-    height: 1px;
-    margin-top: auto;
-    background: var(--line);
-    overflow: hidden;
-  }
-
-  .progress::after {
-    content: "";
-    position: absolute;
-    inset: 0 auto 0 0;
-    width: 30%;
-    background: linear-gradient(90deg, transparent, var(--accent), transparent);
-    animation: sweep 2.8s var(--ease) infinite;
   }
 
   .is-cta {
     background:
-      repeating-linear-gradient(-45deg, transparent 0 9px, var(--line-soft) 9px 10px),
-      var(--bg);
+      repeating-linear-gradient(-45deg, transparent 0 9px, var(--line-soft) 9px 10px), var(--bg);
   }
 
   .is-cta .summary {
@@ -243,22 +280,23 @@ cards.sort((a, b) => order[a.status] - order[b.status]);
     font-weight: 500;
   }
 
-  @keyframes pulse {
-    0% {
-      box-shadow: 0 0 0 0 var(--accent-line);
+  /* Short screens drop the language line and shorten summaries so both rows fit on one screen */
+  @media (max-height: 860px) and (min-width: 1000px) {
+    .languages {
+      display: none;
     }
-    70%,
-    100% {
-      box-shadow: 0 0 0 8px transparent;
-    }
-  }
 
-  @keyframes sweep {
-    from {
-      transform: translateX(-100%);
+    .repo {
+      min-height: 0;
     }
-    to {
-      transform: translateX(340%);
+
+    .summary {
+      -webkit-line-clamp: 2;
+      max-height: calc(1.55em * 2);
+    }
+
+    .outline li:nth-child(n + 3) {
+      display: none;
     }
   }
 

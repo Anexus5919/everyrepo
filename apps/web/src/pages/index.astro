@@ -1,81 +1,80 @@
 ---
-import Arrow from "../components/Arrow.astro";
-import Assembly from "../components/Assembly.astro";
-import HeroFlow from "../components/HeroFlow.astro";
+import BookIcon from "../components/BookIcon.astro";
 import Method from "../components/Method.astro";
+import Pipeline from "../components/Pipeline.astro";
 import RepoGrid from "../components/RepoGrid.astro";
-import Traces from "../components/Traces.astro";
 import WikiPreview from "../components/WikiPreview.astro";
 import Base from "../layouts/Base.astro";
 import { formatCount } from "../lib/format.ts";
+import { citationLinks, pipelineItems, readingMinutes } from "../lib/showcase.ts";
 import { loadRepos, loadWiki } from "../lib/site-data.ts";
 
 const repos = loadRepos();
 const ready = repos.filter((repo) => repo.status === "ready");
-const featured = ready.find((repo) => repo.repo === "mui/mui-x") ?? ready[0];
-if (!featured) throw new Error("No written wiki to feature; run the site command");
-const wiki = loadWiki(featured.repo);
-const next = repos.find((repo) => repo.status !== "ready");
+if (ready.length === 0) throw new Error("No written wiki to show; run the site command");
+const wikis = new Map(ready.map((repo) => [repo.repo, loadWiki(repo.repo)]));
+// Wikis with the most pages lead the showcase
+const wikiList = [...wikis.values()].sort((a, b) => b.pages - a.pages);
 
 const totalFiles = repos.reduce((sum, repo) => sum + repo.files, 0);
 const totalPages = ready.reduce((sum, repo) => sum + repo.pages, 0);
-const totalCitations = ready
-  .map((repo) => loadWiki(repo.repo))
-  .reduce(
-    (sum, item) => sum + item.wikiPages.reduce((count, page) => count + page.citations.length, 0),
-    0,
-  );
+const minutes = readingMinutes(wikiList);
+const readingTime = minutes >= 90 ? `${(minutes / 60).toFixed(1)} h` : `${minutes} min`;
+const citations = citationLinks(wikiList);
+const items = pipelineItems(wikiList, (count) => `${formatCount(count)} files`);
+
+const outlines = Object.fromEntries(
+  [...wikis.entries()].map(([repo, item]) => [
+    repo,
+    item.wikiPages.filter((page) => page.parentSlug === null).map((page) => page.title),
+  ]),
+);
 
 const knownRepos = repos.map((repo) => ({ repo: repo.repo, status: repo.status }));
 const examples = ready.slice(0, 3).map((repo) => repo.repo);
 ---
 
 <Base
+  snap
   title="EveryRepo: a wiki for any public GitHub repository"
   description="EveryRepo writes a wiki for public GitHub repositories. Every sentence links to the lines of code it was written from."
-  status={`${repos.length} repositories · ${formatCount(totalFiles)} files read`}
 >
-  <section class="hero" data-flow-host>
-    <div class="hero-bg" aria-hidden="true">
-      <div class="hero-grid"></div>
-      <Traces />
-      <HeroFlow />
-    </div>
-
+  <section class="hero snap">
     <div class="frame hero-inner">
       <div class="hero-copy">
-        {
-          next && (
-            <a class="live-chip" href="#guide">
-              <span class="chip-state">
-                <span class="dot" />
-                {next.status === "indexing" ? "Reading now" : "Next in the guide"}
-              </span>
-              <span class="chip-repo mono">{next.repo}</span>
-              <span class="chip-meta mono">{formatCount(next.files)} files</span>
-              <Arrow />
-            </a>
-          )
-        }
+        <span class="eyebrow">Codebase wikis, cited to the line</span>
         <h1 class="display">Read any codebase like you <em>already work there.</em></h1>
         <p class="lead">
           EveryRepo writes a wiki for public GitHub repositories: how the code is organized, which
           files to open first, and a source for every sentence, linked to the exact lines.
         </p>
         <form class="open-form" id="open" data-open-form>
-          <label class="field">
+          <label class="field" data-open-field>
             <span class="sr-only">Repository</span>
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.8"
-              stroke-linecap="round"
-              aria-hidden="true"
-              ><circle cx="11" cy="11" r="6.5"></circle><path d="M16 16l4.5 4.5"></path></svg
-            >
+            <span class="field-icon" aria-hidden="true">
+              <svg
+                class="search"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                ><circle cx="11" cy="11" r="6.5"></circle><path d="M16 16l4.5 4.5"></path></svg
+              >
+              <svg
+                class="match"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"><path pathLength="1" d="M5 12.5l4.5 4.5L19 7.5"></path></svg
+              >
+            </span>
             <input
               name="repo"
               placeholder="owner/repo or a GitHub link"
@@ -85,7 +84,9 @@ const examples = ready.slice(0, 3).map((repo) => repo.repo);
             />
             <kbd class="mono">/</kbd>
           </label>
-          <button class="btn btn-solid btn-lg" type="submit">Open the wiki <Arrow /></button>
+          <button class="btn btn-solid btn-lg book-trigger" type="submit"
+            >Open the wiki <BookIcon /></button
+          >
         </form>
         <p class="form-note" data-open-note aria-live="polite"></p>
         <div class="try">
@@ -100,53 +101,49 @@ const examples = ready.slice(0, 3).map((repo) => repo.repo);
         </div>
       </div>
 
-      <div class="hero-art" data-flow-target>
-        <Assembly
-          files={`${formatCount(featured.files)} files read`}
-          packages={`${featured.packages} packages`}
-          pages={`${featured.pages} pages written`}
-        />
+      <div class="hero-art">
+        <Pipeline items={items} />
       </div>
     </div>
 
     <div class="frame hero-stats">
       <div class="stat">
-        <span class="value">{repos.length}</span><span class="label">repositories read</span>
+        <span class="value">{formatCount(totalFiles)}</span>
+        <span class="label">files read across {repos.length} repositories</span>
       </div>
       <div class="stat">
-        <span class="value">{formatCount(totalFiles)}</span><span class="label">files parsed</span>
+        <span class="value">{totalPages}</span>
+        <span class="label">wiki pages written from them</span>
       </div>
       <div class="stat">
-        <span class="value">{totalPages}</span><span class="label">wiki pages written</span>
+        <span class="value">{readingTime}</span>
+        <span class="label">of reading across {ready.length} wikis</span>
       </div>
       <div class="stat">
-        <span class="value">{formatCount(totalCitations)}</span><span class="label"
-          >citations to exact lines</span
-        >
+        <span class="value">{formatCount(citations)}</span>
+        <span class="label">citations that open the exact lines</span>
       </div>
     </div>
   </section>
 
-  <section class="section block" id="wiki">
+  <section class="section block snap" id="wiki">
     <div class="frame">
-      <span class="cross l"></span><span class="cross r"></span>
       <div class="block-head">
         <div>
           <span class="eyebrow"><span class="num">01</span> A wiki page</span>
           <h2 class="title">Every sentence points at the code it came from.</h2>
         </div>
         <p class="block-text">
-          This is a real page from the {featured.name} wiki. Click a number to open the lines it cites.
-          Nothing on a page is written without a source.
+          Real wikis from the guide. Pick a repository, open any page from its sidebar and point
+          at a number to read the lines it cites.
         </p>
       </div>
-      <WikiPreview wiki={wiki} slug="data-grid-premium" focus="formula" />
+      <WikiPreview wikis={wikiList} />
     </div>
   </section>
 
-  <section class="section block" id="guide">
+  <section class="section block snap" id="guide">
     <div class="frame">
-      <span class="cross l"></span><span class="cross r"></span>
       <div class="block-head">
         <div>
           <span class="eyebrow"><span class="num">02</span> In the guide</span>
@@ -159,21 +156,19 @@ const examples = ready.slice(0, 3).map((repo) => repo.repo);
       </div>
     </div>
     <div class="frame grid-frame">
-      <RepoGrid repos={repos} />
+      <RepoGrid repos={repos} outlines={outlines} />
     </div>
   </section>
 
-  <section class="section block" id="method">
+  <section class="section block snap" id="method">
     <div class="frame">
-      <span class="cross l"></span><span class="cross r"></span>
       <div class="block-head">
         <div>
           <span class="eyebrow"><span class="num">03</span> Method</span>
           <h2 class="title">How a page is made.</h2>
         </div>
         <p class="block-text">
-          Pages come from the code itself at a pinned commit, not from what the project says about
-          itself.
+          Pages come from the code itself at a pinned commit. Point at a step to see it happen.
         </p>
       </div>
     </div>
@@ -182,22 +177,12 @@ const examples = ready.slice(0, 3).map((repo) => repo.repo);
     </div>
   </section>
 
-  <section class="section closing">
-    <div class="frame">
-      <span class="cross l"></span><span class="cross r"></span>
-      <div class="closing-inner">
-        <h2 class="title">Open any public repository.</h2>
-        <p class="block-text">Paste a link. If its wiki is written, you are reading it in a second.</p>
-        <a class="btn btn-solid btn-lg" href="#open">Open a repository <Arrow /></a>
-      </div>
-    </div>
-  </section>
-
   <script is:inline type="application/json" id="known-repos" set:html={JSON.stringify(knownRepos)} />
 </Base>
 
 <script>
   const form = document.querySelector<HTMLFormElement>("[data-open-form]");
+  const field = document.querySelector<HTMLElement>("[data-open-field]");
   const input = document.querySelector<HTMLInputElement>("[data-open-input]");
   const note = document.querySelector<HTMLElement>("[data-open-note]");
   const known = JSON.parse(document.getElementById("known-repos")?.textContent ?? "[]") as Array<{
@@ -205,17 +190,31 @@ const examples = ready.slice(0, 3).map((repo) => repo.repo);
     status: string;
   }>;
 
+  const parse = (value: string) => {
+    const match = /(?:github\.com[/:])?([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?(?:[#?].*)?$/i.exec(
+      value.trim(),
+    );
+    return match ? `${match[1]}/${match[2]}` : null;
+  };
+  const lookup = (name: string | null) =>
+    name ? known.find((item) => item.repo.toLowerCase() === name.toLowerCase()) : undefined;
+
+  // The search icon turns into a check once the text names a wiki that is ready to open
+  input?.addEventListener("input", () => {
+    const entry = lookup(parse(input.value));
+    field?.classList.toggle("is-match", entry?.status === "ready");
+    if (note) note.textContent = "";
+  });
+
   form?.addEventListener("submit", (event) => {
     event.preventDefault();
     if (!input || !note) return;
-    const value = input.value.trim().replace(/\.git$/, "");
-    const match = /(?:github\.com[/:])?([\w.-]+)\/([\w.-]+)\/?(?:[#?].*)?$/i.exec(value);
-    if (!match) {
+    const name = parse(input.value);
+    if (!name) {
       note.textContent = "Enter a repository as owner/repo or paste its GitHub link.";
       return;
     }
-    const name = `${match[1]}/${match[2]}`;
-    const entry = known.find((item) => item.repo.toLowerCase() === name.toLowerCase());
+    const entry = lookup(name);
     if (entry?.status === "ready") {
       window.location.href = `/${entry.repo}`;
     } else if (entry) {
@@ -237,34 +236,18 @@ const examples = ready.slice(0, 3).map((repo) => repo.repo);
   .hero {
     position: relative;
     z-index: 2;
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
   }
 
-  .hero-bg {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-  }
-
-  .hero-grid {
-    position: absolute;
-    inset: 0;
-    background-image:
-      linear-gradient(var(--line-soft) 1px, transparent 1px),
-      linear-gradient(90deg, var(--line-soft) 1px, transparent 1px);
-    background-size: 64px 64px;
-    background-position: center -1px;
-    mask-image: radial-gradient(ellipse 75% 70% at 65% 45%, #000 10%, transparent 72%);
-    opacity: 0.7;
-  }
-
   .hero-inner {
+    flex-grow: 1;
     display: grid;
-    grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr);
+    grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
     align-items: center;
-    gap: 24px;
-    min-height: 700px;
-    padding: 72px 24px 56px;
+    gap: 16px;
+    padding: 40px 24px 32px;
   }
 
   .hero-copy {
@@ -272,72 +255,14 @@ const examples = ready.slice(0, 3).map((repo) => repo.repo);
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 26px;
-  }
-
-  .live-chip {
-    display: inline-flex;
-    align-items: stretch;
-    height: 34px;
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
-    background: color-mix(in oklab, var(--bg) 70%, transparent);
-    font-size: var(--t-caption);
-    color: var(--text-2);
-    transition: border-color 160ms ease;
-  }
-
-  .live-chip:hover {
-    border-color: var(--text-3);
-  }
-
-  .live-chip > * {
-    display: flex;
-    align-items: center;
-    padding: 0 12px;
-  }
-
-  .live-chip > * + * {
-    border-left: 1px solid var(--line);
-  }
-
-  .live-chip :global(svg) {
-    padding: 0 10px;
-    box-sizing: content-box;
-    height: 100%;
-    color: var(--text-3);
-  }
-
-  .chip-state {
-    gap: 8px;
-    color: var(--text);
-    white-space: nowrap;
-  }
-
-  .dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 999px;
-    background: var(--accent);
-    box-shadow: 0 0 0 3px var(--accent-soft);
-    animation: blink 2.4s ease-in-out infinite;
-  }
-
-  .chip-repo {
-    color: var(--text);
-    font-size: var(--t-label);
-  }
-
-  .chip-meta {
-    font-size: var(--t-label);
-    color: var(--accent);
+    gap: 24px;
   }
 
   .display {
     font-size: var(--t-display);
     line-height: 1.02;
     letter-spacing: -0.02em;
-    max-width: 640px;
+    max-width: 600px;
   }
 
   .display em {
@@ -346,7 +271,7 @@ const examples = ready.slice(0, 3).map((repo) => repo.repo);
   }
 
   .lead {
-    max-width: 560px;
+    max-width: 540px;
     font-size: var(--t-lead);
     line-height: 1.55;
     color: var(--text-2);
@@ -356,7 +281,7 @@ const examples = ready.slice(0, 3).map((repo) => repo.repo);
     display: flex;
     gap: 10px;
     width: 100%;
-    max-width: 580px;
+    max-width: 560px;
   }
 
   .field {
@@ -368,13 +293,49 @@ const examples = ready.slice(0, 3).map((repo) => repo.repo);
     padding: 0 12px 0 16px;
     border: 1px solid var(--line);
     border-radius: var(--radius);
-    background: color-mix(in oklab, var(--panel) 88%, transparent);
+    background: var(--panel);
     color: var(--text-3);
     transition: border-color 160ms ease;
   }
 
   .field:focus-within {
+    border-color: var(--text-3);
+  }
+
+  .field.is-match {
     border-color: var(--accent);
+  }
+
+  .field-icon {
+    display: grid;
+  }
+
+  .field-icon svg {
+    grid-area: 1 / 1;
+    transition: opacity 160ms ease;
+  }
+
+  .match {
+    color: var(--accent);
+    opacity: 0;
+  }
+
+  .match path {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    transition: stroke-dashoffset 320ms var(--ease-out) 60ms;
+  }
+
+  .is-match .search {
+    opacity: 0;
+  }
+
+  .is-match .match {
+    opacity: 1;
+  }
+
+  .is-match .match path {
+    stroke-dashoffset: 0;
   }
 
   .field input {
@@ -404,8 +365,7 @@ const examples = ready.slice(0, 3).map((repo) => repo.repo);
   }
 
   .form-note {
-    min-height: 0;
-    margin-top: -14px;
+    margin-top: -12px;
     font-size: var(--t-caption);
     color: var(--accent-2);
   }
@@ -429,22 +389,19 @@ const examples = ready.slice(0, 3).map((repo) => repo.repo);
     border-radius: 999px;
     font-size: var(--t-caption);
     color: var(--text-2);
-    background: color-mix(in oklab, var(--bg) 70%, transparent);
     transition:
       border-color 160ms ease,
       color 160ms ease;
   }
 
   .pill:hover {
-    border-color: var(--accent);
+    border-color: var(--text-3);
     color: var(--text);
   }
 
   .hero-art {
     position: relative;
     width: 100%;
-    max-width: 600px;
-    justify-self: end;
   }
 
   .hero-stats {
@@ -452,8 +409,6 @@ const examples = ready.slice(0, 3).map((repo) => repo.repo);
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     border-top: 1px solid var(--line-soft);
-    background: color-mix(in oklab, var(--bg) 60%, transparent);
-    backdrop-filter: blur(6px);
   }
 
   .stat {
@@ -479,7 +434,10 @@ const examples = ready.slice(0, 3).map((repo) => repo.repo);
   }
 
   .block {
-    padding-top: 88px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding-block: 40px;
   }
 
   .block > .frame:first-child {
@@ -491,7 +449,7 @@ const examples = ready.slice(0, 3).map((repo) => repo.repo);
     grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
     align-items: end;
     gap: 48px;
-    margin-bottom: 44px;
+    margin-bottom: 28px;
   }
 
   .title {
@@ -509,52 +467,11 @@ const examples = ready.slice(0, 3).map((repo) => repo.repo);
     max-width: 420px;
   }
 
-  #wiki .frame {
-    padding-bottom: 88px;
-  }
-
-  .grid-frame {
-    padding-bottom: 88px;
-  }
-
-  .closing {
-    background:
-      radial-gradient(ellipse 60% 90% at 50% 100%, var(--accent-soft), transparent 70%),
-      var(--bg);
-  }
-
-  .closing-inner {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 18px;
-    padding: 112px 24px;
-    text-align: center;
-  }
-
-  .closing-inner .title {
-    margin-top: 0;
-  }
-
-  @keyframes blink {
-    0%,
-    100% {
-      opacity: 1;
-    }
-    50% {
-      opacity: 0.35;
-    }
-  }
 
   @media (max-width: 1000px) {
     .hero-inner {
       grid-template-columns: 1fr;
-      padding-top: 56px;
-    }
-
-    .hero-art {
-      justify-self: center;
-      max-width: 520px;
+      padding-top: 48px;
     }
 
     .block-head {
@@ -580,12 +497,8 @@ const examples = ready.slice(0, 3).map((repo) => repo.repo);
       flex-direction: column;
     }
 
-    .live-chip .chip-meta {
-      display: none;
-    }
-
     .block {
-      padding-top: 64px;
+      padding-block: 48px;
     }
 
     .block > .frame:first-child {

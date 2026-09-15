@@ -1,0 +1,144 @@
+import type { IncomingMessage, ServerResponse } from "node:http";
+import { AskInputError, type AskAnswer, type AskEvent } from "@everyrepo/ask";
+import { EmbeddingBudgetError } from "@everyrepo/embed";
+import { ModelUnavailableError } from "@everyrepo/llm";
+
+export interface AskBackend {
+  ask(repo: string, question: string, onEvent?: (event: AskEvent) => void): Promise<AskAnswer>;
+  repos(): Array<{ repo: string; sha: string }>;
+}
+
+export interface AskServerOptions {
+  // Questions one address may ask per minute
+  perMinute?: number;
+  now?: () => number;
+  log?: (message: string) => void;
+}
+
+export type AskStreamLine =
+  | { type: "stage"; stage: AskEvent["type"]; files?: string[] }
+  | { type: "answer"; answer: AskAnswer }
+  | { type: "error"; message: string };
+
+const MAX_BODY_BYTES = 8_000;
+const LOCAL_ORIGIN = /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/;
+
+function readBody(request: IncomingMessage): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let size = 0;
+    const parts: Buffer[] = [];
+    request.on("data", (part: Buffer) => {
+      size += part.length;
+      if (size > MAX_BODY_BYTES) {
+        reject(new AskInputError("The request is too large."));
+        request.destroy();
+        return;
+      }
+      parts.push(part);
+    });
+    request.on("end", () => resolve(Buffer.concat(parts).toString("utf8")));
+    request.on("error", reject);
+  });
+}
+
+function sendJson(response: ServerResponse, status: number, body: unknown): void {
+  response.writeHead(status, { "content-type": "application/json; charset=utf-8" });
+  response.end(JSON.stringify(body));
+}
+
+// Messages visitors can act on; anything unexpected stays in the server log
+export function publicMessage(error: unknown): string {
+  if (error instanceof AskInputError) return error.message;
+  if (error instanceof ModelUnavailableError || error instanceof EmbeddingBudgetError) {
+    return "Ask has used its free allowance for now. Try again in a while.";
+  }
+  return "Something went wrong while answering. Try again.";
+}
+
+// Answers stream as one JSON object per line: stages first, then the answer or an error
+export function createAskHandler(backend: AskBackend, options: AskServerOptions = {}) {
+  const perMinute = options.perMinute ?? 10;
+  const now = options.now ?? Date.now;
+  const recent = new Map<string, number[]>();
+
+  const allow = (address: string) => {
+    const cutoff = now() - 60_000;
+    const times = (recent.get(address) ?? []).filter((time) => time > cutoff);
+    if (times.length >= perMinute) {
+      recent.set(address, times);
+      return false;
+    }
+    times.push(now());
+    recent.set(address, times);
+    return true;
+  };
+
+  return async (request: IncomingMessage, response: ServerResponse): Promise<void> => {
+    const origin = request.headers.origin;
+    if (origin && LOCAL_ORIGIN.test(origin)) {
+      response.setHeader("access-control-allow-origin", origin);
+      response.setHeader("access-control-allow-methods", "GET, POST, OPTIONS");
+      response.setHeader("access-control-allow-headers", "content-type");
+      response.setHeader("vary", "origin");
+    }
+    const path = new URL(request.url ?? "/", "http://localhost").pathname;
+
+    if (request.method === "OPTIONS") {
+      response.writeHead(204).end();
+      return;
+    }
+    if (request.method === "GET" && path === "/api/repos") {
+      sendJson(response, 200, { repos: backend.repos() });
+      return;
+    }
+    if (request.method !== "POST" || path !== "/api/ask") {
+      sendJson(response, 404, { error: "Not found" });
+      return;
+    }
+
+    let repo: unknown;
+    let question: unknown;
+    try {
+      ({ repo, question } = JSON.parse(await readBody(request)) as Record<string, unknown>);
+    } catch (error) {
+      const message =
+        error instanceof AskInputError ? error.message : "Send JSON with a repo and a question.";
+      sendJson(response, 400, { error: message });
+      return;
+    }
+    if (typeof repo !== "string" || typeof question !== "string") {
+      sendJson(response, 400, { error: "Send JSON with a repo and a question." });
+      return;
+    }
+    if (!allow(request.socket.remoteAddress ?? "unknown")) {
+      sendJson(response, 429, {
+        error: "Too many questions at once. Wait a minute and ask again.",
+      });
+      return;
+    }
+
+    response.writeHead(200, {
+      "content-type": "application/x-ndjson; charset=utf-8",
+      "cache-control": "no-store",
+    });
+    const send = (line: AskStreamLine) => response.write(`${JSON.stringify(line)}\n`);
+    const started = now();
+    try {
+      const answer = await backend.ask(repo, question, (event) =>
+        send(
+          event.type === "reading"
+            ? { type: "stage", stage: event.type, files: event.files }
+            : { type: "stage", stage: event.type },
+        ),
+      );
+      send({ type: "answer", answer });
+      options.log?.(`${repo} ${answer.status} in ${now() - started} ms: ${answer.question}`);
+    } catch (error) {
+      if (!(error instanceof AskInputError)) {
+        options.log?.(`${repo} failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      send({ type: "error", message: publicMessage(error) });
+    }
+    response.end();
+  };
+}

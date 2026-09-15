@@ -3,16 +3,20 @@ import type { AddressInfo } from "node:net";
 import { AskInputError, type AskAnswer } from "@everyrepo/ask";
 import { ModelUnavailableError } from "@everyrepo/llm";
 import { afterEach, describe, expect, it } from "vitest";
-import { createAskHandler, type AskBackend } from "./ask-server.ts";
+import { createAskHandler, readRequest, type AskBackend } from "./ask-server.ts";
 
 const answer: AskAnswer = {
   status: "answered",
+  intent: "code",
   question: "Where is the port read?",
   markdown:
     "It is read in `loadConfig` [[1]](https://github.com/acme/app/blob/abc/src/load.ts#L1-L4).",
+  note: "",
   sources: [],
   files: [],
   pages: [],
+  issue: null,
+  otherIssues: [],
   model: "fake",
   cached: false,
   checks: { written: 1, kept: 1, missingNames: [] },
@@ -28,7 +32,8 @@ async function start(backend: AskBackend, perMinute = 10): Promise<string> {
 }
 
 afterEach(async () => {
-  await new Promise((resolve) => server?.close(resolve));
+  if (!server) return;
+  await new Promise((resolve) => server!.close(resolve));
   server = undefined;
 });
 
@@ -47,23 +52,39 @@ const lines = async (response: Response) =>
 
 describe("Ask API", () => {
   it("streams stages and then the answer to a local site", async () => {
+    let received: unknown;
     const base = await start({
       repos: () => [],
-      ask: async (_repo, _question, onEvent) => {
-        onEvent?.({ type: "searching" });
-        onEvent?.({ type: "reading", files: ["src/load.ts"] });
-        onEvent?.({ type: "writing" });
+      ask: async (request, onEvent) => {
+        received = request;
+        onEvent?.({ type: "stage", stage: "understanding", label: "Understanding the question" });
+        onEvent?.({
+          type: "stage",
+          stage: "reading",
+          label: "Reading 1 file",
+          files: ["src/load.ts"],
+        });
         return answer;
       },
     });
-    const response = await post(base, { repo: "acme/app", question: "Where is the port read?" });
+    const response = await post(base, {
+      repo: "acme/app",
+      question: "Where is the port read?",
+      page: "configuration",
+      history: [{ question: "What is this?", answer: "An app." }],
+    });
     expect(response.headers.get("access-control-allow-origin")).toBe("http://localhost:4321");
     expect(await lines(response)).toEqual([
-      { type: "stage", stage: "searching" },
-      { type: "stage", stage: "reading", files: ["src/load.ts"] },
-      { type: "stage", stage: "writing" },
+      { type: "stage", stage: "understanding", label: "Understanding the question" },
+      { type: "stage", stage: "reading", label: "Reading 1 file", files: ["src/load.ts"] },
       { type: "answer", answer },
     ]);
+    expect(received).toEqual({
+      repo: "acme/app",
+      question: "Where is the port read?",
+      page: "configuration",
+      history: [{ question: "What is this?", answer: "An app." }],
+    });
   });
 
   it("does not open answers to other sites", async () => {
@@ -104,5 +125,24 @@ describe("Ask API", () => {
       await response.text();
     }
     expect(statuses).toEqual([200, 200, 429]);
+  });
+});
+
+describe("readRequest", () => {
+  it("drops unexpected page names and malformed history turns", () => {
+    expect(
+      readRequest({
+        repo: "acme/app",
+        question: "Why?",
+        page: "../secret",
+        history: [{ question: "Hi", answer: 3 }, "x", { question: "Q", answer: "A".repeat(2_000) }],
+      }),
+    ).toEqual({
+      repo: "acme/app",
+      question: "Why?",
+      page: null,
+      history: [{ question: "Q", answer: "A".repeat(1_000) }],
+    });
+    expect(readRequest({ question: "Why?" })).toBeNull();
   });
 });

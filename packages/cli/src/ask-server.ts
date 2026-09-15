@@ -1,10 +1,17 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { AskInputError, type AskAnswer, type AskEvent } from "@everyrepo/ask";
+import { AskInputError, type AskAnswer, type AskEvent, type AskTurn } from "@everyrepo/ask";
 import { EmbeddingBudgetError } from "@everyrepo/embed";
 import { ModelUnavailableError } from "@everyrepo/llm";
 
+export interface AskRequestBody {
+  repo: string;
+  question: string;
+  page: string | null;
+  history: AskTurn[];
+}
+
 export interface AskBackend {
-  ask(repo: string, question: string, onEvent?: (event: AskEvent) => void): Promise<AskAnswer>;
+  ask(request: AskRequestBody, onEvent?: (event: AskEvent) => void): Promise<AskAnswer>;
   repos(): Array<{ repo: string; sha: string }>;
 }
 
@@ -16,12 +23,32 @@ export interface AskServerOptions {
 }
 
 export type AskStreamLine =
-  | { type: "stage"; stage: AskEvent["type"]; files?: string[] }
-  | { type: "answer"; answer: AskAnswer }
-  | { type: "error"; message: string };
+  AskEvent | { type: "answer"; answer: AskAnswer } | { type: "error"; message: string };
 
 const MAX_BODY_BYTES = 8_000;
 const LOCAL_ORIGIN = /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/;
+const PAGE_SLUG = /^[a-z0-9][a-z0-9-]{0,150}$/i;
+const HISTORY_TURNS = 6;
+
+// Only the expected fields and sizes pass; anything else in the body is ignored
+export function readRequest(body: unknown): AskRequestBody | null {
+  if (typeof body !== "object" || body === null) return null;
+  const { repo, question, page, history } = body as Record<string, unknown>;
+  if (typeof repo !== "string" || typeof question !== "string") return null;
+  const turns = Array.isArray(history) ? history.slice(-HISTORY_TURNS) : [];
+  return {
+    repo,
+    question,
+    page: typeof page === "string" && PAGE_SLUG.test(page) ? page : null,
+    history: turns.flatMap((turn: unknown) => {
+      if (typeof turn !== "object" || turn === null) return [];
+      const { question: asked, answer } = turn as Record<string, unknown>;
+      return typeof asked === "string" && typeof answer === "string"
+        ? [{ question: asked.slice(0, 400), answer: answer.slice(0, 1_000) }]
+        : [];
+    }),
+  };
+}
 
 function readBody(request: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -96,20 +123,20 @@ export function createAskHandler(backend: AskBackend, options: AskServerOptions 
       return;
     }
 
-    let repo: unknown;
-    let question: unknown;
+    let body: AskRequestBody | null;
     try {
-      ({ repo, question } = JSON.parse(await readBody(request)) as Record<string, unknown>);
+      body = readRequest(JSON.parse(await readBody(request)));
     } catch (error) {
       const message =
         error instanceof AskInputError ? error.message : "Send JSON with a repo and a question.";
       sendJson(response, 400, { error: message });
       return;
     }
-    if (typeof repo !== "string" || typeof question !== "string") {
+    if (!body) {
       sendJson(response, 400, { error: "Send JSON with a repo and a question." });
       return;
     }
+    const { repo } = body;
     if (!allow(request.socket.remoteAddress ?? "unknown")) {
       sendJson(response, 429, {
         error: "Too many questions at once. Wait a minute and ask again.",
@@ -124,15 +151,11 @@ export function createAskHandler(backend: AskBackend, options: AskServerOptions 
     const send = (line: AskStreamLine) => response.write(`${JSON.stringify(line)}\n`);
     const started = now();
     try {
-      const answer = await backend.ask(repo, question, (event) =>
-        send(
-          event.type === "reading"
-            ? { type: "stage", stage: event.type, files: event.files }
-            : { type: "stage", stage: event.type },
-        ),
-      );
+      const answer = await backend.ask(body, send);
       send({ type: "answer", answer });
-      options.log?.(`${repo} ${answer.status} in ${now() - started} ms: ${answer.question}`);
+      options.log?.(
+        `${repo} ${answer.intent} ${answer.status} in ${now() - started} ms: ${answer.question}${answer.note ? ` (${answer.note})` : ""}`,
+      );
     } catch (error) {
       if (!(error instanceof AskInputError)) {
         options.log?.(`${repo} failed: ${error instanceof Error ? error.message : String(error)}`);

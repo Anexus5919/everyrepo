@@ -1,5 +1,12 @@
 import { createHash } from "node:crypto";
-import { askQuestion, AskInputError, type AskAnswer, type AskEvent } from "@everyrepo/ask";
+import {
+  askQuestion,
+  AskInputError,
+  createGithubIssues,
+  type AskAnswer,
+  type AskEvent,
+  type AskTurn,
+} from "@everyrepo/ask";
 import { parseRepoRef, repoDirName } from "@everyrepo/core";
 import {
   EmbeddingCache,
@@ -14,8 +21,16 @@ import { fromBlob, toBlob } from "@everyrepo/embed";
 import { loadVectorIndex, type VectorIndex } from "@everyrepo/search";
 import { openEmbedder, openLlm, type CliContext } from "./context.ts";
 
+export interface AskRequest {
+  repo: string;
+  question: string;
+  // Slug of the wiki page the reader is on
+  page?: string | null;
+  history?: AskTurn[];
+}
+
 export interface AskSession {
-  ask(repo: string, question: string, onEvent?: (event: AskEvent) => void): Promise<AskAnswer>;
+  ask(request: AskRequest, onEvent?: (event: AskEvent) => void): Promise<AskAnswer>;
   // Repositories that have an index to answer from
   repos(): Array<{ repo: string; sha: string }>;
   close(): void;
@@ -37,6 +52,9 @@ export async function openAskSession(context: CliContext): Promise<AskSession> {
   const llm = openLlm(context);
   const queries = new EmbeddingCache(queryCachePath(context.config.dataDir));
   const loaded = new Map<string, Snapshot>();
+  // A token raises the GitHub rate limit but is optional for public issues
+  const githubToken = process.env["GITHUB_TOKEN"];
+  const issues = createGithubIssues(githubToken ? { token: githubToken } : {});
 
   // Repeated questions reuse their stored vector instead of paying for it again
   async function embedQuery(text: string): Promise<Float32Array> {
@@ -71,7 +89,7 @@ export async function openAskSession(context: CliContext): Promise<AskSession> {
   }
 
   return {
-    async ask(repoArg, question, onEvent) {
+    async ask({ repo: repoArg, question, page, history }, onEvent) {
       let ref;
       try {
         ref = parseRepoRef(repoArg);
@@ -98,6 +116,9 @@ export async function openAskSession(context: CliContext): Promise<AskSession> {
         repo: row.fullName,
         sha: snapshot.sha,
         question,
+        page: page ?? null,
+        history: history ?? [],
+        issues,
         ...(onEvent ? { onEvent } : {}),
       });
     },

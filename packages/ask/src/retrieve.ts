@@ -38,6 +38,47 @@ export function trimExcerpt(row: ChunkRow, maxChars: number): ChunkRow {
   return { ...row, content: kept.join("\n"), endLine: row.startLine + kept.length - 1 };
 }
 
+export interface DocumentPattern {
+  // Case-insensitive SQL LIKE pattern for the file path
+  like: string;
+  // Only files at the repository root
+  root?: boolean;
+}
+
+// Opening chunks of documents such as the README or a contributing guide, shortest matching path first
+export function documentChunks(
+  engine: EngineDb,
+  patterns: readonly DocumentPattern[],
+  maxChars: number,
+): Source[] {
+  const query = engine.$client.prepare(
+    `SELECT c.id, f.path, c.start_line AS startLine, c.end_line AS endLine, c.content
+     FROM chunk c JOIN file f ON f.id = c.file_id
+     WHERE lower(f.path) LIKE lower(?) AND (? = 0 OR instr(f.path, '/') = 0)
+     ORDER BY length(f.path), f.path, c.start_line LIMIT 4`,
+  );
+  const picked: ChunkRow[] = [];
+  let used = 0;
+  for (const pattern of patterns) {
+    for (const row of query.all(pattern.like, pattern.root ? 1 : 0) as ChunkRow[]) {
+      if (picked.some((item) => item.id === row.id)) continue;
+      const excerpt = trimExcerpt(row, Math.min(MAX_EXCERPT_CHARS, maxChars - used));
+      if (excerpt.content.length < 80 || used + excerpt.content.length > maxChars) continue;
+      picked.push(excerpt);
+      used += excerpt.content.length;
+    }
+    if (picked.length > 0) break;
+  }
+  return picked.map((row, position) => ({
+    label: `S${position + 1}`,
+    chunkId: row.id,
+    path: row.path,
+    startLine: row.startLine,
+    endLine: row.endLine,
+    content: row.content,
+  }));
+}
+
 // Best chunks of the most relevant files alternate with the best matching chunks, then pack into a budget
 export function retrieveSources(
   engine: EngineDb,

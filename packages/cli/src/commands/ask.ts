@@ -9,26 +9,37 @@ export function askCommand(): Command {
     .description("Answer a question about a repository from its indexed code")
     .argument("<repo>", "owner/name or GitHub URL")
     .argument("<question...>", "the question")
-    .action(async (repo: string, words: string[]) => {
+    .option("--page <slug>", "wiki page the question is asked from")
+    .action(async (repo: string, words: string[], options: { page?: string }) => {
       const context = await openContext();
       const session = await openAskSession(context);
       try {
         const started = Date.now();
-        const answer = await session.ask(repo, words.join(" "), (event) => {
-          if (event.type === "reading") {
-            console.log(`${timestamp()} reading ${event.files.length} files`);
-          }
-        });
-        if (answer.status === "not-found") {
-          console.log("The indexed code did not answer this. These files came closest:");
-          for (const file of answer.files) console.log(`  ${file.path}`);
-        } else {
+        const answer = await session.ask(
+          { repo, question: words.join(" "), page: options.page ?? null },
+          (event) => console.log(`${timestamp()} ${event.label}`),
+        );
+        console.log(`\nIntent: ${answer.intent}, ${answer.status}`);
+        if (answer.issue) {
+          console.log(`Issue #${answer.issue.number} ${answer.issue.title} ${answer.issue.url}`);
+        }
+        if (answer.note) console.log(answer.note);
+        if (answer.markdown) {
           console.log(`\n${answer.markdown}\n\nSources`);
           for (const source of answer.sources) {
-            console.log(
-              `  [${source.number}] ${source.path}#L${source.startLine}-L${source.endLine}`,
-            );
+            const where =
+              source.kind === "code"
+                ? `${source.path}#L${source.startLine}-L${source.endLine}`
+                : source.url;
+            console.log(`  [${source.number}] ${source.kind} ${where}`);
           }
+        } else if (answer.files.length > 0) {
+          console.log("Files read:");
+          for (const file of answer.files) console.log(`  ${file.path}`);
+        }
+        if (answer.otherIssues.length > 0) {
+          console.log("\nOther issues");
+          for (const issue of answer.otherIssues) console.log(`  #${issue.number} ${issue.title}`);
         }
         if (answer.pages.length > 0) {
           console.log("\nWiki pages");
@@ -36,7 +47,7 @@ export function askCommand(): Command {
         }
         const { written, kept, missingNames } = answer.checks;
         console.log(
-          `\n${answer.model || "no model call"}, ${Date.now() - started} ms${answer.cached ? ", cached" : ""}, kept ${kept} of ${written} blocks`,
+          `\n${answer.model || "no answer model call"}, ${Date.now() - started} ms${answer.cached ? ", cached" : ""}, kept ${kept} of ${written} blocks`,
         );
         if (missingNames.length > 0) {
           console.log(`Names not found in the cited sources: ${missingNames.join(", ")}`);

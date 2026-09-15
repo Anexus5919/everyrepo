@@ -1,0 +1,640 @@
+---
+import BookIcon from "./BookIcon.astro";
+
+interface Props {
+  // Unique on the page; also names the input, list and note inside the form
+  id: string;
+  variant?: "hero" | "dialog" | "page";
+  // Pressing / anywhere on the page focuses this box
+  shortcut?: boolean;
+  label?: string;
+  value?: string;
+}
+const { id, variant = "hero", shortcut = false, label = "Open", value = "" } = Astro.props;
+---
+
+<form
+  class:list={["opener", `is-${variant}`]}
+  data-opener
+  data-shortcut={shortcut ? "" : undefined}
+  novalidate
+>
+  <div class="row">
+    <div class="field" data-opener-field>
+      <span class="field-icon" aria-hidden="true">
+        <svg
+          class="search"
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"><circle cx="11" cy="11" r="6.5"></circle><path d="M16 16l4.5 4.5"></path></svg
+        >
+        <svg
+          class="match"
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"><path pathLength="1" d="M5 12.5l4.5 4.5L19 7.5"></path></svg
+        >
+      </span>
+      <label class="sr-only" for={`${id}-input`}>Repository</label>
+      <input
+        id={`${id}-input`}
+        name="repo"
+        type="text"
+        role="combobox"
+        aria-autocomplete="list"
+        aria-expanded="false"
+        aria-controls={`${id}-list`}
+        aria-describedby={`${id}-note`}
+        placeholder="Search GitHub repositories or paste a link"
+        autocomplete="off"
+        autocapitalize="off"
+        spellcheck="false"
+        enterkeyhint="go"
+        value={value}
+        data-opener-input
+      />
+      <button class="clear" type="button" aria-label="Clear" data-opener-clear hidden>
+        <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"
+          ><path d="M4 4l8 8M12 4l-8 8"></path></svg
+        >
+      </button>
+      {shortcut && <kbd class="mono" aria-hidden="true">/</kbd>}
+      <div class="suggestions" data-opener-suggestions hidden>
+        <div class="options" id={`${id}-list`} role="listbox" aria-label="Suggestions" data-opener-list>
+        </div>
+        <p class="suggestions-status" data-opener-status aria-live="polite" hidden></p>
+      </div>
+    </div>
+    <button class="btn btn-solid submit book-trigger" type="submit" data-opener-submit>
+      <span data-opener-label>{label}</span>
+      <BookIcon />
+    </button>
+  </div>
+  <div class="preview" data-opener-preview aria-live="polite" hidden></div>
+  <p class="note" id={`${id}-note`} data-opener-note aria-live="polite"></p>
+  <div class="check" data-opener-check></div>
+</form>
+
+<script>
+  import { mountOpeners } from "../lib/opener.ts";
+
+  mountOpeners();
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey) return;
+    const target = event.target as HTMLElement;
+    if (target.closest("input, textarea, select, [contenteditable]")) return;
+    if (document.querySelector("dialog[open]")) return;
+    const input = document.querySelector<HTMLInputElement>("[data-opener][data-shortcut] input");
+    if (!input) return;
+    event.preventDefault();
+    input.focus();
+  });
+</script>
+
+<style>
+  .opener {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+  }
+
+  .is-hero {
+    max-width: 560px;
+  }
+
+  .row {
+    display: flex;
+    gap: 10px;
+  }
+
+  .field {
+    position: relative;
+    flex-grow: 1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    height: 52px;
+    padding: 0 12px 0 16px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--panel);
+    color: var(--text-3);
+    transition: border-color 160ms ease;
+  }
+
+  .is-dialog .field,
+  .is-page .field {
+    height: 48px;
+  }
+
+  .field:focus-within {
+    border-color: var(--text-3);
+  }
+
+  .field.is-match {
+    border-color: var(--accent);
+  }
+
+  .field.is-invalid {
+    border-color: var(--accent-2);
+    animation: nudge 260ms ease;
+  }
+
+  @keyframes nudge {
+    25% {
+      transform: translateX(-3px);
+    }
+    75% {
+      transform: translateX(3px);
+    }
+  }
+
+  .field-icon {
+    display: grid;
+  }
+
+  .field-icon svg {
+    grid-area: 1 / 1;
+    transition: opacity 160ms ease;
+  }
+
+  .match {
+    color: var(--accent);
+    opacity: 0;
+  }
+
+  .match path {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    transition: stroke-dashoffset 320ms var(--ease-out) 60ms;
+  }
+
+  .is-match .search {
+    opacity: 0;
+  }
+
+  .is-match .match {
+    opacity: 1;
+  }
+
+  .is-match .match path {
+    stroke-dashoffset: 0;
+  }
+
+  .field input {
+    flex-grow: 1;
+    min-width: 0;
+    height: 100%;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    font-size: var(--t-small);
+    color: var(--text);
+  }
+
+  .field input::placeholder {
+    color: var(--text-3);
+  }
+
+  .clear {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-3);
+    cursor: pointer;
+  }
+
+  .clear:hover {
+    background: var(--panel-2);
+    color: var(--text);
+  }
+
+  .clear svg {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+  }
+
+  kbd {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    font-size: var(--t-label);
+    color: var(--text-3);
+  }
+
+  .submit {
+    flex-shrink: 0;
+    height: auto;
+    min-width: 150px;
+    justify-content: center;
+  }
+
+  .is-busy .submit {
+    cursor: progress;
+    opacity: 0.8;
+  }
+
+  /* Written wikis open below the box and never push the page down */
+  .suggestions {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: -1px;
+    right: -1px;
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    max-height: min(460px, 62vh);
+    padding: 6px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--bg-raise);
+    box-shadow: var(--shadow);
+    animation: rise 140ms var(--ease-out);
+  }
+
+  .suggestions[hidden] {
+    display: none;
+  }
+
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+  }
+
+  .options :global(.option-group + .option-group) {
+    margin-top: 4px;
+    padding-top: 4px;
+    border-top: 1px solid var(--line-soft);
+  }
+
+  .options :global(.suggestions-label) {
+    padding: 6px 10px 4px;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-3);
+  }
+
+  .options :global(.option) {
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 10px;
+    border-radius: 6px;
+    font-size: var(--t-small);
+    color: var(--text);
+    cursor: pointer;
+  }
+
+  .options :global(.option-icon) {
+    display: grid;
+    place-items: center;
+    color: var(--text-3);
+  }
+
+  .options :global(.option-main) {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .options :global(.option-main .repo-name),
+  .options :global(.option-description) {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .options :global(.option-description) {
+    font-size: var(--t-caption);
+    color: var(--text-3);
+  }
+
+  .options :global(mark) {
+    background: transparent;
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  .options :global(.option-meta) {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: var(--t-caption);
+    color: var(--text-3);
+    white-space: nowrap;
+  }
+
+  .options :global(.option-stars) {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .options :global(.option-badge) {
+    padding: 1px 8px;
+    border: 1px solid var(--accent-line);
+    border-radius: 999px;
+    font-size: 11px;
+    color: var(--accent-2);
+  }
+
+  .options :global(.option-owner .option-meta .icon) {
+    transition: transform 160ms var(--ease-out);
+  }
+
+  .options :global(.option-owner:hover .option-meta .icon),
+  .options :global(.option-owner[aria-selected="true"] .option-meta .icon) {
+    transform: translateX(3px);
+  }
+
+  .suggestions-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    padding: 8px 10px 6px;
+    font-size: var(--t-caption);
+    line-height: 1.5;
+    color: var(--text-3);
+  }
+
+  .suggestions-status.is-loading::before {
+    content: "";
+    flex-shrink: 0;
+    width: 10px;
+    height: 10px;
+    border: 1.5px solid var(--line);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 700ms linear infinite;
+  }
+
+  .options :global(.option:hover),
+  .options :global(.option[aria-selected="true"]) {
+    background: var(--panel-2);
+  }
+
+  .options :global(.option-meta) {
+    flex-shrink: 0;
+    font-size: var(--t-caption);
+    color: var(--text-3);
+  }
+
+  .opener :global(.repo-owner) {
+    color: var(--text-3);
+  }
+
+  .preview[hidden] {
+    display: none;
+  }
+
+  .preview :global(.preview-card) {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 14px 16px;
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius);
+    background: var(--bg-raise);
+    font-size: var(--t-small);
+    color: var(--text-2);
+    animation: rise 180ms var(--ease-out);
+  }
+
+  .preview :global(.monogram) {
+    flex-shrink: 0;
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--panel);
+    font-family: var(--font-serif);
+    font-size: 18px;
+    color: var(--text);
+  }
+
+  .preview :global(.preview-main) {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .preview :global(.repo-name) {
+    font-weight: 500;
+    color: var(--text);
+    overflow-wrap: anywhere;
+  }
+
+  .preview :global(.preview-description) {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    font-size: var(--t-caption);
+    line-height: 1.5;
+    color: var(--text-2);
+  }
+
+  .preview :global(.facts) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+    font-size: var(--t-caption);
+    color: var(--text-3);
+  }
+
+  .preview :global(.fact) {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .opener :global(.icon) {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.4;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .opener :global(.icon-star) {
+    fill: currentColor;
+    stroke: none;
+  }
+
+  .preview :global(.preview-status) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 8px;
+    margin-top: 2px;
+    font-size: var(--t-caption);
+    line-height: 1.5;
+  }
+
+  .preview :global(.preview-status strong) {
+    font-weight: 500;
+    color: var(--text);
+  }
+
+  .preview :global(.status-mark) {
+    align-self: center;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-3);
+  }
+
+  .preview :global(.tone-ready .status-mark) {
+    background: var(--accent);
+  }
+
+  .preview :global(.tone-active .status-mark) {
+    background: var(--accent);
+    animation: beat 1.4s ease-in-out infinite;
+  }
+
+  .preview :global(.tone-waiting .status-mark),
+  .preview :global(.tone-open .status-mark) {
+    background: var(--accent-2);
+  }
+
+  .preview :global(.tone-attention .status-mark) {
+    background: transparent;
+    box-shadow: inset 0 0 0 2px var(--accent-2);
+  }
+
+  .preview :global(.tone-blocked) {
+    border-color: var(--line);
+  }
+
+  .preview :global(.tone-blocked .status-mark) {
+    background: transparent;
+    box-shadow: inset 0 0 0 2px var(--text-3);
+  }
+
+  .preview :global(.preview-offline) {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--t-caption);
+    color: var(--text-3);
+  }
+
+  .preview :global(.preview-offline .icon) {
+    flex-shrink: 0;
+    color: var(--accent-2);
+  }
+
+  .preview :global(.preview-icon) {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    color: var(--accent-2);
+  }
+
+  .preview :global(.is-checking) {
+    align-items: center;
+    color: var(--text-3);
+  }
+
+  .preview :global(.spinner) {
+    width: 16px;
+    height: 16px;
+    margin: 0 10px;
+    border: 2px solid var(--line);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 700ms linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes beat {
+    50% {
+      opacity: 0.35;
+    }
+  }
+
+  .note {
+    margin: -4px 0 0;
+    font-size: var(--t-caption);
+    color: var(--accent-2);
+  }
+
+  .note[data-tone="info"] {
+    color: var(--text-3);
+  }
+
+  .note:empty {
+    display: none;
+  }
+
+  .check:empty {
+    display: none;
+  }
+
+  @media (max-width: 560px) {
+    .row {
+      flex-direction: column;
+    }
+
+    .submit {
+      min-height: 48px;
+    }
+
+    kbd {
+      display: none;
+    }
+
+    .options :global(.option-language) {
+      display: none;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .suggestions-status.is-loading::before,
+    .preview :global(.spinner),
+    .preview :global(.tone-active .status-mark),
+    .field.is-invalid {
+      animation: none;
+    }
+  }
+</style>

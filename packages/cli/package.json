@@ -7,17 +7,20 @@
     ".": "./src/main.ts"
   },
   "dependencies": {
+    "@everyrepo/accounts": "workspace:*",
     "@everyrepo/ask": "workspace:*",
     "@everyrepo/core": "workspace:*",
     "@everyrepo/db": "workspace:*",
     "@everyrepo/detect": "workspace:*",
     "@everyrepo/embed": "workspace:*",
     "@everyrepo/eval": "workspace:*",
+    "@everyrepo/github": "workspace:*",
     "@everyrepo/llm": "workspace:*",
     "@everyrepo/parse": "workspace:*",
     "@everyrepo/pipeline": "workspace:*",
     "@everyrepo/queue": "workspace:*",
     "@everyrepo/repo": "workspace:*",
+    "@everyrepo/requests": "workspace:*",
     "@everyrepo/search": "workspace:*",
     "commander": "^15.0.0"
   }

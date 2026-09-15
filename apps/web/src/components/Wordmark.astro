@@ -83,7 +83,7 @@
       target.textBaseline = "alphabetic";
     }
 
-    // The word fills the width, or the height when space is short, and sits low enough that only the tips of y and p reach the bottom edge
+    // The word fills the width, or the height when space is short, sits centered, and sits low enough that only the tips of y and p reach the bottom edge
     function fit() {
       const rect = host.getBoundingClientRect();
       ratio = Math.min(window.devicePixelRatio || 1, 2);
@@ -99,7 +99,7 @@
       const tall = metrics.actualBoundingBoxAscent / 100;
       const drop = (metrics.actualBoundingBoxDescent / 100) * DESCENDER_SHOWN;
       size = Math.max(10, Math.min(width / wide, (height - 6) / (tall + drop)));
-      left = metrics.actualBoundingBoxLeft * (size / 100);
+      left = (width - wide * size) / 2 + metrics.actualBoundingBoxLeft * (size / 100);
       baseline = height - drop * size;
       top = baseline - tall * size;
 

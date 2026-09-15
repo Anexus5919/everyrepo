@@ -1,4 +1,10 @@
-import { repoDirName, type LocalConfig, type RepoRef, type SizeTier } from "@everyrepo/core";
+import {
+  INDEX_STAGE_KEYS,
+  repoDirName,
+  type LocalConfig,
+  type RepoRef,
+  type SizeTier,
+} from "@everyrepo/core";
 import {
   embeddingCachePath,
   engineDbPath,
@@ -31,15 +37,7 @@ import { runEmbedStage } from "./embed-stage.ts";
 import { runGraphStage } from "./graph-stage.ts";
 import { estimateIndexCost, type CostEstimate } from "./estimate.ts";
 
-export const INDEX_STAGES = [
-  "source",
-  "detect",
-  "parse",
-  "graph",
-  "chunk",
-  "embed",
-  "estimate",
-] as const;
+export const INDEX_STAGES = INDEX_STAGE_KEYS;
 export type IndexStage = (typeof INDEX_STAGES)[number];
 
 export interface PipelineOptions {
@@ -49,6 +47,8 @@ export interface PipelineOptions {
   repoId: number;
   fetch: boolean;
   embedder?: Embedder | undefined;
+  // When the embedding allowance frees up again, for resuming a paused job on time
+  embeddingsAt?: (() => Date | undefined) | undefined;
 }
 
 export interface SourceOutput {
@@ -153,7 +153,7 @@ export function createIndexHandlers(options: PipelineOptions): Record<IndexStage
     }
   };
 
-  const parse: StageHandler = async ({ outputs, heartbeat, log }) => {
+  const parse: StageHandler = async ({ outputs, heartbeat, log, progress }) => {
     const snapshot = sourceOutput(outputs);
     const started = Date.now();
     const engine = openEngineDb(snapshot.enginePath);
@@ -182,6 +182,7 @@ export function createIndexHandlers(options: PipelineOptions): Record<IndexStage
       for (const [index, row] of candidates.entries()) {
         const language = row.language ?? undefined;
         if (!isParseable(language)) continue;
+        progress(index, candidates.length);
         if (row.bytes > MAX_PARSE_BYTES) {
           counts.skippedLarge += 1;
           continue;
@@ -207,6 +208,7 @@ export function createIndexHandlers(options: PipelineOptions): Record<IndexStage
         }
       }
       writer.write(batch);
+      progress(candidates.length, candidates.length);
       counts.seconds = Math.round((Date.now() - started) / 100) / 10;
       log(
         `${counts.ok} ok, ${counts.partial} with syntax errors, ${counts.failed} failed, ${counts.definitions} definitions in ${counts.seconds}s`,
@@ -229,17 +231,18 @@ export function createIndexHandlers(options: PipelineOptions): Record<IndexStage
     });
   };
 
-  const chunk: StageHandler = async ({ outputs, heartbeat, log }) => {
+  const chunk: StageHandler = async ({ outputs, heartbeat, log, progress }) => {
     const snapshot = sourceOutput(outputs);
     return runChunkStage({
       enginePath: snapshot.enginePath,
       gitDir: snapshot.gitDir,
       log,
       heartbeat,
+      progress,
     });
   };
 
-  const embed: StageHandler = async ({ outputs, heartbeat, log }) => {
+  const embed: StageHandler = async ({ outputs, heartbeat, log, progress }) => {
     const snapshot = sourceOutput(outputs);
     return runEmbedStage({
       enginePath: snapshot.enginePath,
@@ -247,6 +250,8 @@ export function createIndexHandlers(options: PipelineOptions): Record<IndexStage
       embedder: options.embedder,
       log,
       heartbeat,
+      progress,
+      allowanceAt: options.embeddingsAt,
     });
   };
 

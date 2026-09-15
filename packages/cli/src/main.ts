@@ -8,9 +8,11 @@ import { indexCommand } from "./commands/index-repo.ts";
 import { llmCommand } from "./commands/llm.ts";
 import { reportCommand } from "./commands/report.ts";
 import { reposCommand } from "./commands/repos.ts";
+import { requestsCommand } from "./commands/requests.ts";
 import { searchCommand } from "./commands/search.ts";
 import { siteCommand } from "./commands/site.ts";
 import { wikiCommand } from "./commands/wiki.ts";
+import { workerCommand } from "./commands/worker.ts";
 
 // Secrets such as provider tokens live in a gitignored .env next to the local config
 if (existsSync(".env")) process.loadEnvFile(".env");
@@ -32,6 +34,8 @@ program.addCommand(exportCommand());
 program.addCommand(siteCommand());
 program.addCommand(askCommand());
 program.addCommand(serveCommand());
+program.addCommand(requestsCommand());
+program.addCommand(workerCommand());
 
 try {
   await program.parseAsync();

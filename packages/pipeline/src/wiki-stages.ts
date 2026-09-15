@@ -1,10 +1,16 @@
-import { formatRepoRef, repoDirName, type LocalConfig, type RepoRef } from "@everyrepo/core";
+import {
+  formatRepoRef,
+  repoDirName,
+  WIKI_STAGE_KEYS,
+  type LocalConfig,
+  type RepoRef,
+} from "@everyrepo/core";
 import { engineDbPath, eq, repos, type AppDb } from "@everyrepo/db";
 import { ModelUnavailableError, type LlmRouter } from "@everyrepo/llm";
 import { StageDeferredError, type StageHandler } from "@everyrepo/queue";
 import { buildGlossary, planWiki, summarizeRepository, writePages } from "@everyrepo/wiki";
 
-export const WIKI_STAGES = ["summarize", "plan", "write", "glossary"] as const;
+export const WIKI_STAGES = WIKI_STAGE_KEYS;
 export type WikiStage = (typeof WIKI_STAGES)[number];
 
 export interface WikiOptions {
@@ -15,6 +21,8 @@ export interface WikiOptions {
   router: LlmRouter;
   // Rewrites only these page slugs when set
   pages?: readonly string[] | undefined;
+  // When a task's model allowance frees up again, for resuming a paused job on time
+  allowanceAt?: ((task: string) => Date | undefined) | undefined;
 }
 
 function enginePathFor(options: WikiOptions): string {
@@ -26,52 +34,66 @@ function enginePathFor(options: WikiOptions): string {
 }
 
 // Free model allowances run out during large repositories; the job waits and resumes where it stopped
-async function deferWhenUnavailable<T>(work: () => Promise<T>): Promise<T> {
+async function deferWhenUnavailable<T>(
+  work: () => Promise<T>,
+  allowanceAt: WikiOptions["allowanceAt"],
+): Promise<T> {
   try {
     return await work();
   } catch (error) {
     if (error instanceof ModelUnavailableError) {
-      throw new StageDeferredError(`${error.message}; finished work is kept, run again later`, {
-        cause: error,
-      });
+      const retryAt = error.task ? allowanceAt?.(error.task) : undefined;
+      throw new StageDeferredError(
+        `${error.message}; finished work is kept, run again later`,
+        retryAt ? { cause: error, retryAt } : { cause: error },
+      );
     }
     throw error;
   }
 }
 
 export function createWikiHandlers(options: WikiOptions): Record<WikiStage, StageHandler> {
-  const summarize: StageHandler = async ({ heartbeat, log }) =>
-    deferWhenUnavailable(() =>
-      summarizeRepository({
-        enginePath: enginePathFor(options),
-        repo: formatRepoRef(options.ref),
-        router: options.router,
-        log,
-        heartbeat,
-      }),
+  const summarize: StageHandler = async ({ heartbeat, log, progress }) =>
+    deferWhenUnavailable(
+      () =>
+        summarizeRepository({
+          enginePath: enginePathFor(options),
+          repo: formatRepoRef(options.ref),
+          router: options.router,
+          log,
+          heartbeat,
+          progress,
+        }),
+      options.allowanceAt,
     );
   const plan: StageHandler = async ({ log }) =>
-    deferWhenUnavailable(() =>
-      planWiki({
-        enginePath: enginePathFor(options),
-        repo: formatRepoRef(options.ref),
-        router: options.router,
-        log,
-      }),
+    deferWhenUnavailable(
+      () =>
+        planWiki({
+          enginePath: enginePathFor(options),
+          repo: formatRepoRef(options.ref),
+          router: options.router,
+          log,
+        }),
+      options.allowanceAt,
     );
-  const write: StageHandler = async ({ heartbeat, log }) =>
-    deferWhenUnavailable(() =>
-      writePages({
-        enginePath: enginePathFor(options),
-        router: options.router,
-        ...(options.pages ? { only: options.pages } : {}),
-        log,
-        heartbeat,
-      }),
+  const write: StageHandler = async ({ heartbeat, log, progress }) =>
+    deferWhenUnavailable(
+      () =>
+        writePages({
+          enginePath: enginePathFor(options),
+          router: options.router,
+          ...(options.pages ? { only: options.pages } : {}),
+          log,
+          heartbeat,
+          progress,
+        }),
+      options.allowanceAt,
     );
   const glossary: StageHandler = async ({ log }) =>
-    deferWhenUnavailable(() =>
-      buildGlossary({ enginePath: enginePathFor(options), router: options.router, log }),
+    deferWhenUnavailable(
+      () => buildGlossary({ enginePath: enginePathFor(options), router: options.router, log }),
+      options.allowanceAt,
     );
   return { summarize, plan, write, glossary };
 }

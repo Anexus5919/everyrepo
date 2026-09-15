@@ -38,4 +38,12 @@ export interface ChatModel {
 // The model is out of its allowance for now; a router moves on to the next model
 export class ModelUnavailableError extends Error {
   override readonly name = "ModelUnavailableError";
+
+  constructor(
+    message: string,
+    // The task no configured model could take, when a router gave up on all of them
+    readonly task?: string,
+  ) {
+    super(message);
+  }
 }

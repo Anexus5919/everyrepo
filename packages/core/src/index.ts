@@ -1,10 +1,24 @@
-export { formatRepoRef, parseRepoRef, repoDirName, type RepoRef } from "./repo-ref.ts";
+export {
+  formatRepoRef,
+  parseRepoRef,
+  readRepoInput,
+  readSearchInput,
+  repoDirName,
+  repoInputMessage,
+  repoKey,
+  type RepoInput,
+  type RepoInputProblem,
+  type RepoRef,
+  type SearchInput,
+} from "./repo-ref.ts";
+export * from "./requests.ts";
 export {
   loadLocalConfig,
   type EmbeddingsConfig,
   type LlmConfig,
   type LocalConfig,
   type LocalRepo,
+  type RequestsConfig,
 } from "./local-config.ts";
 export { testRepos, type TestRepo } from "./test-repos.ts";
 export * from "./vocabulary.ts";

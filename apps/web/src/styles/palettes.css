@@ -1,4 +1,5 @@
-/* Palettes readers can choose; each sets the same tokens for dark and light, and Ember in global.css is the default */
+/* Palettes readers can choose; each sets the same tokens for dark and light. Tide is the default, and Ember's
+   colours are the base tokens in global.css */
 
 /* Tide: deep blue black with sea green and sky blue */
 :root[data-palette="tide"] {

@@ -1,0 +1,12 @@
+---
+import AuthPanel from "../../components/AuthPanel.astro";
+import Base from "../../layouts/Base.astro";
+---
+
+<Base
+  title="Sign in: EveryRepo"
+  description="Sign in with GitHub to request repositories and follow your requests."
+  guide={false}
+>
+  <AuthPanel mode="signin" />
+</Base>

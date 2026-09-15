@@ -1,6 +1,12 @@
 ---
 import { loadRepos } from "../lib/site-data.ts";
 
+interface Props {
+  // Opens by itself on a first visit; pages people arrive at mid-task leave it closed
+  auto?: boolean;
+}
+const { auto = true } = Astro.props;
+
 const ready = loadRepos().filter((repo) => repo.status === "ready");
 // A short name other than the one the home page leads with keeps the drawings readable
 const typed =
@@ -41,7 +47,7 @@ const steps = [
 const cover = (text: string, size: number) => Math.ceil(text.length * size * 0.6) + 6;
 ---
 
-<dialog class="guide" aria-labelledby="guide-title" data-guide>
+<dialog class="guide" aria-labelledby="guide-title" data-guide data-guide-auto={auto ? "true" : "false"}>
   <div class="stage" aria-hidden="true">
     <svg class="scene" data-scene="0" viewBox="0 0 640 240">
       <g class="s1-repo">
@@ -343,7 +349,8 @@ const cover = (text: string, size: number) => Math.ceil(text.length * size * 0.6
     } catch {
       seen = false;
     }
-    if (!seen || new URLSearchParams(window.location.search).has("guide")) {
+    const auto = guide.dataset.guideAuto === "true" && !seen;
+    if (auto || new URLSearchParams(window.location.search).has("guide")) {
       // The page settles first so the guide opens over something to look at
       window.setTimeout(open, 700);
     }

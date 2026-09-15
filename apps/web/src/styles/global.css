@@ -220,6 +220,174 @@ h4 {
   font-family: var(--font-serif);
 }
 
+/* A notice window drawn by script, such as the one request rule */
+.notice-dialog {
+  width: min(460px, calc(100vw - 32px));
+  max-width: none;
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--bg-raise);
+  color: var(--text);
+  box-shadow: var(--shadow);
+  overflow: visible;
+}
+
+.notice-dialog::backdrop {
+  background: rgba(8, 7, 6, 0.55);
+  backdrop-filter: blur(3px);
+}
+
+.notice-dialog[open] {
+  animation: notice-open 240ms var(--ease-out);
+}
+
+@keyframes notice-open {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+
+.notice-shell {
+  outline: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 0 26px 24px;
+  text-align: center;
+}
+
+/* The emoji sits in a disc that rises out of the top edge */
+.notice-emoji {
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  margin-top: -36px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  font-size: 34px;
+  line-height: 1;
+}
+
+.notice-dialog[open] .notice-emoji {
+  animation: notice-turn 1.8s var(--ease-out) 300ms 1 both;
+}
+
+@keyframes notice-turn {
+  0%,
+  60% {
+    transform: rotate(0deg);
+  }
+  80% {
+    transform: rotate(180deg);
+  }
+  100% {
+    transform: rotate(180deg);
+  }
+}
+
+.notice-shell h2 {
+  margin-top: 6px;
+  font-size: var(--t-h3);
+  line-height: 1.2;
+}
+
+.notice-text,
+.notice-hint {
+  font-size: var(--t-small);
+  line-height: 1.6;
+  color: var(--text-2);
+}
+
+.notice-hint {
+  font-size: var(--t-caption);
+  color: var(--text-3);
+}
+
+.notice-active {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  margin-top: 4px;
+  padding: 14px 16px;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  color: var(--text);
+  transition: border-color 160ms ease;
+}
+
+.notice-active:hover {
+  border-color: var(--accent);
+}
+
+.notice-label {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.notice-repo {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.notice-state,
+.notice-eta {
+  font-size: var(--t-caption);
+  color: var(--text-2);
+}
+
+.notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+html.has-notice {
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notice-dialog[open],
+  .notice-dialog[open] .notice-emoji {
+    animation: none;
+  }
+}
+
+/* A small dot for anything that updates while the page is open */
+.live-dot {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-3);
+}
+
+@keyframes live-blink {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-dot {
+    animation: none !important;
+  }
+}
+
 .sr-only {
   position: absolute;
   width: 1px;

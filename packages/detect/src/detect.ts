@@ -1,6 +1,6 @@
 import { estimateTokens, sizeTierFor, type FileKind, type SizeTier } from "@everyrepo/core";
 import { detectDocsSources, type DocsSource } from "./docs.ts";
-import { classifyPath, generatedMatcherFromGitattributes } from "./kinds.ts";
+import { classifyPath, generatedMatcherFromGitattributes, type GeneratedMatcher } from "./kinds.ts";
 import { detectModules, moduleForPath, type DetectedModule, type ReadText } from "./modules.ts";
 
 export interface FileEntry {
@@ -51,13 +51,11 @@ export function hasGeneratedHeader(content: string): boolean {
   return GENERATED_HEADER.test(content.slice(0, 800));
 }
 
-export async function detectRepository(input: DetectInput): Promise<Detection> {
-  const paths = new Set(input.entries.map((entry) => entry.path));
-  const readText: ReadText = (path) =>
-    paths.has(path) ? input.readText(path) : Promise.resolve(undefined);
-  const isGenerated = generatedMatcherFromGitattributes(await readText(".gitattributes"));
-
-  const classified = input.entries.map((entry) => {
+function classifyEntries<T extends Pick<FileEntry, "path" | "bytes">>(
+  entries: readonly T[],
+  isGenerated: GeneratedMatcher,
+): Array<T & { kind: FileKind; tokens: number; language?: string }> {
+  return entries.map((entry) => {
     const { language, kind: pathKind } = classifyPath(entry.path, isGenerated);
     const oversized =
       (pathKind === "src" || pathKind === "types") && entry.bytes > MAX_SOURCE_BYTES;
@@ -69,6 +67,56 @@ export async function detectRepository(input: DetectInput): Promise<Detection> {
       ...(language ? { language } : {}),
     };
   });
+}
+
+export interface TreeEstimate {
+  files: number;
+  sourceFiles: number;
+  sourceTokens: number;
+  sizeTier: SizeTier;
+  languages: Array<{ language: string; files: number }>;
+}
+
+// Size of a repository from its file list alone, before anything is downloaded. Large files are
+// not opened to look for generated-code headers, so the figure can be slightly above detection's
+export function estimateFromTree(
+  entries: ReadonlyArray<Pick<FileEntry, "path" | "bytes">>,
+  gitattributes?: string,
+): TreeEstimate {
+  const classified = classifyEntries(entries, generatedMatcherFromGitattributes(gitattributes));
+  const languages = new Map<string, { language: string; files: number; tokens: number }>();
+  let sourceFiles = 0;
+  let sourceTokens = 0;
+  for (const file of classified) {
+    if (file.kind === "src") {
+      sourceFiles += 1;
+      sourceTokens += file.tokens;
+    }
+    if ((file.kind === "src" || file.kind === "types") && file.language) {
+      const stat = languages.get(file.language) ?? { language: file.language, files: 0, tokens: 0 };
+      stat.files += 1;
+      stat.tokens += file.tokens;
+      languages.set(file.language, stat);
+    }
+  }
+  return {
+    files: entries.length,
+    sourceFiles,
+    sourceTokens,
+    sizeTier: sizeTierFor(sourceTokens),
+    languages: [...languages.values()]
+      .sort((a, b) => b.tokens - a.tokens)
+      .map(({ language, files }) => ({ language, files })),
+  };
+}
+
+export async function detectRepository(input: DetectInput): Promise<Detection> {
+  const paths = new Set(input.entries.map((entry) => entry.path));
+  const readText: ReadText = (path) =>
+    paths.has(path) ? input.readText(path) : Promise.resolve(undefined);
+  const isGenerated = generatedMatcherFromGitattributes(await readText(".gitattributes"));
+
+  const classified = classifyEntries(input.entries, isGenerated);
   for (const file of classified) {
     const isSource = file.kind === "src" || file.kind === "types";
     if (isSource && file.bytes > HEADER_CHECK_BYTES) {

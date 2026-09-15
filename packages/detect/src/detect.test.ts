@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detectRepository, type FileEntry } from "./detect.ts";
+import { detectRepository, estimateFromTree, type FileEntry } from "./detect.ts";
 import { detectDocsSources } from "./docs.ts";
 import { classifyPath, generatedMatcherFromGitattributes } from "./kinds.ts";
 import { classifyLicenseText, normalizeLicenseField } from "./licenses.ts";
@@ -228,6 +228,40 @@ describe("detectRepository", () => {
       "repository:",
       "directory:js",
     ]);
+  });
+});
+
+describe("estimateFromTree", () => {
+  it("sizes a repository from paths and byte counts the way detection does", async () => {
+    const tree = [
+      { path: "src/index.ts", bytes: 3_700 },
+      { path: "src/grid/Grid.tsx", bytes: 7_400 },
+      { path: "src/types.d.ts", bytes: 370 },
+      { path: "src/grid/Grid.test.tsx", bytes: 3_700 },
+      { path: "vendor/lib.min.js", bytes: 90_000 },
+      { path: "src/schema.generated.ts", bytes: 50_000 },
+      { path: "data/huge.ts", bytes: 2_000_000 },
+      { path: "api/client.ts", bytes: 1_850 },
+      { path: "README.md", bytes: 1_000 },
+      { path: "package.json", bytes: 400 },
+    ];
+    const estimate = estimateFromTree(tree, "api/** linguist-generated=true\n");
+    expect(estimate).toEqual({
+      files: 10,
+      sourceFiles: 2,
+      sourceTokens: 3_000,
+      sizeTier: "S",
+      languages: [
+        { language: "tsx", files: 1 },
+        { language: "typescript", files: 2 },
+      ],
+    });
+
+    const { entries, readText } = fixture(
+      Object.fromEntries(tree.map((file) => [file.path, "x".repeat(file.bytes)])),
+    );
+    const detection = await detectRepository({ entries, readText, repoName: "app" });
+    expect(estimateFromTree(tree).sourceTokens).toBeGreaterThanOrEqual(detection.sourceTokens);
   });
 });
 

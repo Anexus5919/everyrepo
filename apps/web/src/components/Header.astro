@@ -12,6 +12,8 @@ const icons = {
     '<rect x="2.5" y="4" width="7" height="5" rx="1.2"/><rect x="14.5" y="4" width="7" height="5" rx="1.2"/><rect x="8.5" y="15" width="7" height="5" rx="1.2"/><path d="M6 9v2.5c0 1 .8 1.5 1.8 1.5H12v2M18 9v2.5c0 1-.8 1.5-1.8 1.5H12"/>',
   browse:
     '<rect x="3" y="3" width="7.5" height="7.5" rx="1.2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.2"/><path d="M17.25 14v6.5M14 17.25h6.5"/>',
+  queue:
+    '<path d="M4 6h11M4 12h11M4 18h7"/><circle cx="19" cy="17" r="3"/><path d="M19 15.6V17l1 .8"/>',
   open: '<path d="M10 14 20.5 3.5"/><path d="M14.5 3.5h6v6"/><path d="M19 13.5V19a1.5 1.5 0 0 1-1.5 1.5h-12A1.5 1.5 0 0 1 4 19V7a1.5 1.5 0 0 1 1.5-1.5H11"/>',
   tour: '<circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/>',
   method: '<path d="m12 3 9 4.5-9 4.5-9-4.5z"/><path d="m3 12 9 4.5 9-4.5"/><path d="m3 16.5 9 4.5 9-4.5"/>',
@@ -19,7 +21,7 @@ const icons = {
     '<circle cx="8.5" cy="9" r="4.5"/><circle cx="15.5" cy="9" r="4.5"/><circle cx="12" cy="15" r="4.5"/>',
 };
 
-type Action = "guide" | "palette";
+type Action = "guide" | "palette" | "repo";
 interface Feature {
   icon: keyof typeof icons;
   title: string;
@@ -100,8 +102,15 @@ const menus: Menu[] = [
       {
         icon: "open",
         title: "Open a repository",
-        text: "Paste a public GitHub link to open its wiki or see where it is in the queue.",
+        text: "Paste any public GitHub link to open its wiki or request one.",
         href: "/#open",
+        action: "repo",
+      },
+      {
+        icon: "queue",
+        title: "Follow the queue",
+        text: "Repositories being written now and the line after them.",
+        href: "/queue/",
       },
     ],
     columns: [
@@ -114,7 +123,7 @@ const menus: Menu[] = [
         links: waiting.map((repo) => ({
           text: repo.name,
           owner: repo.owner,
-          href: "/#guide",
+          href: "/queue/",
           badge: repo.status === "indexing" ? "Reading" : "Queued",
         })),
       },
@@ -158,8 +167,12 @@ const menus: Menu[] = [
   },
 ];
 
-const actionAttributes = (action?: Action) =>
-  action === "guide" ? { "data-guide-open": "" } : action === "palette" ? { "data-open-palette": "" } : {};
+const ACTION_ATTRIBUTES: Record<Action, Record<string, string>> = {
+  guide: { "data-guide-open": "" },
+  palette: { "data-open-palette": "" },
+  repo: { "data-open-repo": "" },
+};
+const actionAttributes = (action?: Action) => (action ? ACTION_ATTRIBUTES[action] : {});
 ---
 
 <header class="site-header" data-site-header>
@@ -279,6 +292,39 @@ const actionAttributes = (action?: Action) =>
       </svg>
     </button>
 
+    <div class="account" data-account>
+      <a class="cell account-signin" href="/signin/" aria-label="Sign in" data-account-signin>
+        <svg class="account-icon" width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"
+          ><circle cx="12" cy="8.5" r="3.8"></circle><path d="M4.5 20c.9-3.6 3.9-5.8 7.5-5.8s6.6 2.2 7.5 5.8"
+          ></path></svg
+        >
+        <span class="account-text">Sign in</span>
+      </a>
+      <button
+        class="cell account-trigger"
+        type="button"
+        aria-expanded="false"
+        aria-controls="account-menu"
+        data-account-trigger
+        hidden
+      >
+        <span class="avatar" aria-hidden="true" data-account-avatar></span>
+        <span class="account-text" data-account-login></span>
+        <svg class="chevron" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+          <path d="M2 3.5 5 6.5 8 3.5"></path>
+        </svg>
+      </button>
+      <div class="account-menu" id="account-menu" data-account-menu hidden>
+        <div class="account-who">
+          <span class="account-name" data-account-name></span>
+          <span class="account-handle" data-account-handle></span>
+        </div>
+        <a class="account-item" href="/account/">Your account</a>
+        <a class="account-item" href="/account/#requests">Your requests</a>
+        <button class="account-item" type="button" data-account-signout>Sign out</button>
+      </div>
+    </div>
+
     <button
       class="cell cell-icon menu-toggle"
       type="button"
@@ -294,7 +340,7 @@ const actionAttributes = (action?: Action) =>
       </svg>
     </button>
 
-    <a class="cell cta book-trigger" href="/#open">Open a repository <BookIcon /></a>
+    <a class="cell cta book-trigger" href="/#open" data-open-repo>Open a repository <BookIcon /></a>
   </div>
 
   <div class="mobile-menu" id="mobile-menu" data-mobile-menu hidden>
@@ -666,6 +712,124 @@ const actionAttributes = (action?: Action) =>
     }
   }
 
+  .account {
+    position: relative;
+    display: flex;
+  }
+
+  .account-signin[hidden],
+  .account-trigger[hidden] {
+    display: none;
+  }
+
+  .account-icon {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.6;
+    stroke-linecap: round;
+  }
+
+  .account-trigger {
+    gap: 10px;
+    padding: 0 18px;
+  }
+
+  .account-trigger[aria-expanded="true"] .chevron {
+    transform: rotate(180deg);
+  }
+
+  .avatar {
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    background: var(--panel-2);
+    overflow: hidden;
+    font-family: var(--font-serif);
+    font-size: 14px;
+    color: var(--text);
+  }
+
+  .avatar :global(img) {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .account-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    z-index: 70;
+    display: flex;
+    flex-direction: column;
+    width: 240px;
+    margin-top: 1px;
+    padding: 6px;
+    border: 1px solid var(--line);
+    border-top: 0;
+    border-radius: 0 0 12px 12px;
+    background: var(--bg-raise);
+    box-shadow: var(--shadow);
+    animation: mega-in 180ms var(--ease-out);
+  }
+
+  .account-menu[hidden] {
+    display: none;
+  }
+
+  .account-who {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 10px 10px 12px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .account-name {
+    font-size: var(--t-small);
+    font-weight: 500;
+    color: var(--text);
+    overflow-wrap: anywhere;
+  }
+
+  .account-handle {
+    font-size: var(--t-caption);
+    color: var(--text-3);
+    overflow-wrap: anywhere;
+  }
+
+  .account-item {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: 9px 10px;
+    border: 0;
+    border-radius: var(--radius);
+    background: transparent;
+    font: inherit;
+    font-size: var(--t-ui);
+    text-align: left;
+    color: var(--text);
+    cursor: pointer;
+  }
+
+  .account-item:hover,
+  .account-item:focus-visible {
+    background: var(--panel-2);
+    outline: none;
+  }
+
+  button.account-item {
+    margin-top: 4px;
+    border-top: 1px solid var(--line-soft);
+    border-radius: 0 0 var(--radius) var(--radius);
+    color: var(--text-2);
+  }
+
   .menu-toggle {
     display: none;
   }
@@ -771,9 +935,24 @@ const actionAttributes = (action?: Action) =>
     padding-top: 10px;
   }
 
-  @media (max-width: 1180px) {
+  @media (max-width: 1320px) {
     .status {
       display: none;
+    }
+  }
+
+  /* Narrower headers keep the account as an icon or a picture */
+  @media (max-width: 1180px) {
+    .account-text,
+    .account-trigger .chevron {
+      display: none;
+    }
+
+    .account-signin,
+    .account-trigger {
+      justify-content: center;
+      width: 64px;
+      padding: 0;
     }
   }
 
@@ -800,13 +979,17 @@ const actionAttributes = (action?: Action) =>
       padding: 0 16px;
     }
 
-    .cell-icon {
+    .cell-icon,
+    .account-signin,
+    .account-trigger {
       width: 52px;
     }
   }
 </style>
 
 <script>
+  import type { AccountUser } from "@everyrepo/core/requests";
+  import { cachedUser, getAccount, signInPage, signOut } from "../lib/session.ts";
   import { changeTheme } from "../lib/theme.ts";
 
   const toggle = document.querySelector<HTMLButtonElement>("[data-theme-toggle]");
@@ -917,6 +1100,79 @@ const actionAttributes = (action?: Action) =>
     });
     mobileMenu.addEventListener("click", (event) => {
       if ((event.target as Element).closest("a")) closeMobile();
+    });
+
+    const account = header.querySelector<HTMLElement>("[data-account]")!;
+    const signIn = account.querySelector<HTMLAnchorElement>("[data-account-signin]")!;
+    const accountTrigger = account.querySelector<HTMLButtonElement>("[data-account-trigger]")!;
+    const accountPanel = account.querySelector<HTMLElement>("[data-account-menu]")!;
+    const avatar = account.querySelector<HTMLElement>("[data-account-avatar]")!;
+
+    const setAccountMenu = (open: boolean) => {
+      accountPanel.hidden = !open;
+      accountTrigger.setAttribute("aria-expanded", String(open));
+    };
+
+    function renderAccount(user: AccountUser | null) {
+      signIn.hidden = user !== null;
+      accountTrigger.hidden = user === null;
+      if (!user) {
+        setAccountMenu(false);
+        // Signing in comes back to the page it started from, except from the sign-in pages themselves
+        const onAuthPage = /^\/(signin|signup)\/?$/.test(window.location.pathname);
+        signIn.href = onAuthPage ? "/signin/" : signInPage();
+        return;
+      }
+      accountTrigger.setAttribute("aria-label", `Account menu for ${user.login}`);
+      account.querySelector("[data-account-login]")!.textContent = user.login;
+      account.querySelector("[data-account-name]")!.textContent = user.name ?? user.login;
+      account.querySelector("[data-account-handle]")!.textContent = user.email ?? `@${user.login}`;
+      const initial = (user.name ?? user.login).charAt(0).toUpperCase();
+      if (!user.avatarUrl) {
+        avatar.replaceChildren(initial);
+        return;
+      }
+      const source = new URL(user.avatarUrl);
+      source.searchParams.set("s", "64");
+      if (avatar.querySelector("img")?.src === source.toString()) return;
+      const image = new Image(26, 26);
+      image.alt = "";
+      image.referrerPolicy = "no-referrer";
+      image.addEventListener("error", () => avatar.replaceChildren(initial));
+      image.src = source.toString();
+      avatar.replaceChildren(image);
+    }
+
+    renderAccount(cachedUser());
+    void getAccount().then((result) => {
+      if (result.reachable) renderAccount(result.user);
+    });
+    window.addEventListener("accountchange", (event) =>
+      renderAccount((event as CustomEvent<AccountUser | null>).detail),
+    );
+
+    accountTrigger.addEventListener("click", () => setAccountMenu(accountPanel.hidden));
+    account.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !accountPanel.hidden) {
+        setAccountMenu(false);
+        accountTrigger.focus();
+      }
+    });
+    account.addEventListener("focusout", (event) => {
+      if (!account.contains(event.relatedTarget as Node | null)) setAccountMenu(false);
+    });
+    document.addEventListener("click", (event) => {
+      if (!account.contains(event.target as Node)) setAccountMenu(false);
+    });
+    accountPanel.querySelector("[data-account-signout]")!.addEventListener("click", async () => {
+      setAccountMenu(false);
+      try {
+        await signOut();
+      } catch {
+        // With the API away the session stays as it is, which the next page view shows
+        return;
+      }
+      if (window.location.pathname.startsWith("/account")) window.location.href = "/";
     });
   }
 </script>

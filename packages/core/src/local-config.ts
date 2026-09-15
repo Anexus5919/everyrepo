@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { z } from "zod";
+import { SIZE_TIERS } from "./vocabulary.ts";
 
 const localRepoSchema = z.object({
   path: z.string().min(1),
@@ -60,16 +61,25 @@ const llmSchema = z
     }
   });
 
+// Rules for repositories requested on the site; larger or later requests wait for the owner
+const requestsSchema = z.object({
+  autoApproveMaxTier: z.enum(SIZE_TIERS).default("M"),
+  autoApprovePerDay: z.number().int().min(0).default(3),
+  maxWaiting: z.number().int().positive().default(20),
+});
+
 const localConfigSchema = z.object({
   dataDir: z.string().min(1),
   localRepos: z.record(z.string(), localRepoSchema).default({}),
   embeddings: embeddingsSchema.optional(),
   llm: llmSchema.optional(),
+  requests: requestsSchema.optional(),
 });
 
 export type EmbeddingsConfig = z.infer<typeof embeddingsSchema>;
 export type LlmConfig = z.infer<typeof llmSchema>;
 export type LocalRepo = z.infer<typeof localRepoSchema>;
+export type RequestsConfig = z.infer<typeof requestsSchema>;
 export type LocalConfig = z.infer<typeof localConfigSchema>;
 
 export async function loadLocalConfig(

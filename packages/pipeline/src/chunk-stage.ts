@@ -14,6 +14,8 @@ export interface ChunkInput {
   gitDir: string;
   log: (message: string) => void;
   heartbeat: () => void;
+  // Reports work done inside the stage for status pages
+  progress?: (done: number, total: number) => void;
 }
 
 export interface ChunkOutput {
@@ -118,6 +120,7 @@ export async function runChunkStage(input: ChunkInput): Promise<ChunkOutput> {
     let tokenCount = 0;
     let batch: Array<[number, number, number, string, string, string, string, number]> = [];
     for (const [index, file] of files.entries()) {
+      input.progress?.(index, files.length);
       const text = await reader.readText(file.oid);
       const lines = text.split(/\r?\n/);
       const language = file.language ?? "";
@@ -153,6 +156,7 @@ export async function runChunkStage(input: ChunkInput): Promise<ChunkOutput> {
       }
     }
     writeBatch(batch);
+    input.progress?.(files.length, files.length);
     sql.prepare("INSERT INTO chunk_fts(chunk_fts) VALUES('rebuild')").run();
 
     const output: ChunkOutput = {

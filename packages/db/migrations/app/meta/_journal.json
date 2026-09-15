@@ -29,6 +29,34 @@
       "when": 1789370261919,
       "tag": "0003_drop_budget_counter",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1789498528628,
+      "tag": "0004_repo_requests",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1789503856203,
+      "tag": "0005_request_owners_and_workers",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1789506542448,
+      "tag": "0006_drop_anonymous_requesters",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1789506543545,
+      "tag": "0007_accounts",
+      "breakpoints": true
     }
   ]
 }

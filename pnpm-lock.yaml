@@ -60,6 +60,15 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
 
+  packages/accounts:
+    dependencies:
+      '@everyrepo/core':
+        specifier: workspace:*
+        version: link:../core
+      '@everyrepo/db':
+        specifier: workspace:*
+        version: link:../db
+
   packages/ask:
     dependencies:
       '@everyrepo/db':
@@ -89,6 +98,9 @@ importers:
 
   packages/cli:
     dependencies:
+      '@everyrepo/accounts':
+        specifier: workspace:*
+        version: link:../accounts
       '@everyrepo/ask':
         specifier: workspace:*
         version: link:../ask
@@ -107,6 +119,9 @@ importers:
       '@everyrepo/eval':
         specifier: workspace:*
         version: link:../eval
+      '@everyrepo/github':
+        specifier: workspace:*
+        version: link:../github
       '@everyrepo/llm':
         specifier: workspace:*
         version: link:../llm
@@ -122,6 +137,9 @@ importers:
       '@everyrepo/repo':
         specifier: workspace:*
         version: link:../repo
+      '@everyrepo/requests':
+        specifier: workspace:*
+        version: link:../requests
       '@everyrepo/search':
         specifier: workspace:*
         version: link:../search
@@ -190,6 +208,12 @@ importers:
       zod:
         specifier: ^4.6.4
         version: 4.6.4
+
+  packages/github:
+    dependencies:
+      '@everyrepo/core':
+        specifier: workspace:*
+        version: link:../core
 
   packages/graph:
     dependencies:
@@ -296,6 +320,24 @@ importers:
       '@everyrepo/core':
         specifier: workspace:*
         version: link:../core
+
+  packages/requests:
+    dependencies:
+      '@everyrepo/core':
+        specifier: workspace:*
+        version: link:../core
+      '@everyrepo/db':
+        specifier: workspace:*
+        version: link:../db
+      '@everyrepo/detect':
+        specifier: workspace:*
+        version: link:../detect
+      '@everyrepo/github':
+        specifier: workspace:*
+        version: link:../github
+      '@everyrepo/queue':
+        specifier: workspace:*
+        version: link:../queue
 
   packages/search:
     dependencies:

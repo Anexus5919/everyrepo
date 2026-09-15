@@ -11,7 +11,9 @@ import "../styles/palettes.css";
 import Footer from "../components/Footer.astro";
 import Guide from "../components/Guide.astro";
 import Header from "../components/Header.astro";
-import { PALETTES } from "../lib/palettes.ts";
+import RepoDialog from "../components/RepoDialog.astro";
+import { DEFAULT_PALETTE, PALETTES } from "../lib/palettes.ts";
+import { loadRepos } from "../lib/site-data.ts";
 
 interface Props {
   title: string;
@@ -19,13 +21,27 @@ interface Props {
   // Full screen sections that scrolling settles on, used by the home page
   snap?: boolean;
   wide?: boolean;
+  // Pages reached in the middle of a task, such as signing in, do not open the first visit guide
+  guide?: boolean;
 }
-const { title, description, snap = false, wide = false } = Astro.props;
+const { title, description, snap = false, wide = false, guide = true } = Astro.props;
 const paletteIds = PALETTES.map((palette) => palette.id);
+// The repository box suggests these and opens written wikis without asking the API
+const knownWikis = loadRepos().map((repo) => ({
+  repo: repo.repo,
+  status: repo.status,
+  summary: repo.summary,
+  pages: repo.pages,
+}));
 ---
 
 <!doctype html>
-<html lang="en" data-theme="dark" data-snap={snap ? "true" : undefined}>
+<html
+  lang="en"
+  data-theme="dark"
+  data-palette={DEFAULT_PALETTE}
+  data-snap={snap ? "true" : undefined}
+>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -49,9 +65,8 @@ const paletteIds = PALETTES.map((palette) => palette.id);
         const saved = localStorage.getItem("palette");
         const palette = paletteIds.includes(named) ? named : saved;
         if (named && paletteIds.includes(named)) localStorage.setItem("palette", named);
-        if (paletteIds.includes(palette) && palette !== "ember") {
-          document.documentElement.dataset.palette = palette;
-        }
+        // A palette the reader chose stays on every visit; without a choice the default set on the page stays
+        if (paletteIds.includes(palette)) document.documentElement.dataset.palette = palette;
       } catch {}
     </script>
   </head>
@@ -62,6 +77,8 @@ const paletteIds = PALETTES.map((palette) => palette.id);
       <slot />
     </main>
     <Footer />
-    <Guide />
+    <Guide auto={guide} />
+    <RepoDialog />
+    <script is:inline type="application/json" id="known-wikis" set:html={JSON.stringify(knownWikis)} />
   </body>
 </html>

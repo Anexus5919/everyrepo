@@ -1,5 +1,5 @@
 ---
-import { PALETTE_GROUPS, PALETTES } from "../lib/palettes.ts";
+import { DEFAULT_PALETTE, PALETTE_GROUPS, PALETTES } from "../lib/palettes.ts";
 
 interface Props {
   // Sits inside a full-height header box instead of standing as its own bordered button
@@ -54,7 +54,10 @@ const { cell = false } = Astro.props;
                   ))}
                 </span>
                 <span class="option-text">
-                  <span class="option-name">{palette.name}</span>
+                  <span class="option-name">
+                    {palette.name}
+                    {palette.id === DEFAULT_PALETTE && <span class="default-tag">Default</span>}
+                  </span>
                   <span class="option-note">{palette.description}</span>
                 </span>
                 <svg class="check" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
@@ -203,6 +206,8 @@ const { cell = false } = Astro.props;
     z-index: 80;
     width: min(340px, calc(100vw - 24px));
     max-height: min(560px, calc(100svh - var(--header) - 24px));
+    /* The header cell keeps its label on one line, which the notes inside must not inherit */
+    white-space: normal;
     overflow-y: auto;
     padding: 12px 8px 8px;
     border: 1px solid var(--line);
@@ -323,8 +328,21 @@ const { cell = false } = Astro.props;
   }
 
   .option-name {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     font-size: var(--t-ui);
     color: var(--text);
+  }
+
+  .default-tag {
+    padding: 0 7px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    font-size: 10.5px;
+    line-height: 17px;
+    letter-spacing: 0.04em;
+    color: var(--text-3);
   }
 
   .option-note {

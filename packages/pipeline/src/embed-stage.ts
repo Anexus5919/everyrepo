@@ -9,6 +9,10 @@ export interface EmbedInput {
   embedder: Embedder | undefined;
   log: (message: string) => void;
   heartbeat: () => void;
+  // Reports work done inside the stage for status pages
+  progress?: (done: number, total: number) => void;
+  // When the embedding allowance frees up again, so a paused job resumes right then
+  allowanceAt?: (() => Date | undefined) | undefined;
 }
 
 export interface EmbedOutput {
@@ -102,6 +106,7 @@ export async function runEmbedStage(input: EmbedInput): Promise<EmbedOutput> {
         cache.putMany(embedder.model, entries);
         for (const [hash, blob] of entries) vectors.set(hash.toString("hex"), blob);
         embedded += batch.length;
+        input.progress?.(embedded, missing.length);
         if (Date.now() - lastLog > 15_000) {
           lastLog = Date.now();
           input.heartbeat();
@@ -115,11 +120,10 @@ export async function runEmbedStage(input: EmbedInput): Promise<EmbedOutput> {
       input.log(
         `embedded ${embedded}/${missing.length} before the budget ran out; the rest resumes from cache`,
       );
+      const retryAt = input.allowanceAt?.();
       throw new StageDeferredError(
         `${stopped.message}; run again later, the allowance refills as usage from the past 24 hours ages out`,
-        {
-          cause: stopped,
-        },
+        retryAt ? { cause: stopped, retryAt } : { cause: stopped },
       );
     }
     if (stopped !== undefined) throw stopped;

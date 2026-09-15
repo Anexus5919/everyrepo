@@ -2,6 +2,8 @@ export {
   claimJob,
   claimNextJob,
   completedStageOutputs,
+  defaultDeferDelayMs,
+  defaultRetryDelayMs,
   enqueueJob,
   findOpenJob,
   runJob,

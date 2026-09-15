@@ -11,7 +11,7 @@ import "../styles/palettes.css";
 import Footer from "../components/Footer.astro";
 import Guide from "../components/Guide.astro";
 import Header from "../components/Header.astro";
-import PalettePicker from "../components/PalettePicker.astro";
+import { PALETTES } from "../lib/palettes.ts";
 
 interface Props {
   title: string;
@@ -21,6 +21,7 @@ interface Props {
   wide?: boolean;
 }
 const { title, description, snap = false, wide = false } = Astro.props;
+const paletteIds = PALETTES.map((palette) => palette.id);
 ---
 
 <!doctype html>
@@ -40,12 +41,17 @@ const { title, description, snap = false, wide = false } = Astro.props;
           document.documentElement.dataset.theme = light ? "light" : "dark";
         }
       } catch {}
+    </script>
+    <script is:inline define:vars={{ paletteIds }}>
       // A palette named in the address wins over the saved one, so a palette can be shared as a link
       try {
         const named = new URLSearchParams(location.search).get("palette");
-        const palette = named ?? localStorage.getItem("palette");
-        if (named) localStorage.setItem("palette", named);
-        if (palette && palette !== "ember") document.documentElement.dataset.palette = palette;
+        const saved = localStorage.getItem("palette");
+        const palette = paletteIds.includes(named) ? named : saved;
+        if (named && paletteIds.includes(named)) localStorage.setItem("palette", named);
+        if (paletteIds.includes(palette) && palette !== "ember") {
+          document.documentElement.dataset.palette = palette;
+        }
       } catch {}
     </script>
   </head>
@@ -57,6 +63,5 @@ const { title, description, snap = false, wide = false } = Astro.props;
     </main>
     <Footer />
     <Guide />
-    <PalettePicker />
   </body>
 </html>

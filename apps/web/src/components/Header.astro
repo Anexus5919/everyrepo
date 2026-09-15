@@ -1,6 +1,7 @@
 ---
 import BookIcon from "./BookIcon.astro";
 import Logo from "./Logo.astro";
+import PaletteMenu from "./PaletteMenu.astro";
 
 interface Props {
   // Reader pages span wider than the home page frame
@@ -21,6 +22,7 @@ const { wide = false } = Astro.props;
       <a href="/#method">Method</a>
     </nav>
     <div class="actions">
+      <PaletteMenu />
       <button
         class="icon-btn"
         type="button"

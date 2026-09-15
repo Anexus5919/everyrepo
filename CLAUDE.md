@@ -95,7 +95,9 @@ TypeScript source directly and run with tsx. Tests use Vitest.
   (`src/components/Ask.astro`, answer rendering in `src/lib/ask-render.ts`); reader pages keep a question box
   at the bottom of the article that opens it. First visits get a five step
   guide (`src/components/Guide.astro`); theme changes blur the whole page, then sweep the new
-  colours in from the left (`src/lib/theme.ts`). Motion plays on hover or focus
+  colours in from the left (`src/lib/theme.ts`). Readers pick a colour palette separately from light and dark
+  (header menu and footer select; `src/lib/palettes.ts`, tokens in `src/styles/palettes.css`, Ember in
+  `global.css` is the default); every palette keeps text, accents and code at readable contrast in both themes. Motion plays on hover or focus
 
 ## Rules
 

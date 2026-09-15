@@ -368,11 +368,11 @@ pre code {
 
 /* On large screens every section fills the viewport below the header and scrolling settles on it */
 @media (min-width: 1000px) and (min-height: 720px) {
-  html {
+  html[data-snap] {
     scroll-snap-type: y mandatory;
   }
 
-  .snap {
+  html[data-snap] .snap {
     min-height: calc(100svh - var(--header));
     scroll-snap-align: start;
   }
@@ -380,7 +380,7 @@ pre code {
 
 /* Short laptop screens get tighter headings so each section still fits one screen */
 @media (min-width: 1000px) and (max-height: 820px) {
-  :root {
+  :root[data-snap] {
     --t-display: clamp(40px, 4.6vw, 56px);
     --t-title: clamp(28px, 2.8vw, 36px);
     --t-lead: 18px;

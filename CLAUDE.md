@@ -70,13 +70,13 @@ TypeScript source directly and run with tsx. Tests use Vitest.
 - `packages/eval`: gold question sets and retrieval metrics
 - `packages/pipeline`: index stage handlers, cost estimate, snapshot report
 - `packages/cli`: the `everyrepo` command
-- `apps/web`: the Astro website. Pages are static and built from the site JSON; styles are plain CSS with
-  theme tokens in `src/styles/global.css` (dark by default, light on request). On large screens each
-  section fills the viewport and scrolling snaps to it. The home page shows every written wiki: the hero
-  canvas takes pages from each repository in turn, and the reader preview has a tab per wiki with a
-  filterable page tree; each written page is also emitted as `/preview/<owner>__<repo>/<slug>.json` and
-  loaded when opened. The footer wordmark is filled with a moving line texture. Other motion plays on
-  hover or focus
+- `apps/web`: the Astro website, static pages built from the site JSON; styles are plain CSS with theme
+  tokens in `src/styles/global.css` (dark by default, light on request). The home page snaps each section
+  to the viewport and shows every written wiki (hero canvas, a reader preview with a tab per wiki, the
+  footer wordmark). Each written wiki also gets a hub at `/<owner>/<repo>`, a reader page per wiki page at
+  `/<owner>/<repo>/<slug>` (page tree, cited sources beside the text, import diagrams drawn from the stored
+  flowcharts by `src/lib/diagram.ts`) and a glossary; each page is also emitted as
+  `/preview/<owner>__<repo>/<slug>.json` for the home preview. Motion plays on hover or focus
 
 ## Rules
 

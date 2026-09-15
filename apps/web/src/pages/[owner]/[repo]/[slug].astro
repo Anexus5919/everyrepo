@@ -1,0 +1,927 @@
+---
+import type { SitePage, SiteWiki } from "@everyrepo/core";
+import WikiTree from "../../../components/WikiTree.astro";
+import Base from "../../../layouts/Base.astro";
+import { shortSha } from "../../../lib/format.ts";
+import { withHeadingIds } from "../../../lib/markdown.ts";
+import { buildPreview, readablePages } from "../../../lib/preview.ts";
+import { wordCount } from "../../../lib/showcase.ts";
+import { formatDate, hubHref, pageHref, readingSequence, readyWikis } from "../../../lib/wiki.ts";
+
+export function getStaticPaths() {
+  return readyWikis().flatMap((wiki) =>
+    readablePages(wiki).map((page) => ({
+      params: { owner: wiki.owner, repo: wiki.name, slug: page.slug },
+      props: { wiki, page },
+    })),
+  );
+}
+
+interface Props {
+  wiki: SiteWiki;
+  page: SitePage;
+}
+const { wiki, page } = Astro.props;
+
+const preview = await buildPreview(page, { diagrams: true });
+// A first heading that repeats the page title is dropped
+const firstHeading = preview.html.indexOf("<h2>");
+const repeated = `<h2>${page.title}</h2>`;
+const body =
+  firstHeading >= 0 &&
+  preview.html.slice(firstHeading, firstHeading + repeated.length).toLowerCase() ===
+    repeated.toLowerCase()
+    ? preview.html.slice(0, firstHeading) + preview.html.slice(firstHeading + repeated.length)
+    : preview.html;
+const { html, toc } = withHeadingIds(body);
+const parent = wiki.wikiPages.find((candidate) => candidate.slug === page.parentSlug);
+const sequence = readingSequence(wiki);
+const position = sequence.findIndex((item) => item.slug === page.slug);
+const previous = position > 0 ? sequence[position - 1] : undefined;
+const next = position >= 0 ? sequence[position + 1] : undefined;
+const minutes = Math.max(1, Math.round(wordCount(page.markdown ?? "") / 230));
+const reading = page.section ? [] : page.readingOrder.slice(0, 6);
+---
+
+<Base
+  wide
+  title={`${page.title} · ${wiki.name} wiki · EveryRepo`}
+  description={page.purpose || `${page.title} in the ${wiki.repo} wiki, with every sentence linked to its source.`}
+>
+  <div class="reader" data-reader>
+    <aside class="reader-tree" data-reader-tree>
+      <WikiTree wiki={wiki} current={page.slug} />
+    </aside>
+
+    <article class="reader-main">
+      <button class="pages-toggle" type="button" aria-expanded="false" data-pages-toggle>
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"
+          ><path d="M2 4h12M2 8h12M2 12h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+          ></path></svg
+        >
+        Pages in this wiki
+      </button>
+
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <a href={hubHref(wiki)}>{wiki.repo}</a>
+        {
+          parent && (
+            <>
+              <span class="sep">/</span>
+              {readablePages(wiki).some((item) => item.slug === parent.slug) ? (
+                <a href={pageHref(wiki, parent.slug)}>{parent.title}</a>
+              ) : (
+                <span>{parent.title}</span>
+              )}
+            </>
+          )
+        }
+      </nav>
+
+      <header class="page-header">
+        <h1 class="page-title">{page.title}</h1>
+        {page.purpose && <p class="purpose">{page.purpose}</p>}
+        <div class="meta">
+          <span>Written from {page.citations.length} excerpts of the code</span>
+          <span class="dot" aria-hidden="true"></span>
+          <span>{minutes} min read</span>
+          <span class="dot" aria-hidden="true"></span>
+          <a class="mono" href={`https://github.com/${wiki.repo}/tree/${wiki.sha}`} target="_blank" rel="noopener"
+            >commit {shortSha(wiki.sha)}</a
+          >
+          {
+            wiki.indexedAt && (
+              <>
+                <span class="dot" aria-hidden="true" />
+                <span>Read {formatDate(wiki.indexedAt)}</span>
+              </>
+            )
+          }
+        </div>
+      </header>
+
+      <div class="prose" set:html={html} />
+
+      {
+        reading.length > 0 && (
+          <section class="start" aria-labelledby="start-reading">
+            <h2 id="start-reading">Where to start reading</h2>
+            <ol>
+              {reading.map((item) => (
+                <li>
+                  <a class="mono" href={item.url} target="_blank" rel="noopener">
+                    {item.path}
+                  </a>
+                  {item.role && <span>{item.role}</span>}
+                </li>
+              ))}
+            </ol>
+          </section>
+        )
+      }
+
+      <nav class="pager" aria-label="Pages">
+        {
+          previous ? (
+            <a class="pager-link" href={pageHref(wiki, previous.slug)}>
+              <span class="pager-label">Previous</span>
+              <span class="pager-title">{previous.title}</span>
+            </a>
+          ) : (
+            <span />
+          )
+        }
+        {
+          next && (
+            <a class="pager-link next" href={pageHref(wiki, next.slug)}>
+              <span class="pager-label">Next</span>
+              <span class="pager-title">{next.title}</span>
+            </a>
+          )
+        }
+      </nav>
+    </article>
+
+    <aside class="reader-side">
+      {
+        toc.length > 1 && (
+          <nav class="toc" aria-label="On this page">
+            <span class="side-label">On this page</span>
+            {toc.map((entry) => (
+              <a href={`#${entry.id}`} data-toc={entry.id}>
+                {entry.text}
+              </a>
+            ))}
+          </nav>
+        )
+      }
+      {
+        preview.sourcesHtml && (
+          <section class="source-panel" aria-label="Cited source">
+            <span class="side-label">
+              Source <span class="side-hint">point at a number in the text</span>
+            </span>
+            <div class="sources" set:html={preview.sourcesHtml} />
+          </section>
+        )
+      }
+    </aside>
+  </div>
+</Base>
+
+<script>
+  const reader = document.querySelector<HTMLElement>("[data-reader]");
+  if (reader) {
+    const side = reader.querySelector<HTMLElement>(".reader-side");
+    let current = reader.querySelector<HTMLElement>("[data-source]:not([hidden])")?.dataset.source;
+
+    const markChips = (number: string | undefined) => {
+      reader.querySelectorAll<HTMLElement>(".cite").forEach((chip) => {
+        chip.classList.toggle("is-active", chip.dataset.cite === number);
+      });
+    };
+    markChips(current);
+
+    const showSource = (number: string) => {
+      if (number === current) return;
+      current = number;
+      reader.querySelectorAll<HTMLElement>("[data-source]").forEach((item) => {
+        const active = item.dataset.source === number;
+        item.hidden = !active;
+        item.classList.remove("is-entering");
+        if (active) {
+          void item.offsetWidth;
+          item.classList.add("is-entering");
+        }
+      });
+      markChips(number);
+    };
+
+    // The side panel shows sources where there is room; on narrow screens a number opens GitHub
+    const panelShown = () => !!side && getComputedStyle(side).display !== "none";
+
+    reader.addEventListener("mouseover", (event) => {
+      const chip = (event.target as HTMLElement).closest<HTMLElement>(".cite");
+      if (chip?.dataset.cite && panelShown()) showSource(chip.dataset.cite);
+    });
+    reader.addEventListener("focusin", (event) => {
+      const chip = (event.target as HTMLElement).closest<HTMLElement>(".cite");
+      if (chip?.dataset.cite && panelShown()) showSource(chip.dataset.cite);
+    });
+    reader.addEventListener("click", (event) => {
+      const mouse = event as MouseEvent;
+      const chip = (event.target as HTMLElement).closest<HTMLElement>(".cite");
+      if (!chip?.dataset.cite || !panelShown() || mouse.metaKey || mouse.ctrlKey) return;
+      event.preventDefault();
+      showSource(chip.dataset.cite);
+    });
+
+    // The contents list follows the section being read
+    const links = new Map(
+      [...reader.querySelectorAll<HTMLAnchorElement>("[data-toc]")].map((link) => [link.dataset.toc!, link]),
+    );
+    if (links.size > 0) {
+      const headings = [...links.keys()]
+        .map((id) => document.getElementById(id))
+        .filter((heading): heading is HTMLElement => heading !== null);
+      const update = () => {
+        const line = window.innerHeight * 0.3;
+        let active = headings[0]?.id;
+        for (const heading of headings) {
+          if (heading.getBoundingClientRect().top <= line) active = heading.id;
+        }
+        links.forEach((link, id) => link.classList.toggle("is-active", id === active));
+      };
+      update();
+      window.addEventListener("scroll", update, { passive: true });
+    }
+
+    // Diagrams a little wider than the column are scaled to fit; much wider ones scroll
+    reader.querySelectorAll<HTMLElement>(".diagram-scroll").forEach((scroll) => {
+      const svg = scroll.querySelector("svg");
+      if (!svg) return;
+      const natural = Number(svg.getAttribute("width"));
+      const fit = () => {
+        const room = scroll.clientWidth - 36;
+        const scaled = natural > room && natural <= room * 1.3;
+        svg.style.width = scaled ? "100%" : "";
+        svg.style.height = scaled ? "auto" : "";
+        scroll.classList.toggle("is-scrollable", !scaled && natural > room);
+      };
+      fit();
+      new ResizeObserver(fit).observe(scroll);
+    });
+
+    // Pointing at a file in a diagram shows only the imports it takes part in
+    reader.querySelectorAll<HTMLElement>("[data-diagram]").forEach((diagram) => {
+      const edges = [...diagram.querySelectorAll<SVGPathElement>(".edge")];
+      const nodes = [...diagram.querySelectorAll<SVGGElement>(".node")];
+      const focus = (node: string | null) => {
+        diagram.classList.toggle("is-focused", node !== null);
+        const linked = new Set<string>(node ? [node] : []);
+        edges.forEach((edge) => {
+          const on = node !== null && (edge.dataset.from === node || edge.dataset.to === node);
+          edge.classList.toggle("is-linked", on);
+          if (on) {
+            linked.add(edge.dataset.from!);
+            linked.add(edge.dataset.to!);
+          }
+        });
+        nodes.forEach((item) => item.classList.toggle("is-linked", linked.has(item.dataset.node!)));
+      };
+      nodes.forEach((node) => {
+        node.addEventListener("mouseenter", () => focus(node.dataset.node!));
+        node.addEventListener("focus", () => focus(node.dataset.node!));
+        node.addEventListener("mouseleave", () => focus(null));
+        node.addEventListener("blur", () => focus(null));
+      });
+    });
+
+    const toggle = reader.querySelector<HTMLButtonElement>("[data-pages-toggle]");
+    toggle?.addEventListener("click", () => {
+      const open = reader.classList.toggle("pages-open");
+      toggle.setAttribute("aria-expanded", String(open));
+    });
+  }
+</script>
+
+<style is:global>
+  .reader {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: 280px minmax(0, 1fr) 400px;
+    max-width: 1640px;
+    margin: 0 auto;
+    background: var(--bg);
+  }
+
+  .reader-tree,
+  .reader-side {
+    position: sticky;
+    top: var(--header);
+    height: calc(100svh - var(--header));
+  }
+
+  .reader-tree {
+    border-right: 1px solid var(--line-soft);
+    background: var(--bg-raise);
+  }
+
+  .reader-side {
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+    padding: 28px 20px 20px;
+    border-left: 1px solid var(--line-soft);
+  }
+
+  .reader-main {
+    min-width: 0;
+    padding: 36px clamp(24px, 4vw, 64px) 72px;
+  }
+
+  .reader-main > * {
+    max-width: 760px;
+    margin-inline: auto;
+  }
+
+  .pages-toggle {
+    display: none;
+  }
+
+  .crumbs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: var(--t-ui);
+    color: var(--text-3);
+  }
+
+  .crumbs a:hover {
+    color: var(--text);
+  }
+
+  .crumbs .sep {
+    color: var(--line);
+  }
+
+  .page-header {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-top: 18px;
+    padding-bottom: 26px;
+    margin-bottom: 30px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .page-title {
+    font-size: var(--t-title);
+    line-height: 1.08;
+    letter-spacing: -0.015em;
+  }
+
+  .purpose {
+    font-size: var(--t-lead);
+    line-height: 1.5;
+    color: var(--text-2);
+  }
+
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 12px;
+    font-size: var(--t-caption);
+    color: var(--text-3);
+  }
+
+  .meta a:hover {
+    color: var(--text);
+  }
+
+  .meta .dot {
+    width: 3px;
+    height: 3px;
+    border-radius: 999px;
+    background: var(--line);
+  }
+
+  .reader .prose {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .reader .prose p,
+  .reader .prose li {
+    font-size: var(--t-body);
+    line-height: 1.75;
+    color: var(--text-2);
+  }
+
+  .reader .prose h2 {
+    margin-top: 28px;
+    font-size: var(--t-h3);
+    line-height: 1.25;
+    scroll-margin-top: calc(var(--header) + 24px);
+  }
+
+  .reader .prose h3 {
+    margin-top: 12px;
+    font-family: var(--font-sans);
+    font-size: var(--t-body);
+    font-weight: 600;
+  }
+
+  .reader .prose ul,
+  .reader .prose ol {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0;
+    padding-left: 22px;
+  }
+
+  .reader .prose a:not(.cite) {
+    color: var(--text);
+    text-decoration: underline;
+    text-decoration-color: var(--line);
+    text-underline-offset: 3px;
+  }
+
+  .reader .prose a:not(.cite):hover {
+    text-decoration-color: var(--accent);
+  }
+
+  .reader .prose code {
+    font-size: 0.84em;
+  }
+
+  .reader .prose .code-block {
+    padding: 14px 16px;
+    border: 1px solid var(--line-soft);
+    border-radius: 8px;
+    background: var(--bg-raise);
+    overflow-x: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--line) transparent;
+  }
+
+  .reader .prose .code-block .shiki {
+    font-size: 13px;
+  }
+
+  .reader .cite-group {
+    display: inline-flex;
+    margin: 0 1px;
+    border-radius: 4px;
+    background: var(--accent-soft);
+    vertical-align: 3px;
+  }
+
+  .reader .cite-group .cite {
+    margin: 0;
+    min-width: 17px;
+    border-radius: 0;
+    background: transparent;
+    vertical-align: 0;
+  }
+
+  .reader .cite-group .cite + .cite {
+    box-shadow: -1px 0 0 var(--accent-line);
+  }
+
+  .reader .cite-group .cite:first-child {
+    border-radius: 4px 0 0 4px;
+  }
+
+  .reader .cite-group .cite:last-child {
+    border-radius: 0 4px 4px 0;
+  }
+
+  .reader .cite-group .cite:hover,
+  .reader .cite-group .cite.is-active {
+    background: var(--accent);
+    color: var(--accent-ink);
+  }
+
+  .reader .diagram {
+    margin: 8px 0;
+    border: 1px solid var(--line-soft);
+    border-radius: 10px;
+    background: var(--bg-raise);
+    overflow: hidden;
+  }
+
+  .reader .diagram-scroll {
+    position: relative;
+    padding: 18px;
+    overflow-x: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--line) transparent;
+  }
+
+  .reader .diagram svg {
+    display: block;
+    max-width: none;
+    margin: 0 auto;
+  }
+
+  .reader .diagram-scroll.is-scrollable {
+    mask-image: linear-gradient(to right, #000 88%, transparent);
+  }
+
+  .reader .diagram figcaption {
+    padding: 10px 18px;
+    border-top: 1px solid var(--line-soft);
+    font-size: var(--t-caption);
+    color: var(--text-3);
+  }
+
+  .reader .diagram .edge {
+    fill: none;
+    stroke: var(--text-3);
+    stroke-width: 1.2;
+    opacity: 0.55;
+    transition:
+      opacity 160ms ease,
+      stroke 160ms ease;
+  }
+
+  .reader .diagram .edge.back {
+    stroke-dasharray: 4 4;
+  }
+
+  .reader .diagram marker path {
+    fill: var(--text-3);
+  }
+
+  .reader .diagram .node rect {
+    fill: var(--panel);
+    stroke: var(--line);
+    transition:
+      stroke 160ms ease,
+      opacity 160ms ease;
+  }
+
+  .reader .diagram .node {
+    cursor: default;
+    outline: none;
+    transition: opacity 160ms ease;
+  }
+
+  .reader .diagram .node-name {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    fill: var(--text);
+  }
+
+  .reader .diagram .node-folder {
+    font-family: var(--font-sans);
+    font-size: 10.5px;
+    fill: var(--text-3);
+  }
+
+  .reader .diagram.is-focused .edge {
+    opacity: 0.1;
+  }
+
+  .reader .diagram.is-focused .edge.is-linked {
+    opacity: 1;
+    stroke: var(--accent);
+  }
+
+  .reader .diagram.is-focused .node {
+    opacity: 0.35;
+  }
+
+  .reader .diagram.is-focused .node.is-linked {
+    opacity: 1;
+  }
+
+  .reader .diagram .node.is-linked rect {
+    stroke: var(--accent);
+  }
+
+  .start {
+    margin-top: 44px;
+    padding-top: 28px;
+    border-top: 1px solid var(--line-soft);
+  }
+
+  .start h2 {
+    font-size: var(--t-h3);
+    margin-bottom: 14px;
+  }
+
+  .start ol {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: start;
+  }
+
+  .start li {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr);
+    column-gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line-soft);
+    counter-increment: start;
+  }
+
+  .start li::before {
+    content: counter(start, decimal-leading-zero);
+    grid-row: span 2;
+    font-family: var(--font-mono);
+    font-size: var(--t-caption);
+    color: var(--accent);
+    padding-top: 2px;
+  }
+
+  .start a {
+    font-size: var(--t-ui);
+    color: var(--text);
+    overflow-wrap: anywhere;
+  }
+
+  .start a:hover {
+    color: var(--accent-2);
+  }
+
+  .start span {
+    font-size: var(--t-small);
+    color: var(--text-2);
+  }
+
+  .pager {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 44px;
+  }
+
+  .pager-link {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 16px 18px;
+    border: 1px solid var(--line-soft);
+    border-radius: 8px;
+    transition:
+      border-color 160ms ease,
+      background-color 160ms ease;
+  }
+
+  .pager-link:hover {
+    border-color: var(--line);
+    background: var(--bg-raise);
+  }
+
+  .pager-link.next {
+    text-align: right;
+    grid-column: 2;
+  }
+
+  .pager-label {
+    font-size: var(--t-label);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-3);
+  }
+
+  .pager-title {
+    font-family: var(--font-serif);
+    font-size: var(--t-h4);
+    color: var(--text);
+  }
+
+  .side-label {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 8px;
+    font-size: var(--t-label);
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-3);
+  }
+
+  .side-hint {
+    font-weight: 400;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--text-3);
+    opacity: 0.8;
+  }
+
+  .toc {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 auto;
+    max-height: 42%;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--line) transparent;
+  }
+
+  .toc a {
+    position: relative;
+    padding: 5px 0 5px 14px;
+    font-size: var(--t-caption);
+    line-height: 1.4;
+    color: var(--text-3);
+    border-left: 1px solid var(--line-soft);
+    transition:
+      color 160ms ease,
+      border-color 160ms ease;
+  }
+
+  .toc a:hover {
+    color: var(--text);
+  }
+
+  .toc a.is-active {
+    color: var(--text);
+    border-left-color: var(--accent);
+  }
+
+  .source-panel {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .sources {
+    flex: 1 1 auto;
+    min-height: 0;
+    border: 1px solid var(--line-soft);
+    border-radius: 8px;
+    background: var(--bg-raise);
+    overflow: hidden;
+  }
+
+  .reader .source-item {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  .reader .source-item[hidden] {
+    display: none;
+  }
+
+  .reader .source-head {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .reader .badge {
+    display: grid;
+    place-items: center;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 5px;
+    border-radius: 4px;
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-size: var(--t-label);
+  }
+
+  .reader .source-file {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .reader .source-file .name,
+  .reader .source-file .folder {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .reader .source-file .name {
+    font-size: var(--t-caption);
+    color: var(--text);
+  }
+
+  .reader .source-file .folder {
+    font-size: 11px;
+    color: var(--text-3);
+    direction: rtl;
+    text-align: left;
+  }
+
+  .reader .source-head .lines {
+    font-size: var(--t-label);
+    color: var(--text-3);
+  }
+
+  .reader .source-head .lines:hover,
+  .reader .source-item .more:hover {
+    color: var(--accent);
+  }
+
+  .reader .source-item .code {
+    position: relative;
+    flex-grow: 1;
+    min-height: 0;
+    padding: 12px 0;
+    overflow: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--line) transparent;
+  }
+
+  /* A newly shown source is read top to bottom once, then the tint clears */
+  .reader .is-entering .code::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: var(--accent-soft);
+    animation: reader-read-through 560ms var(--ease-out) forwards;
+  }
+
+  @keyframes reader-read-through {
+    0% {
+      clip-path: inset(0 0 100% 0);
+      opacity: 1;
+    }
+    60% {
+      clip-path: inset(0 0 0 0);
+      opacity: 1;
+    }
+    100% {
+      clip-path: inset(0 0 0 0);
+      opacity: 0;
+    }
+  }
+
+  .reader .source-item .shiki {
+    font-size: 12px;
+    padding-right: 16px;
+  }
+
+  .reader .source-item .line::before {
+    counter-increment: line;
+    content: counter(line);
+    display: inline-block;
+    width: 38px;
+    margin-right: 14px;
+    text-align: right;
+    color: var(--text-3);
+    opacity: 0.6;
+  }
+
+  .reader .source-item .more {
+    padding: 10px 14px 12px;
+    border-top: 1px solid var(--line-soft);
+    font-size: var(--t-caption);
+    color: var(--text-3);
+  }
+
+  @media (max-width: 1280px) {
+    .reader {
+      grid-template-columns: 260px minmax(0, 1fr) 340px;
+    }
+  }
+
+  @media (max-width: 1100px) {
+    .reader {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .reader-side {
+      display: none;
+    }
+
+    .reader-tree {
+      display: none;
+      position: static;
+      height: auto;
+      max-height: 60svh;
+      border-right: 0;
+      border-bottom: 1px solid var(--line-soft);
+    }
+
+    .reader.pages-open .reader-tree {
+      display: block;
+    }
+
+    .pages-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 18px;
+      padding: 7px 12px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: transparent;
+      font-size: var(--t-caption);
+      color: var(--text-2);
+      cursor: pointer;
+    }
+  }
+
+  @media (max-width: 560px) {
+    .pager {
+      grid-template-columns: 1fr;
+    }
+
+    .pager-link.next {
+      grid-column: 1;
+    }
+  }
+</style>

@@ -1,0 +1,609 @@
+---
+import type { SiteWiki } from "@everyrepo/core";
+import BookIcon from "../../../components/BookIcon.astro";
+import Base from "../../../layouts/Base.astro";
+import { formatCount, languageName, shortSha } from "../../../lib/format.ts";
+import { readablePages } from "../../../lib/preview.ts";
+import { readingMinutes } from "../../../lib/showcase.ts";
+import {
+  formatDate,
+  githubHref,
+  pageHref,
+  readyWikis,
+  startingFiles,
+  technologies,
+} from "../../../lib/wiki.ts";
+
+export function getStaticPaths() {
+  return readyWikis().map((wiki) => ({
+    params: { owner: wiki.owner, repo: wiki.name },
+    props: { wiki },
+  }));
+}
+
+interface Props {
+  wiki: SiteWiki;
+}
+const { wiki } = Astro.props;
+
+const readable = new Set(readablePages(wiki).map((page) => page.slug));
+const firstPage =
+  wiki.wikiPages.find((page) => page.slug === "overview" && readable.has(page.slug)) ??
+  wiki.wikiPages.find((page) => readable.has(page.slug));
+const startFiles = startingFiles(wiki);
+
+const sections = wiki.wikiPages
+  .filter((page) => page.parentSlug === null && page.slug !== "overview")
+  .map((page) => ({
+    page,
+    open: readable.has(page.slug),
+    children: wiki.wikiPages.filter((child) => child.parentSlug === page.slug && readable.has(child.slug)),
+  }))
+  .filter((section) => section.open || section.children.length > 0);
+
+const total = wiki.languages.reduce((sum, item) => sum + item.files, 0) || 1;
+const languageShares = wiki.languages.slice(0, 4).map((item) => ({
+  name: languageName(item.language),
+  share: item.files / total,
+}));
+const shades = ["var(--accent)", "var(--accent-2)", "var(--text-3)", "var(--line)"];
+const minutes = readingMinutes([wiki]);
+const readingTime = minutes >= 90 ? `${(minutes / 60).toFixed(1)} h` : `${minutes} min`;
+const stack = technologies(wiki).slice(0, 12);
+const terms = wiki.glossary.slice(0, 8);
+---
+
+<Base
+  title={`${wiki.repo} wiki · EveryRepo`}
+  description={wiki.summary ?? `A wiki for ${wiki.repo}, with every sentence linked to its source.`}
+>
+  <section class="hub-hero">
+    <div class="frame hub-hero-inner">
+      <div class="hub-copy">
+        <nav class="crumbs" aria-label="Breadcrumb">
+          <a href="/#guide">Repositories</a>
+          <span class="sep">/</span>
+          <span>{wiki.owner}</span>
+        </nav>
+        <h1 class="hub-title">{wiki.name}</h1>
+        <p class="hub-summary">{wiki.summary}</p>
+        <div class="hub-actions">
+          {
+            firstPage && (
+              <a class="btn btn-solid btn-lg book-trigger" href={pageHref(wiki, firstPage.slug)}>
+                Start reading <BookIcon />
+              </a>
+            )
+          }
+          <a class="btn btn-line btn-lg" href={githubHref(wiki)} target="_blank" rel="noopener">
+            View on GitHub
+          </a>
+        </div>
+      </div>
+
+      {
+        startFiles.length > 0 && (
+          <aside class="start-card" aria-labelledby="start-files">
+            <h2 id="start-files" class="card-title">
+              Open these files first
+            </h2>
+            <ol>
+              {startFiles.map((item) => (
+                <li>
+                  <a class="mono" href={item.url} target="_blank" rel="noopener">
+                    {item.path.split("/").pop()}
+                  </a>
+                  <span class="start-folder mono">{item.path.split("/").slice(0, -1).join("/") || "/"}</span>
+                  <span class="start-role">{item.role}</span>
+                </li>
+              ))}
+            </ol>
+          </aside>
+        )
+      }
+    </div>
+
+    <div class="frame hub-stats">
+      <div class="stat">
+        <span class="value">{wiki.pages}</span>
+        <span class="label">wiki pages</span>
+      </div>
+      <div class="stat">
+        <span class="value">{readingTime}</span>
+        <span class="label">to read it all</span>
+      </div>
+      <div class="stat">
+        <span class="value">{formatCount(wiki.files)}</span>
+        <span class="label">files read, {formatCount(wiki.sourceFiles)} of them source</span>
+      </div>
+      <div class="stat">
+        <span class="value">{wiki.packages}</span>
+        <span class="label">packages</span>
+      </div>
+      <div class="stat languages">
+        <span class="bar" aria-hidden="true">
+          {languageShares.map((item, index) => <span style={`flex-grow:${item.share};background:${shades[index]}`} />)}
+        </span>
+        <span class="label">
+          {languageShares.filter((item) => item.share >= 0.01).map((item) => `${item.name} ${Math.round(item.share * 100)}%`).join("  ")}
+        </span>
+        <span class="label mono">
+          commit {shortSha(wiki.sha)}{wiki.indexedAt ? `, read ${formatDate(wiki.indexedAt)}` : ""}
+        </span>
+      </div>
+    </div>
+  </section>
+
+  <section class="section hub-block">
+    <div class="frame hub-grid">
+      <div class="about">
+        <span class="eyebrow"><span class="num">01</span> What it is</span>
+        <p class="about-text">{wiki.overview}</p>
+        {wiki.architecture && <p class="about-text muted">{wiki.architecture}</p>}
+        {
+          stack.length > 0 && (
+            <div class="stack">
+              {stack.map((name) => (
+                <span class="chip">{name}</span>
+              ))}
+            </div>
+          )
+        }
+      </div>
+
+      <div class="sections">
+        <span class="eyebrow"><span class="num">02</span> Sections</span>
+        <div class="section-list">
+          {
+            sections.map((section, index) => (
+              <div class="section-item">
+                <span class="section-number mono">{String(index + 1).padStart(2, "0")}</span>
+                <div class="section-body">
+                  {section.open ? (
+                    <a class="section-title" href={pageHref(wiki, section.page.slug)}>
+                      {section.page.title}
+                    </a>
+                  ) : (
+                    <span class="section-title">{section.page.title}</span>
+                  )}
+                  <p class="section-purpose">{section.page.purpose}</p>
+                  {section.children.length > 0 && (
+                    <div class="section-children">
+                      {section.children.slice(0, 6).map((child) => (
+                        <a href={pageHref(wiki, child.slug)}>{child.title}</a>
+                      ))}
+                      {section.children.length > 6 && (
+                        <span class="more">and {section.children.length - 6} more</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <span class="section-count">
+                  {section.children.length + (section.open ? 1 : 0)}{" "}
+                  {section.children.length + (section.open ? 1 : 0) === 1 ? "page" : "pages"}
+                </span>
+              </div>
+            ))
+          }
+        </div>
+      </div>
+    </div>
+  </section>
+
+  {
+    terms.length > 0 && (
+      <section class="section hub-block">
+        <div class="frame">
+          <div class="glossary-head">
+            <span class="eyebrow">
+              <span class="num">03</span> Words you will meet
+            </span>
+            <a class="glossary-link" href={`/${wiki.repo}/glossary`}>
+              All {wiki.glossary.length} terms
+            </a>
+          </div>
+          <dl class="terms">
+            {terms.map((term) => (
+              <div class="term">
+                <dt class="mono">{term.term}</dt>
+                <dd>{term.definition}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      </section>
+    )
+  }
+</Base>
+
+<style>
+  .hub-hero {
+    position: relative;
+    z-index: 2;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .hub-hero-inner {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+    gap: 56px;
+    align-items: center;
+    padding: 56px 24px 44px;
+  }
+
+  .hub-copy {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 18px;
+  }
+
+  .crumbs {
+    display: flex;
+    gap: 8px;
+    font-size: var(--t-ui);
+    color: var(--text-3);
+  }
+
+  .crumbs a:hover {
+    color: var(--text);
+  }
+
+  .crumbs .sep {
+    color: var(--line);
+  }
+
+  .hub-title {
+    font-size: var(--t-display);
+    line-height: 1.02;
+    letter-spacing: -0.02em;
+    overflow-wrap: anywhere;
+  }
+
+  .hub-summary {
+    max-width: 620px;
+    font-size: var(--t-lead);
+    line-height: 1.55;
+    color: var(--text-2);
+  }
+
+  .hub-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 6px;
+  }
+
+  .start-card {
+    padding: 22px 24px 10px;
+    border: 1px solid var(--line-soft);
+    border-radius: 12px;
+    background: var(--bg-raise);
+  }
+
+  .card-title {
+    margin-bottom: 8px;
+    font-family: var(--font-sans);
+    font-size: var(--t-label);
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-3);
+  }
+
+  .start-card ol {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: file;
+  }
+
+  .start-card li {
+    display: grid;
+    grid-template-columns: 26px minmax(0, 1fr);
+    column-gap: 10px;
+    padding: 11px 0;
+    border-top: 1px solid var(--line-soft);
+    counter-increment: file;
+  }
+
+  .start-card li:first-child {
+    border-top: 0;
+  }
+
+  .start-card li::before {
+    content: counter(file, decimal-leading-zero);
+    grid-row: span 3;
+    font-family: var(--font-mono);
+    font-size: var(--t-caption);
+    color: var(--accent);
+    padding-top: 1px;
+  }
+
+  .start-card a {
+    font-size: var(--t-ui);
+    color: var(--text);
+  }
+
+  .start-card a:hover {
+    color: var(--accent-2);
+  }
+
+  .start-folder {
+    font-size: 11px;
+    color: var(--text-3);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .start-role {
+    margin-top: 2px;
+    font-size: var(--t-caption);
+    line-height: 1.5;
+    color: var(--text-2);
+  }
+
+  .hub-stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 0.7fr)) minmax(0, 1.6fr);
+    border-top: 1px solid var(--line-soft);
+  }
+
+  .stat {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 20px 24px 24px;
+  }
+
+  .stat + .stat {
+    border-left: 1px solid var(--line-soft);
+  }
+
+  .value {
+    font-family: var(--font-serif);
+    font-size: var(--t-h2);
+    line-height: 1.1;
+  }
+
+  .label {
+    font-size: var(--t-caption);
+    color: var(--text-3);
+    white-space: pre-wrap;
+  }
+
+  .languages {
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .bar {
+    display: flex;
+    gap: 2px;
+    height: 5px;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .hub-block {
+    padding-block: 64px;
+  }
+
+  .hub-block > .frame {
+    padding: 0 24px;
+  }
+
+  .hub-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+    gap: 64px;
+  }
+
+  .about {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .about-text {
+    font-size: var(--t-body);
+    line-height: 1.75;
+    color: var(--text);
+  }
+
+  .about-text.muted {
+    color: var(--text-2);
+  }
+
+  .stack {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 4px;
+  }
+
+  .chip {
+    padding: 3px 10px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    font-size: var(--t-caption);
+    color: var(--text-2);
+  }
+
+  .sections {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .section-list {
+    border-top: 1px solid var(--line-soft);
+  }
+
+  .section-item {
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    gap: 14px;
+    padding: 20px 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .section-number {
+    padding-top: 5px;
+    font-size: var(--t-caption);
+    color: var(--accent);
+  }
+
+  .section-body {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .section-title {
+    font-family: var(--font-serif);
+    font-size: var(--t-h3);
+    line-height: 1.25;
+    color: var(--text);
+  }
+
+  a.section-title:hover {
+    color: var(--accent-2);
+  }
+
+  .section-purpose {
+    font-size: var(--t-small);
+    line-height: 1.6;
+    color: var(--text-2);
+  }
+
+  .section-children {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+  }
+
+  .section-children a,
+  .section-children .more {
+    padding: 3px 10px;
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius);
+    font-size: var(--t-caption);
+    color: var(--text-2);
+    transition:
+      border-color 140ms ease,
+      color 140ms ease;
+  }
+
+  .section-children a:hover {
+    border-color: var(--text-3);
+    color: var(--text);
+  }
+
+  .section-children .more {
+    border-style: dashed;
+    color: var(--text-3);
+  }
+
+  .section-count {
+    padding-top: 6px;
+    font-size: var(--t-caption);
+    color: var(--text-3);
+    white-space: nowrap;
+  }
+
+  .glossary-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 20px;
+  }
+
+  .glossary-link {
+    font-size: var(--t-ui);
+    color: var(--text-2);
+  }
+
+  .glossary-link:hover {
+    color: var(--text);
+  }
+
+  .terms {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1px;
+    margin: 0;
+    background: var(--line-soft);
+    border-block: 1px solid var(--line-soft);
+  }
+
+  .term {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 20px 20px 22px;
+    background: var(--bg);
+  }
+
+  .term dt {
+    font-size: var(--t-ui);
+    color: var(--text);
+    overflow-wrap: anywhere;
+  }
+
+  .term dd {
+    margin: 0;
+    font-size: var(--t-caption);
+    line-height: 1.6;
+    color: var(--text-2);
+  }
+
+  @media (max-width: 1000px) {
+    .hub-hero-inner,
+    .hub-grid {
+      grid-template-columns: 1fr;
+      gap: 36px;
+    }
+
+    .hub-stats {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .stat:nth-child(odd) {
+      border-left: 0;
+    }
+
+    .stat:nth-child(n + 3) {
+      border-top: 1px solid var(--line-soft);
+    }
+
+    .languages {
+      grid-column: span 2;
+    }
+
+    .terms {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 560px) {
+    .hub-hero-inner {
+      padding-inline: 0;
+    }
+
+    .terms {
+      grid-template-columns: 1fr;
+    }
+
+    .section-item {
+      grid-template-columns: 28px minmax(0, 1fr);
+    }
+
+    .section-count {
+      display: none;
+    }
+  }
+</style>

@@ -1,10 +1,16 @@
 ---
 import BookIcon from "./BookIcon.astro";
 import Logo from "./Logo.astro";
+
+interface Props {
+  // Reader pages span wider than the home page frame
+  wide?: boolean;
+}
+const { wide = false } = Astro.props;
 ---
 
 <header class="site-header">
-  <div class="frame bar">
+  <div class:list={["bar", wide ? "wide" : "frame"]}>
     <a class="brand" href="/">
       <Logo />
       <span>EveryRepo</span>
@@ -79,6 +85,12 @@ import Logo from "./Logo.astro";
     gap: 40px;
     height: 100%;
     padding: 0 24px;
+  }
+
+  .bar.wide {
+    width: min(100%, 1640px);
+    margin-inline: auto;
+    padding: 0 20px;
   }
 
   .brand {

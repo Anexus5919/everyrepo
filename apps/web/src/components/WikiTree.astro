@@ -1,0 +1,333 @@
+---
+import type { SiteWiki } from "@everyrepo/core";
+import { shortSha } from "../lib/format.ts";
+import { pageTree, readablePages } from "../lib/preview.ts";
+import { hubHref, pageHref } from "../lib/wiki.ts";
+
+interface Props {
+  wiki: SiteWiki;
+  current?: string;
+}
+const { wiki, current } = Astro.props;
+const tree = pageTree(wiki);
+const count = readablePages(wiki).length;
+const openGroup = tree.find(
+  (group) => group.slug === current || group.children.some((child) => child.slug === current),
+)?.slug;
+---
+
+<nav class="wiki-tree" aria-label={`${wiki.name} wiki`} data-wiki-tree>
+  <a class="tree-repo" href={hubHref(wiki)}>
+    <span class="tree-owner">{wiki.owner} /</span>
+    <span class="tree-name">{wiki.name}</span>
+  </a>
+
+  <label class="tree-filter">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      aria-hidden="true"
+    >
+      <circle cx="11" cy="11" r="6.5"></circle>
+      <path d="M16 16l4.5 4.5"></path>
+    </svg>
+    <span class="sr-only">Filter pages</span>
+    <input type="search" placeholder={`Filter ${count} pages`} data-tree-filter />
+  </label>
+
+  <div class="tree-list">
+    {
+      tree.map((group) => (
+        <div class="tree-group" data-tree-group data-open={group.slug === openGroup ? "true" : "false"}>
+          <div class="tree-row">
+            {group.written ? (
+              <a
+                class="tree-link top"
+                href={pageHref(wiki, group.slug)}
+                aria-current={group.slug === current ? "page" : undefined}
+              >
+                {group.title}
+              </a>
+            ) : (
+              <span class="tree-link top static">{group.title}</span>
+            )}
+            {group.children.length > 0 && (
+              <button
+                class="tree-toggle"
+                type="button"
+                aria-expanded={group.slug === openGroup ? "true" : "false"}
+                aria-label={`Pages in ${group.title}`}
+                data-tree-toggle
+              >
+                <span>{group.children.length}</span>
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                  <path
+                    d="M4.5 3L7.5 6L4.5 9"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              </button>
+            )}
+          </div>
+          {group.children.length > 0 && (
+            <div class="tree-children">
+              {group.children.map((child) => (
+                <a
+                  class="tree-link child"
+                  href={pageHref(wiki, child.slug)}
+                  aria-current={child.slug === current ? "page" : undefined}
+                >
+                  {child.title}
+                </a>
+              ))}
+            </div>
+          )}
+        </div>
+      ))
+    }
+    <p class="tree-empty" data-tree-empty hidden>No page matches</p>
+  </div>
+
+  <div class="tree-foot">
+    <a href={`/${wiki.repo}/glossary`}>Glossary</a>
+    <span class="mono">{shortSha(wiki.sha)}</span>
+  </div>
+</nav>
+
+<script>
+  document.querySelectorAll<HTMLElement>("[data-wiki-tree]").forEach((tree) => {
+    const setOpen = (group: HTMLElement, open: boolean) => {
+      group.dataset.open = String(open);
+      group.querySelector("[data-tree-toggle]")?.setAttribute("aria-expanded", String(open));
+    };
+    tree.addEventListener("click", (event) => {
+      const toggle = (event.target as HTMLElement).closest<HTMLElement>("[data-tree-toggle]");
+      if (!toggle) return;
+      const group = toggle.closest<HTMLElement>("[data-tree-group]")!;
+      setOpen(group, group.dataset.open !== "true");
+    });
+    tree.querySelector<HTMLInputElement>("[data-tree-filter]")?.addEventListener("input", (event) => {
+      const query = (event.target as HTMLInputElement).value.trim().toLowerCase();
+      let shown = 0;
+      tree.querySelectorAll<HTMLElement>("[data-tree-group]").forEach((group) => {
+        const top = group.querySelector<HTMLElement>(".top");
+        const topMatch = !query || (top?.textContent ?? "").toLowerCase().includes(query);
+        let matches = 0;
+        group.querySelectorAll<HTMLElement>(".child").forEach((child) => {
+          const match =
+            !query || topMatch || (child.textContent ?? "").toLowerCase().includes(query);
+          child.hidden = !match;
+          if (match) matches += 1;
+        });
+        group.hidden = !topMatch && matches === 0;
+        if (!group.hidden) shown += 1;
+        if (query) group.dataset.filtered = "true";
+        else delete group.dataset.filtered;
+      });
+      tree.querySelector<HTMLElement>("[data-tree-empty]")!.hidden = shown > 0;
+    });
+    // The current page stays in view inside a long tree without moving the page itself
+    const list = tree.querySelector<HTMLElement>(".tree-list");
+    const currentLink = tree.querySelector<HTMLElement>('[aria-current="page"]');
+    if (list && currentLink && currentLink.offsetParent) {
+      const top = currentLink.getBoundingClientRect().top - list.getBoundingClientRect().top;
+      if (top > list.clientHeight - 40) list.scrollTop = top - list.clientHeight / 2;
+    }
+  });
+</script>
+
+<style>
+  .wiki-tree {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .tree-repo {
+    display: flex;
+    flex-direction: column;
+    padding: 20px 20px 12px;
+  }
+
+  .tree-owner {
+    font-size: var(--t-label);
+    color: var(--text-3);
+  }
+
+  .tree-name {
+    font-family: var(--font-serif);
+    font-size: var(--t-h4);
+    line-height: 1.25;
+    color: var(--text);
+  }
+
+  .tree-repo:hover .tree-name {
+    color: var(--accent-2);
+  }
+
+  .tree-filter {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 34px;
+    margin: 0 14px 8px;
+    padding: 0 10px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    color: var(--text-3);
+    transition: border-color 140ms ease;
+  }
+
+  .tree-filter:focus-within {
+    border-color: var(--text-3);
+  }
+
+  .tree-filter input {
+    flex-grow: 1;
+    min-width: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    font-size: var(--t-caption);
+    color: var(--text);
+  }
+
+  .tree-filter input::placeholder {
+    color: var(--text-3);
+  }
+
+  .tree-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 2px 10px 16px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--line) transparent;
+  }
+
+  .tree-row {
+    display: flex;
+    align-items: center;
+  }
+
+  .tree-link {
+    position: relative;
+    display: block;
+    flex-grow: 1;
+    min-width: 0;
+    padding: 6px 10px;
+    border-radius: var(--radius);
+    font-size: 13.5px;
+    line-height: 1.35;
+    color: var(--text-2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition:
+      background-color 140ms ease,
+      color 140ms ease;
+  }
+
+  .tree-link.top {
+    font-weight: 500;
+    color: var(--text);
+  }
+
+  .tree-link.child {
+    padding-left: 24px;
+  }
+
+  a.tree-link:hover {
+    background: var(--panel-2);
+    color: var(--text);
+  }
+
+  .tree-link[aria-current="page"] {
+    background: var(--accent-soft);
+    color: var(--text);
+  }
+
+  .tree-link[aria-current="page"]::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 7px;
+    bottom: 7px;
+    width: 2px;
+    border-radius: 2px;
+    background: var(--accent);
+  }
+
+  .tree-toggle {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 26px;
+    padding: 0 6px;
+    border: 0;
+    border-radius: var(--radius);
+    background: transparent;
+    font-size: 11px;
+    color: var(--text-3);
+    cursor: pointer;
+  }
+
+  .tree-toggle:hover {
+    background: var(--panel-2);
+    color: var(--text);
+  }
+
+  /* The chevron turns to point at the pages it reveals */
+  .tree-toggle svg {
+    transition: transform 180ms var(--ease-out);
+  }
+
+  [data-open="true"] > .tree-row .tree-toggle svg,
+  [data-filtered="true"] > .tree-row .tree-toggle svg {
+    transform: rotate(90deg);
+  }
+
+  .tree-children {
+    display: none;
+    margin: 2px 0 6px;
+  }
+
+  [data-open="true"] > .tree-children,
+  [data-filtered="true"] > .tree-children {
+    display: block;
+  }
+
+  .tree-empty {
+    padding: 10px;
+    font-size: var(--t-caption);
+    color: var(--text-3);
+  }
+
+  .tree-foot {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 20px;
+    border-top: 1px solid var(--line-soft);
+    font-size: var(--t-caption);
+    color: var(--text-3);
+  }
+
+  .tree-foot a {
+    color: var(--text-2);
+  }
+
+  .tree-foot a:hover {
+    color: var(--text);
+  }
+</style>

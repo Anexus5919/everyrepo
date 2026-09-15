@@ -1,6 +1,6 @@
 import type { SitePage, SiteWiki } from "@everyrepo/core";
 import { languageForPath } from "./format.ts";
-import { highlight, renderMarkdown } from "./markdown.ts";
+import { highlight, renderMarkdown, type RenderOptions } from "./markdown.ts";
 
 const EXCERPT_LINES = 28;
 
@@ -47,8 +47,11 @@ export function pageTree(wiki: SiteWiki): TreeGroup[] {
     .filter((group) => group.written || group.children.length > 0);
 }
 
-export async function buildPreview(page: SitePage): Promise<PreviewPage> {
-  const html = await renderMarkdown(page.markdown ?? "");
+export async function buildPreview(
+  page: SitePage,
+  options: RenderOptions = {},
+): Promise<PreviewPage> {
+  const html = await renderMarkdown(page.markdown ?? "", options);
   const cited = [
     ...new Set([...html.matchAll(/data-cite="(\d+)"/g)].map((match) => Number(match[1]))),
   ];

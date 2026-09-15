@@ -17,7 +17,7 @@ export function siteCommand(): Command {
         const at = new Date();
         for (const wiki of result.ready) {
           if (wiki.publishedSha !== wiki.sha) {
-            markPublished(context.appDb, wiki.repoId, wiki.sha, at);
+            markPublished(context.appDb, wiki.repoId, wiki.sha, wiki.writtenAt ?? at);
           }
         }
         console.log(

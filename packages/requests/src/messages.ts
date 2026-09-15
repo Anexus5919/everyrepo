@@ -13,7 +13,7 @@ export function reasonMessage(code: string, repo: string, detail?: string): stri
     case "no-source":
       return "This repository has no source code files to explain. EveryRepo writes wikis from code.";
     case "large":
-      return "This is a large repository. Its wiki takes days on the free models EveryRepo uses, so large requests are approved by hand.";
+      return "Large wikis take days on the free models EveryRepo uses, so they are approved by hand.";
     case "daily-limit":
       return "Today's automatic approvals are used up. The request is saved and will be reviewed.";
     case "queue-full":

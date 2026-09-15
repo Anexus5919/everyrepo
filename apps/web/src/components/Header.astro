@@ -12,6 +12,8 @@ const icons = {
     '<rect x="2.5" y="4" width="7" height="5" rx="1.2"/><rect x="14.5" y="4" width="7" height="5" rx="1.2"/><rect x="8.5" y="15" width="7" height="5" rx="1.2"/><path d="M6 9v2.5c0 1 .8 1.5 1.8 1.5H12v2M18 9v2.5c0 1-.8 1.5-1.8 1.5H12"/>',
   browse:
     '<rect x="3" y="3" width="7.5" height="7.5" rx="1.2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.2"/><path d="M17.25 14v6.5M14 17.25h6.5"/>',
+  queue:
+    '<path d="M4 6h11M4 12h11M4 18h7"/><circle cx="19" cy="17" r="3"/><path d="M19 15.6V17l1 .8"/>',
   open: '<path d="M10 14 20.5 3.5"/><path d="M14.5 3.5h6v6"/><path d="M19 13.5V19a1.5 1.5 0 0 1-1.5 1.5h-12A1.5 1.5 0 0 1 4 19V7a1.5 1.5 0 0 1 1.5-1.5H11"/>',
   tour: '<circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/>',
   method: '<path d="m12 3 9 4.5-9 4.5-9-4.5z"/><path d="m3 12 9 4.5 9-4.5"/><path d="m3 16.5 9 4.5 9-4.5"/>',
@@ -19,7 +21,7 @@ const icons = {
     '<circle cx="8.5" cy="9" r="4.5"/><circle cx="15.5" cy="9" r="4.5"/><circle cx="12" cy="15" r="4.5"/>',
 };
 
-type Action = "guide" | "palette";
+type Action = "guide" | "palette" | "repo";
 interface Feature {
   icon: keyof typeof icons;
   title: string;
@@ -100,8 +102,15 @@ const menus: Menu[] = [
       {
         icon: "open",
         title: "Open a repository",
-        text: "Paste a public GitHub link to open its wiki or see where it is in the queue.",
+        text: "Paste any public GitHub link to open its wiki or request one.",
         href: "/#open",
+        action: "repo",
+      },
+      {
+        icon: "queue",
+        title: "Follow the queue",
+        text: "Repositories being written now and the line after them.",
+        href: "/queue/",
       },
     ],
     columns: [
@@ -114,7 +123,7 @@ const menus: Menu[] = [
         links: waiting.map((repo) => ({
           text: repo.name,
           owner: repo.owner,
-          href: "/#guide",
+          href: "/queue/",
           badge: repo.status === "indexing" ? "Reading" : "Queued",
         })),
       },
@@ -158,8 +167,12 @@ const menus: Menu[] = [
   },
 ];
 
-const actionAttributes = (action?: Action) =>
-  action === "guide" ? { "data-guide-open": "" } : action === "palette" ? { "data-open-palette": "" } : {};
+const ACTION_ATTRIBUTES: Record<Action, Record<string, string>> = {
+  guide: { "data-guide-open": "" },
+  palette: { "data-open-palette": "" },
+  repo: { "data-open-repo": "" },
+};
+const actionAttributes = (action?: Action) => (action ? ACTION_ATTRIBUTES[action] : {});
 ---
 
 <header class="site-header" data-site-header>
@@ -294,7 +307,7 @@ const actionAttributes = (action?: Action) =>
       </svg>
     </button>
 
-    <a class="cell cta book-trigger" href="/#open">Open a repository <BookIcon /></a>
+    <a class="cell cta book-trigger" href="/#open" data-open-repo>Open a repository <BookIcon /></a>
   </div>
 
   <div class="mobile-menu" id="mobile-menu" data-mobile-menu hidden>

@@ -211,6 +211,7 @@ export function describeRecord(record: RepoRecord, context: DescribeContext): Re
         ...base,
         state: "failed",
         reason: reason("failed", BUILD_STAGES.find((stage) => stage.key === failed)?.label),
+        progress: progressFor(lastJob, stages),
       };
     }
     return { ...base, state: "queued" };

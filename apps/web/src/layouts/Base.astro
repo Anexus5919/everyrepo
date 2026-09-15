@@ -11,7 +11,9 @@ import "../styles/palettes.css";
 import Footer from "../components/Footer.astro";
 import Guide from "../components/Guide.astro";
 import Header from "../components/Header.astro";
+import RepoDialog from "../components/RepoDialog.astro";
 import { PALETTES } from "../lib/palettes.ts";
+import { loadRepos } from "../lib/site-data.ts";
 
 interface Props {
   title: string;
@@ -22,6 +24,13 @@ interface Props {
 }
 const { title, description, snap = false, wide = false } = Astro.props;
 const paletteIds = PALETTES.map((palette) => palette.id);
+// The repository box suggests these and opens written wikis without asking the API
+const knownWikis = loadRepos().map((repo) => ({
+  repo: repo.repo,
+  status: repo.status,
+  summary: repo.summary,
+  pages: repo.pages,
+}));
 ---
 
 <!doctype html>
@@ -63,5 +72,7 @@ const paletteIds = PALETTES.map((palette) => palette.id);
     </main>
     <Footer />
     <Guide />
+    <RepoDialog />
+    <script is:inline type="application/json" id="known-wikis" set:html={JSON.stringify(knownWikis)} />
   </body>
 </html>

@@ -220,6 +220,28 @@ h4 {
   font-family: var(--font-serif);
 }
 
+/* A small dot for anything that updates while the page is open */
+.live-dot {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-3);
+}
+
+@keyframes live-blink {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-dot {
+    animation: none !important;
+  }
+}
+
 .sr-only {
   position: absolute;
   width: 1px;

@@ -24,6 +24,8 @@ export interface ExportedWiki {
   sha: string;
   // The snapshot the website showed before this export, if any
   publishedSha: string | null;
+  // When the last page was written, which is when a wiki first became readable
+  writtenAt: Date | null;
 }
 
 export interface SiteExport {
@@ -78,10 +80,28 @@ export async function exportSite(db: AppDb, dataDir: string, out: string): Promi
       join(out, `${repoDirName(ref)}.json`),
       JSON.stringify({ ...repo, overview, architecture, technologies, wikiPages, glossary }),
     );
-    ready.push({ repoId: row.id, repo: repo.repo, sha: repo.sha, publishedSha: row.publishedSha });
+    ready.push({
+      repoId: row.id,
+      repo: repo.repo,
+      sha: repo.sha,
+      publishedSha: row.publishedSha,
+      writtenAt: lastWritten(engineDbPath(dataDir, repoDirName(ref), row.lastIndexedSha!)),
+    });
   }
   await writeFile(join(out, "repos.json"), JSON.stringify(listed, null, 2));
   return { out, listed, ready };
+}
+
+function lastWritten(enginePath: string): Date | null {
+  const sql = openEngineDb(enginePath).$client;
+  try {
+    const row = sql
+      .prepare("SELECT MAX(updated_at) AS at FROM wiki_page WHERE status = 'written'")
+      .get() as { at: number | null } | undefined;
+    return row?.at ? new Date(row.at) : null;
+  } finally {
+    sql.close();
+  }
 }
 
 function readWiki(enginePath: string, indexing: boolean, indexedAt: number | null): SiteWiki {

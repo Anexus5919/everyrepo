@@ -319,6 +319,7 @@ describe("following a build", () => {
     const failed = await requests.lookup(ref("acme/app"));
     expect(failed).toMatchObject({ state: "failed", reason: { code: "failed" } });
     expect(failed.reason?.message).toContain("sorting the files");
+    expect(failed.progress).toMatchObject({ stage: "detect", phase: "reading" });
 
     await requests.submit(ref("acme/app"), "b");
     expect(jobsFor("acme/app")).toHaveLength(1);

@@ -1,0 +1,462 @@
+---
+import RepoOpener from "../../components/RepoOpener.astro";
+import Base from "../../layouts/Base.astro";
+---
+
+<Base
+  title="Request status: EveryRepo"
+  description="Follow a repository's wiki while it is read, written and published."
+>
+  <section class="section status-page">
+    <div class="frame status-frame">
+      <a class="back" href="/queue/">
+        <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"
+          ><path d="M13 8H3M7 4L3 8l4 4"></path></svg
+        >
+        The queue
+      </a>
+      <p class="sr-only" aria-live="polite" data-status-announce></p>
+      <div class="status-root" data-status-root>
+        <noscript>
+          <p class="status-noscript">This page needs JavaScript to show live progress.</p>
+        </noscript>
+      </div>
+      <div class="status-pick" data-status-pick hidden>
+        <span class="eyebrow">Request status</span>
+        <h1 class="status-title">Which repository?</h1>
+        <p class="status-description" data-status-pick-note>
+          Paste a GitHub link or type owner/name to open its wiki, follow its build or request one.
+        </p>
+        <RepoOpener id="status-opener" variant="page" />
+      </div>
+    </div>
+  </section>
+</Base>
+
+<script>
+  import { mountStatusPage } from "../../lib/status-page.ts";
+
+  mountStatusPage();
+</script>
+
+<style is:global>
+  .status-page {
+    padding-block: 40px 88px;
+  }
+
+  .status-frame {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    max-width: 760px;
+  }
+
+  .status-page .back {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    align-self: flex-start;
+    font-size: var(--t-caption);
+    color: var(--text-3);
+  }
+
+  .status-page .back:hover {
+    color: var(--text);
+  }
+
+  .status-page .back svg,
+  .status-page .icon {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .status-page .icon-star,
+  .status-page .icon-github {
+    fill: currentColor;
+    stroke: none;
+  }
+
+  .status-root,
+  .status-pick {
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+
+  .status-root[hidden],
+  .status-pick[hidden] {
+    display: none;
+  }
+
+  .status-head {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .status-title {
+    font-size: var(--t-title);
+    line-height: 1.1;
+    letter-spacing: -0.01em;
+    overflow-wrap: anywhere;
+  }
+
+  .status-title .owner {
+    color: var(--text-3);
+  }
+
+  .status-description {
+    max-width: 620px;
+    font-size: var(--t-small);
+    line-height: 1.65;
+    color: var(--text-2);
+  }
+
+  .status-moved {
+    font-size: var(--t-caption);
+    color: var(--accent-2);
+  }
+
+  .status-facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+    font-size: var(--t-caption);
+    color: var(--text-3);
+  }
+
+  .status-facts .fact {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .status-facts .github-link {
+    color: var(--text-2);
+  }
+
+  .status-facts .github-link:hover {
+    color: var(--text);
+  }
+
+  .status-page .banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    border: 1px solid var(--accent-line);
+    border-radius: var(--radius);
+    background: var(--accent-soft);
+    font-size: var(--t-small);
+    color: var(--text);
+  }
+
+  .status-page .banner .icon {
+    color: var(--accent);
+    stroke-width: 2;
+  }
+
+  .status-card {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    padding: 24px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--bg-raise);
+  }
+
+  .status-top {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+  }
+
+  .status-card h2 {
+    font-size: var(--t-h3);
+    line-height: 1.25;
+  }
+
+  .status-card p {
+    margin-top: 6px;
+    font-size: var(--t-small);
+    line-height: 1.6;
+    color: var(--text-2);
+  }
+
+  .status-card .status-mark {
+    flex-shrink: 0;
+    width: 12px;
+    height: 12px;
+    margin-top: 9px;
+    border-radius: 50%;
+    background: var(--text-3);
+  }
+
+  .status-card.tone-ready .status-mark,
+  .status-card.tone-active .status-mark {
+    background: var(--accent);
+  }
+
+  .status-card.tone-active .status-mark {
+    box-shadow: 0 0 0 0 var(--accent-line);
+    animation: status-pulse 1.8s ease-out infinite;
+  }
+
+  .status-card.tone-waiting .status-mark,
+  .status-card.tone-open .status-mark {
+    background: var(--accent-2);
+  }
+
+  .status-card.tone-attention .status-mark {
+    background: transparent;
+    box-shadow: inset 0 0 0 2px var(--accent-2);
+  }
+
+  .status-card.tone-blocked .status-mark {
+    background: transparent;
+    box-shadow: inset 0 0 0 2px var(--text-3);
+  }
+
+  @keyframes status-pulse {
+    to {
+      box-shadow: 0 0 0 10px transparent;
+    }
+  }
+
+  .status-page .progress {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .status-page .progress-track {
+    flex-grow: 1;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--panel-2);
+    overflow: hidden;
+  }
+
+  .status-page .progress-fill {
+    display: block;
+    height: 100%;
+    border-radius: 3px;
+    background: var(--accent);
+    transition: width 600ms var(--ease-out);
+  }
+
+  .status-page .progress-value {
+    min-width: 40px;
+    text-align: right;
+    font-size: var(--t-caption);
+    color: var(--text-2);
+  }
+
+  .status-page .status-problem {
+    color: var(--accent-2);
+  }
+
+  .status-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .status-actions .btn .icon {
+    stroke-width: 1.8;
+  }
+
+  .status-page .check:empty {
+    display: none;
+  }
+
+  .steps {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .step {
+    position: relative;
+    display: flex;
+    gap: 16px;
+    padding-bottom: 22px;
+  }
+
+  .step:last-child {
+    padding-bottom: 0;
+  }
+
+  /* A thin rail joins each step to the next */
+  .step:not(:last-child)::before {
+    content: "";
+    position: absolute;
+    top: 26px;
+    bottom: 2px;
+    left: 11px;
+    width: 1px;
+    background: var(--line);
+  }
+
+  .step.is-done:not(:last-child)::before {
+    background: var(--accent-line);
+  }
+
+  .step-mark {
+    position: relative;
+    flex-shrink: 0;
+    display: grid;
+    place-items: center;
+    width: 23px;
+    height: 23px;
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    background: var(--bg);
+    color: var(--accent-ink);
+  }
+
+  .step.is-done .step-mark {
+    border-color: var(--accent);
+    background: var(--accent);
+  }
+
+  .step.is-done .step-mark .icon {
+    width: 12px;
+    height: 12px;
+    stroke-width: 2.2;
+  }
+
+  .step.is-current .step-mark {
+    border-color: var(--accent);
+  }
+
+  .step.is-current .step-mark::after {
+    content: "";
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+
+  .step.is-stopped .step-mark {
+    border-color: var(--accent-2);
+  }
+
+  .step.is-stopped .step-mark::after {
+    content: "";
+    width: 9px;
+    height: 2px;
+    background: var(--accent-2);
+  }
+
+  .step-text {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding-top: 1px;
+  }
+
+  .step-label {
+    font-size: var(--t-small);
+    color: var(--text-2);
+  }
+
+  .step.is-done .step-label,
+  .step.is-current .step-label,
+  .step.is-stopped .step-label {
+    color: var(--text);
+  }
+
+  .step-note {
+    font-size: var(--t-caption);
+    color: var(--text-3);
+  }
+
+  .status-details {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    margin: 0;
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  .status-details div {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 14px 16px;
+    border-right: 1px solid var(--line-soft);
+    border-bottom: 1px solid var(--line-soft);
+    margin: 0 -1px -1px 0;
+  }
+
+  .status-details dt {
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-3);
+  }
+
+  .status-details dd {
+    margin: 0;
+    font-size: var(--t-small);
+    color: var(--text);
+  }
+
+  .status-page .live {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: var(--t-caption);
+    color: var(--text-3);
+  }
+
+  .status-page .is-live .live-dot {
+    background: var(--accent);
+    animation: live-blink 1.6s ease-in-out infinite;
+  }
+
+  .status-loading {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 40px 0;
+    font-size: var(--t-small);
+    color: var(--text-3);
+  }
+
+  .status-page .spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--line);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: status-spin 700ms linear infinite;
+  }
+
+  @keyframes status-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @media (max-width: 560px) {
+    .status-card {
+      padding: 18px;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .status-card.tone-active .status-mark,
+    .status-page .spinner {
+      animation: none !important;
+    }
+  }
+</style>

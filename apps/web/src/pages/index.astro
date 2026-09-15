@@ -7,6 +7,7 @@ import Faq from "../components/Faq.astro";
 import FeatureGrid from "../components/FeatureGrid.astro";
 import Method from "../components/Method.astro";
 import Pipeline from "../components/Pipeline.astro";
+import RepoOpener from "../components/RepoOpener.astro";
 import RepoGrid from "../components/RepoGrid.astro";
 import WikiPreview from "../components/WikiPreview.astro";
 import Base from "../layouts/Base.astro";
@@ -78,7 +79,6 @@ const diagramPoints = [
   "Ask for a plain explanation, box by box",
 ];
 
-const knownRepos = repos.map((repo) => ({ repo: repo.repo, status: repo.status }));
 const examples = ready.slice(0, 3).map((repo) => repo.repo);
 ---
 
@@ -96,47 +96,9 @@ const examples = ready.slice(0, 3).map((repo) => repo.repo);
           EveryRepo writes a wiki for public GitHub repositories: how the code is organized, which
           files to open first, and a source for every sentence, linked to the exact lines.
         </p>
-        <form class="open-form" id="open" data-open-form>
-          <label class="field" data-open-field>
-            <span class="sr-only">Repository</span>
-            <span class="field-icon" aria-hidden="true">
-              <svg
-                class="search"
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.8"
-                stroke-linecap="round"
-                ><circle cx="11" cy="11" r="6.5"></circle><path d="M16 16l4.5 4.5"></path></svg
-              >
-              <svg
-                class="match"
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"><path pathLength="1" d="M5 12.5l4.5 4.5L19 7.5"></path></svg
-              >
-            </span>
-            <input
-              name="repo"
-              placeholder="owner/repo or a GitHub link"
-              autocomplete="off"
-              spellcheck="false"
-              data-open-input
-            />
-            <kbd class="mono">/</kbd>
-          </label>
-          <button class="btn btn-solid btn-lg book-trigger" type="submit"
-            >Open the wiki <BookIcon /></button
-          >
-        </form>
-        <p class="form-note" data-open-note aria-live="polite"></p>
+        <div class="hero-opener" id="open">
+          <RepoOpener id="hero-opener" variant="hero" shortcut label="Open the wiki" />
+        </div>
         <div class="try">
           <span>Try</span>
           {
@@ -269,7 +231,7 @@ const examples = ready.slice(0, 3).map((repo) => repo.repo);
         </div>
         <p class="block-text">
           A wiki is written the first time a repository is requested. Everyone after that opens the
-          finished pages straight away.
+          finished pages straight away. <a class="inline-link" href="/queue/">See what is in the queue</a>.
         </p>
       </div>
     </div>
@@ -322,7 +284,9 @@ const examples = ready.slice(0, 3).map((repo) => repo.repo);
           is unclear.
         </p>
         <div class="faq-actions">
-          <a class="btn btn-solid book-trigger" href="#open">Open a repository <BookIcon /></a>
+          <a class="btn btn-solid book-trigger" href="#open" data-open-repo
+            >Open a repository <BookIcon /></a
+          >
           <button class="btn btn-line" type="button" data-guide-open>Take the tour</button>
         </div>
       </div>
@@ -330,60 +294,8 @@ const examples = ready.slice(0, 3).map((repo) => repo.repo);
     </div>
   </section>
 
-  <script is:inline type="application/json" id="known-repos" set:html={JSON.stringify(knownRepos)} />
 </Base>
 
-<script>
-  const form = document.querySelector<HTMLFormElement>("[data-open-form]");
-  const field = document.querySelector<HTMLElement>("[data-open-field]");
-  const input = document.querySelector<HTMLInputElement>("[data-open-input]");
-  const note = document.querySelector<HTMLElement>("[data-open-note]");
-  const known = JSON.parse(document.getElementById("known-repos")?.textContent ?? "[]") as Array<{
-    repo: string;
-    status: string;
-  }>;
-
-  const parse = (value: string) => {
-    const match = /(?:github\.com[/:])?([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?(?:[#?].*)?$/i.exec(
-      value.trim(),
-    );
-    return match ? `${match[1]}/${match[2]}` : null;
-  };
-  const lookup = (name: string | null) =>
-    name ? known.find((item) => item.repo.toLowerCase() === name.toLowerCase()) : undefined;
-
-  // The search icon turns into a check once the text names a wiki that is ready to open
-  input?.addEventListener("input", () => {
-    const entry = lookup(parse(input.value));
-    field?.classList.toggle("is-match", entry?.status === "ready");
-    if (note) note.textContent = "";
-  });
-
-  form?.addEventListener("submit", (event) => {
-    event.preventDefault();
-    if (!input || !note) return;
-    const name = parse(input.value);
-    if (!name) {
-      note.textContent = "Enter a repository as owner/repo or paste its GitHub link.";
-      return;
-    }
-    const entry = lookup(name);
-    if (entry?.status === "ready") {
-      window.location.href = `/${entry.repo}`;
-    } else if (entry) {
-      note.textContent = `${entry.repo} is already in the queue. Its wiki is being prepared.`;
-    } else {
-      note.textContent = `${name} is not in the guide yet. Requests open soon.`;
-    }
-  });
-
-  document.addEventListener("keydown", (event) => {
-    const target = event.target as HTMLElement;
-    if (event.key !== "/" || target.closest("input, textarea")) return;
-    event.preventDefault();
-    input?.focus();
-  });
-</script>
 
 <style>
   .hero {
@@ -430,101 +342,19 @@ const examples = ready.slice(0, 3).map((repo) => repo.repo);
     color: var(--text-2);
   }
 
-  .open-form {
-    display: flex;
-    gap: 10px;
-    width: 100%;
-    max-width: 560px;
+  .inline-link {
+    color: var(--text);
+    border-bottom: 1px solid var(--line);
   }
 
-  .field {
-    flex-grow: 1;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    height: 52px;
-    padding: 0 12px 0 16px;
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
-    background: var(--panel);
-    color: var(--text-3);
-    transition: border-color 160ms ease;
-  }
-
-  .field:focus-within {
+  .inline-link:hover {
     border-color: var(--text-3);
   }
 
-  .field.is-match {
-    border-color: var(--accent);
-  }
-
-  .field-icon {
-    display: grid;
-  }
-
-  .field-icon svg {
-    grid-area: 1 / 1;
-    transition: opacity 160ms ease;
-  }
-
-  .match {
-    color: var(--accent);
-    opacity: 0;
-  }
-
-  .match path {
-    stroke-dasharray: 1;
-    stroke-dashoffset: 1;
-    transition: stroke-dashoffset 320ms var(--ease-out) 60ms;
-  }
-
-  .is-match .search {
-    opacity: 0;
-  }
-
-  .is-match .match {
-    opacity: 1;
-  }
-
-  .is-match .match path {
-    stroke-dashoffset: 0;
-  }
-
-  .field input {
-    flex-grow: 1;
-    min-width: 0;
-    height: 100%;
-    border: 0;
-    outline: 0;
-    background: transparent;
-    font-size: var(--t-small);
-    color: var(--text);
-  }
-
-  .field input::placeholder {
-    color: var(--text-3);
-  }
-
-  kbd {
-    display: grid;
-    place-items: center;
-    width: 22px;
-    height: 22px;
-    border: 1px solid var(--line);
-    border-radius: 4px;
-    font-size: var(--t-label);
-    color: var(--text-3);
-  }
-
-  .form-note {
-    margin-top: -12px;
-    font-size: var(--t-caption);
-    color: var(--accent-2);
-  }
-
-  .form-note:empty {
-    display: none;
+  .hero-opener {
+    width: 100%;
+    max-width: 560px;
+    scroll-margin-top: calc(var(--header) + 24px);
   }
 
   .try {
@@ -740,10 +570,6 @@ const examples = ready.slice(0, 3).map((repo) => repo.repo);
   }
 
   @media (max-width: 560px) {
-    .open-form {
-      flex-direction: column;
-    }
-
     .block {
       padding-block: 48px;
     }

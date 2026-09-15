@@ -2,6 +2,8 @@
 
 import type { SizeTier } from "./vocabulary.ts";
 
+export type { SizeTier };
+
 export const INDEX_STAGE_KEYS = [
   "source",
   "detect",

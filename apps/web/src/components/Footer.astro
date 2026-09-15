@@ -18,7 +18,9 @@ const year = new Date().getFullYear();
         <h2 class="cta-title">Understand the next codebase you open.</h2>
         <div class="cta-actions">
           <a class="btn btn-line btn-lg" href="/#wiki">See a sample page</a>
-          <a class="btn btn-solid btn-lg book-trigger" href="/#open">Open a repository <BookIcon /></a>
+          <a class="btn btn-solid btn-lg book-trigger" href="/#open" data-open-repo
+            >Open a repository <BookIcon /></a
+          >
         </div>
       </div>
 
@@ -39,7 +41,8 @@ const year = new Date().getFullYear();
           <a href="/#wiki">A wiki page</a>
           <a href="/#guide">Repositories</a>
           <a href="/#method">How a page is made</a>
-          <a href="/#open">Open a repository</a>
+          <a href="/#open" data-open-repo>Open a repository</a>
+          <a href="/queue/">The queue</a>
           <a href="?guide" data-guide-open>How to use it</a>
         </nav>
 
@@ -58,12 +61,12 @@ const year = new Date().getFullYear();
           <h3 class="heading">Being written</h3>
           {
             waiting.map((repo) => (
-              <span class="waiting">
+              <a class="waiting" href={`/request/?repo=${encodeURIComponent(repo.repo)}`}>
                 <span>
                   <span class="owner">{repo.owner} /</span> {repo.name}
                 </span>
                 <span class="badge">{repo.status === "indexing" ? "Reading" : "Queued"}</span>
-              </span>
+              </a>
             ))
           }
         </div>

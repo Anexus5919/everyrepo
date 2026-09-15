@@ -2,6 +2,8 @@ import { Marked, type Tokens } from "marked";
 
 export interface AskSource {
   number: number;
+  kind: "code" | "issue" | "page" | "summary";
+  title: string;
   path: string;
   startLine: number;
   endLine: number;
@@ -9,19 +11,33 @@ export interface AskSource {
   excerpt: string;
 }
 
+export interface IssueCard {
+  number: number;
+  title: string;
+  url: string;
+  labels: string[];
+  comments: number;
+  reactions: number;
+  updatedAt: string;
+}
+
 export interface AskAnswer {
-  status: "answered" | "not-found";
+  status: "answered" | "not-found" | "off-topic";
+  intent: "code" | "overview" | "contribute" | "general";
   question: string;
   markdown: string;
+  note: string;
   sources: AskSource[];
   files: Array<{ path: string; url: string }>;
   pages: Array<{ slug: string; title: string }>;
+  issue: IssueCard | null;
+  otherIssues: IssueCard[];
   model: string;
   cached: boolean;
 }
 
 export type AskStreamLine =
-  | { type: "stage"; stage: "searching" | "reading" | "writing"; files?: string[] }
+  | { type: "stage"; stage: string; label: string; files?: string[] }
   | { type: "answer"; answer: AskAnswer }
   | { type: "error"; message: string };
 
@@ -34,9 +50,10 @@ export function escapeHtml(text: string): string {
     .replace(/'/g, "&#39;");
 }
 
-const SAFE_LINK = /^https:\/\/github\.com\//;
+const GITHUB_LINK = /^https:\/\/github\.com\//;
+const SITE_LINK = /^\/(?!\/)/;
 
-// Answers are model text, so raw HTML is shown as text and only GitHub links stay clickable
+// Answers are model text, so raw HTML is shown as text and only GitHub and site links stay clickable
 const marked = new Marked({ gfm: true, breaks: false });
 marked.use({
   renderer: {
@@ -48,12 +65,14 @@ marked.use({
     },
     link(token: Tokens.Link) {
       const cite = /^\[(\d+)\]$/.exec(token.text);
-      if (!SAFE_LINK.test(token.href)) return this.parser.parseInline(token.tokens);
+      const site = SITE_LINK.test(token.href);
+      if (!site && !GITHUB_LINK.test(token.href)) return this.parser.parseInline(token.tokens);
       const href = escapeHtml(token.href);
+      const target = site ? "" : ' target="_blank" rel="noopener"';
       if (cite) {
-        return `<a class="cite" href="${href}" data-cite="${cite[1]}" target="_blank" rel="noopener">${cite[1]}</a>`;
+        return `<a class="cite" href="${href}" data-cite="${cite[1]}"${target}>${cite[1]}</a>`;
       }
-      return `<a href="${href}" target="_blank" rel="noopener">${this.parser.parseInline(token.tokens)}</a>`;
+      return `<a href="${href}"${target}>${this.parser.parseInline(token.tokens)}</a>`;
     },
     code(token: Tokens.Code) {
       return `<pre class="answer-code"><code>${escapeHtml(token.text)}</code></pre>`;
@@ -67,6 +86,19 @@ export function renderAnswer(markdown: string): string {
     /(?:<a class="cite"[^>]*>\d+<\/a>){2,}/g,
     (group) => `<span class="cite-group">${group}</span>`,
   );
+}
+
+// What an earlier answer said, without links or code, for the next question's context
+export function plainAnswer(answer: Pick<AskAnswer, "markdown" | "note">): string {
+  const text = answer.markdown || answer.note;
+  return text
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/\[\[\d+\]\]\([^)]*\)/g, "")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/[*_`]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 600);
 }
 
 // Lines of an excerpt with their line numbers, cut to a readable length

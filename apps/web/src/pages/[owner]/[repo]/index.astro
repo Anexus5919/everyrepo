@@ -59,8 +59,9 @@ const askTopics = readablePages(wiki)
   .sort((a, b) => Number(b.parentSlug !== null) - Number(a.parentSlug !== null))
   .slice(0, 2);
 const suggestions = [
-  ...askTopics.map((page) => `How does ${page.title} work?`),
-  ...(startFiles[0] ? [`What does ${startFiles[0].path.split("/").pop()} do?`] : []),
+  `What is ${wiki.name} and what is it used for?`,
+  ...askTopics.slice(0, 1).map((page) => `How does ${page.title} work?`),
+  "I am new here. Which open issue could I start with?",
 ];
 ---
 

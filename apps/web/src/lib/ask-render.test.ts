@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { excerptLines, renderAnswer, takeLines } from "./ask-render.ts";
+import { excerptLines, plainAnswer, renderAnswer, takeLines } from "./ask-render.ts";
 
 const URL_ONE = "https://github.com/acme/app/blob/abc/src/load.ts#L1-L4";
 const URL_TWO = "https://github.com/acme/app/blob/abc/src/run.ts#L8-L9";
@@ -23,6 +23,13 @@ describe("renderAnswer", () => {
     expect(html).not.toContain('href="https://example.com"');
   });
 
+  it("keeps wiki page citations on the site", () => {
+    expect(renderAnswer("See the overview [[1]](/acme/app/overview).")).toContain(
+      '<a class="cite" href="/acme/app/overview" data-cite="1">1</a>',
+    );
+    expect(renderAnswer("[x](//evil.example/path)")).not.toContain("href");
+  });
+
   it("escapes code blocks", () => {
     expect(renderAnswer("```ts\nif (a < b) run();\n```")).toContain(
       '<pre class="answer-code"><code>if (a &lt; b) run();</code></pre>',
@@ -31,6 +38,15 @@ describe("renderAnswer", () => {
 });
 
 describe("stream helpers", () => {
+  it("reduces an answer to plain text for follow-up questions", () => {
+    expect(
+      plainAnswer({
+        markdown: "Uses **`loadConfig`** [[1]](https://github.com/a/b).\n\n```ts\nrun();\n```",
+        note: "",
+      }),
+    ).toBe("Uses loadConfig .");
+  });
+
   it("keeps a partial line for the next read", () => {
     const { lines, rest } = takeLines('{"type":"stage","stage":"searching"}\n{"type":"sta');
     expect(lines).toEqual([{ type: "stage", stage: "searching" }]);

@@ -5,12 +5,14 @@ interface Props {
   repo: string;
   sha: string;
   suggestions: string[];
+  // Slug of the wiki page the panel opens on, sent so answers know where the reader is
+  page?: string;
 }
-const { repo, sha, suggestions } = Astro.props;
+const { repo, sha, suggestions, page } = Astro.props;
 const name = repo.split("/")[1] ?? repo;
 ---
 
-<dialog class="ask" aria-labelledby="ask-title" data-ask data-repo={repo}>
+<dialog class="ask" aria-labelledby="ask-title" data-ask data-repo={repo} data-page={page}>
   <div class="ask-shell">
     <header class="ask-head">
       <div class="ask-heading">
@@ -69,10 +71,12 @@ const name = repo.split("/")[1] ?? repo;
   import {
     escapeHtml,
     excerptLines,
+    plainAnswer,
     renderAnswer,
     takeLines,
     type AskAnswer,
     type AskStreamLine,
+    type IssueCard,
   } from "../lib/ask-render.ts";
 
   interface Turn {
@@ -88,6 +92,7 @@ const name = repo.split("/")[1] ?? repo;
   const panel = document.querySelector<HTMLDialogElement>("[data-ask]");
   if (panel) {
     const repo = panel.dataset.repo!;
+    const page = panel.dataset.page ?? null;
     const log = panel.querySelector<HTMLElement>("[data-ask-log]")!;
     const empty = panel.querySelector<HTMLElement>("[data-ask-empty]")!;
     const form = panel.querySelector<HTMLFormElement>("[data-ask-form]")!;
@@ -119,7 +124,25 @@ const name = repo.split("/")[1] ?? repo;
       folder: path.split("/").slice(0, -1).join("/"),
     });
 
+    const KIND_LABELS = { issue: "GitHub issue", page: "Wiki page", summary: "Repository overview" };
+    const chevron = `<svg class="chevron" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>`;
+
     const sourceRow = (source: AskAnswer["sources"][number]) => {
+      if (source.kind !== "code") {
+        const external = source.url.startsWith("https://");
+        const preview = source.excerpt.split("\n").filter(Boolean).slice(0, 8).join("\n");
+        return `<li class="source" data-source="${source.number}">
+          <button type="button" class="source-row" aria-expanded="false" data-source-toggle>
+            <span class="cite">${source.number}</span>
+            <span class="source-file"><span>${escapeHtml(source.title)}</span><span class="source-folder">${KIND_LABELS[source.kind]}</span></span>
+            ${chevron}
+          </button>
+          <div class="source-excerpt" hidden>
+            <p class="source-text">${escapeHtml(preview)}</p>
+            <a class="source-link" href="${escapeHtml(source.url)}"${external ? ' target="_blank" rel="noopener"' : ""}>${source.kind === "issue" ? "Open the issue on GitHub" : "Open in the wiki"}</a>
+          </div>
+        </li>`;
+      }
       const { name, folder } = fileParts(source.path);
       const { lines, more } = excerptLines(source);
       const code = lines
@@ -130,7 +153,7 @@ const name = repo.split("/")[1] ?? repo;
           <span class="cite">${source.number}</span>
           <span class="source-file"><span class="mono">${escapeHtml(name)}</span><span class="source-folder mono">${escapeHtml(folder)}</span></span>
           <span class="source-lines mono">${source.startLine}-${source.endLine}</span>
-          <svg class="chevron" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          ${chevron}
         </button>
         <div class="source-excerpt" hidden>
           <pre>${code}</pre>
@@ -138,6 +161,33 @@ const name = repo.split("/")[1] ?? repo;
         </div>
       </li>`;
     };
+
+    const shortDate = (iso: string) =>
+      new Date(iso).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" });
+
+    const issueCardHtml = (issue: IssueCard) =>
+      `<a class="issue-card" href="${escapeHtml(issue.url)}" target="_blank" rel="noopener">
+        <span class="issue-top"><span class="ask-label">Suggested issue</span><span class="issue-number mono">#${issue.number}</span></span>
+        <span class="issue-title">${escapeHtml(issue.title)}</span>
+        <span class="issue-meta">${issue.labels
+          .slice(0, 4)
+          .map((label) => `<span class="issue-label">${escapeHtml(label)}</span>`)
+          .join("")}<span>${issue.comments} ${issue.comments === 1 ? "comment" : "comments"}, updated ${shortDate(issue.updatedAt)}</span></span>
+      </a>`;
+
+    const otherIssuesBlock = (answer: AskAnswer) =>
+      answer.otherIssues.length === 0
+        ? ""
+        : `<div class="answer-issues"><span class="ask-label">Other open issues for newcomers</span>${answer.otherIssues
+            .map(
+              (issue) =>
+                `<a class="issue-row" href="${escapeHtml(issue.url)}" target="_blank" rel="noopener"><span class="mono">#${issue.number}</span><span>${escapeHtml(issue.title)}</span></a>`,
+            )
+            .join("")}</div>`;
+
+    const suggestionTexts = [
+      ...panel.querySelectorAll<HTMLButtonElement>("[data-ask-suggest]"),
+    ].map((button) => button.textContent?.trim() ?? "");
 
     const pagesBlock = (answer: AskAnswer) =>
       answer.pages.length === 0
@@ -160,15 +210,32 @@ const name = repo.split("/")[1] ?? repo;
             .join("")}</div></details>`;
 
     function answerHtml(answer: AskAnswer): string {
-      if (answer.status === "not-found") {
-        return `${readBlock(answer.files)}
-          <p class="ask-note">The code that was read does not answer this. Naming a feature, file or function usually helps.</p>
-          ${pagesBlock(answer)}`;
+      const issue = answer.issue ? issueCardHtml(answer.issue) : "";
+      if (answer.status === "off-topic") {
+        return `<p class="ask-note">${escapeHtml(answer.note)}</p>
+          <div class="ask-empty inline"><span class="ask-label">Try asking</span>${suggestionTexts
+            .map(
+              (text) =>
+                `<button class="suggestion" type="button" data-ask-suggest>${escapeHtml(text)}</button>`,
+            )
+            .join("")}</div>`;
       }
-      return `${readBlock(answer.files)}
+      if (answer.status === "not-found") {
+        const issueSearch =
+          answer.intent === "contribute" && !answer.issue
+            ? `<a class="source-link" href="https://github.com/${repo}/issues?q=${encodeURIComponent('is:issue is:open label:"good first issue"')}" target="_blank" rel="noopener">Browse newcomer issues on GitHub</a>`
+            : "";
+        return `${issue}${readBlock(answer.files)}
+          <p class="ask-note">${escapeHtml(answer.note || "The code that was read does not answer this.")}</p>
+          ${issueSearch}${otherIssuesBlock(answer)}${pagesBlock(answer)}`;
+      }
+      const sources =
+        answer.sources.length === 0
+          ? ""
+          : `<div class="answer-sources"><span class="ask-label">Sources</span><ol>${answer.sources.map(sourceRow).join("")}</ol></div>`;
+      return `${issue}${readBlock(answer.files)}
         <div class="answer-prose">${renderAnswer(answer.markdown)}</div>
-        <div class="answer-sources"><span class="ask-label">Sources</span><ol>${answer.sources.map(sourceRow).join("")}</ol></div>
-        ${pagesBlock(answer)}`;
+        ${sources}${otherIssuesBlock(answer)}${pagesBlock(answer)}`;
     }
 
     const errorHtml = (message: string, offline: boolean) =>
@@ -188,28 +255,27 @@ const name = repo.split("/")[1] ?? repo;
       return article;
     }
 
-    const STEPS = [
-      { stage: "searching", text: "Searching the code" },
-      { stage: "reading", text: "Reading the closest files" },
-      { stage: "writing", text: "Writing the answer from them" },
-    ] as const;
+    const stepsHtml = () =>
+      `<ol class="steps"></ol><div class="file-chips reading" hidden></div>`;
 
-    function stepsHtml(): string {
-      return `<ol class="steps">${STEPS.map(
-        (step) =>
-          `<li data-step="${step.stage}"><span class="step-mark" aria-hidden="true"></span><span class="step-text">${step.text}</span></li>`,
-      ).join("")}</ol><div class="file-chips reading" hidden></div>`;
-    }
-
-    function showStage(body: HTMLElement, stage: string, files?: string[]) {
-      const order = STEPS.findIndex((step) => step.stage === stage);
-      body.querySelectorAll<HTMLElement>("[data-step]").forEach((item, position) => {
-        item.dataset.state = position < order ? "done" : position === order ? "active" : "pending";
+    // Each stage the server reports becomes a step; earlier steps are marked done
+    function showStage(body: HTMLElement, stage: string, label: string, files?: string[]) {
+      const list = body.querySelector<HTMLElement>(".steps");
+      if (!list) return;
+      let item = list.querySelector<HTMLElement>(`[data-step="${stage}"]`);
+      list.querySelectorAll<HTMLElement>("[data-step]").forEach((step) => {
+        if (step !== item) step.dataset.state = "done";
       });
+      if (!item) {
+        item = document.createElement("li");
+        item.dataset.step = stage;
+        item.innerHTML = `<span class="step-mark" aria-hidden="true"></span><span class="step-text"></span>`;
+        list.append(item);
+      }
+      item.dataset.state = "active";
+      item.querySelector(".step-text")!.textContent = label;
       if (files) {
         const chips = body.querySelector<HTMLElement>(".file-chips.reading")!;
-        const text = body.querySelector<HTMLElement>('[data-step="reading"] .step-text')!;
-        text.textContent = `Reading ${files.length} ${files.length === 1 ? "file" : "files"}`;
         // Files appear one after another, in the order they ranked
         chips.innerHTML = files
           .map(
@@ -236,16 +302,21 @@ const name = repo.split("/")[1] ?? repo;
       body.innerHTML = stepsHtml();
       if (replace) replace.replaceWith(article);
       else log.append(article);
-      showStage(body, "searching");
+      showStage(body, "understanding", "Understanding the question");
       scrollToEnd(article);
 
       const turn: Turn = { question: text };
+      // Recent answered turns let follow-up questions refer back to them
+      const history = turns
+        .filter((earlier) => earlier.answer)
+        .slice(-3)
+        .map((earlier) => ({ question: earlier.question, answer: plainAnswer(earlier.answer!) }));
       let offline = false;
       try {
         const response = await fetch(`${ASK_URL}/api/ask`, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ repo, question: text }),
+          body: JSON.stringify({ repo, question: text, page, history }),
         }).catch(() => {
           offline = true;
           throw new Error("Ask is offline right now.");
@@ -262,7 +333,7 @@ const name = repo.split("/")[1] ?? repo;
           const parsed = takeLines(buffer + value);
           buffer = parsed.rest;
           for (const line of parsed.lines as AskStreamLine[]) {
-            if (line.type === "stage") showStage(body, line.stage, line.files);
+            if (line.type === "stage") showStage(body, line.stage, line.label, line.files);
             if (line.type === "answer") turn.answer = line.answer;
             if (line.type === "error") throw new Error(line.message);
           }
@@ -910,6 +981,98 @@ const name = repo.split("/")[1] ?? repo;
   .ask .turn-error p {
     font-size: var(--t-small);
     line-height: 1.6;
+    color: var(--text-2);
+  }
+
+  .ask .ask-empty.inline {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .ask .issue-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 14px 16px;
+    border: 1px solid var(--accent-line);
+    border-radius: 10px;
+    background: var(--accent-soft);
+    transition: border-color 140ms ease;
+  }
+
+  .ask .issue-card:hover {
+    border-color: var(--accent);
+  }
+
+  .ask .issue-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .ask .issue-number {
+    font-size: var(--t-caption);
+    color: var(--accent);
+  }
+
+  .ask .issue-title {
+    font-size: var(--t-small);
+    font-weight: 500;
+    line-height: 1.45;
+    color: var(--text);
+  }
+
+  .ask .issue-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 8px;
+    font-size: 11px;
+    color: var(--text-3);
+  }
+
+  .ask .issue-label {
+    padding: 1px 7px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--bg-raise);
+    color: var(--text-2);
+  }
+
+  .ask .answer-issues {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .ask .issue-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 10px;
+    font-size: var(--t-ui);
+    line-height: 1.45;
+    color: var(--text-2);
+  }
+
+  .ask .issue-row .mono {
+    font-size: var(--t-caption);
+    color: var(--text-3);
+  }
+
+  .ask .issue-row:hover {
+    color: var(--text);
+  }
+
+  .ask .source-text {
+    margin: 0;
+    padding: 10px 12px;
+    border-radius: var(--radius);
+    background: var(--bg);
+    font-size: var(--t-caption);
+    line-height: 1.6;
+    white-space: pre-line;
     color: var(--text-2);
   }
 

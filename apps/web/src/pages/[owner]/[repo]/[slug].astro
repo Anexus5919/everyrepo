@@ -45,7 +45,8 @@ const minutes = Math.max(1, Math.round(wordCount(page.markdown ?? "") / 230));
 const reading = page.section ? [] : page.readingOrder.slice(0, 6);
 const suggestions = [
   `How does ${page.title} work?`,
-  ...page.readingOrder.slice(0, 2).map((item) => `What does ${item.path.split("/").pop()} do?`),
+  ...page.readingOrder.slice(0, 1).map((item) => `What does ${item.path.split("/").pop()} do?`),
+  "I am new here. Which open issue could I start with?",
 ];
 ---
 
@@ -140,16 +141,6 @@ const suggestions = [
             )
           }
         </div>
-        <button class="ask-trigger" type="button" data-ask-open>
-          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"
-            ><path
-              d="M3 3.5h10a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H8l-3 2.5v-2.5H3a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1z"
-              stroke="currentColor"
-              stroke-width="1.3"
-              stroke-linejoin="round"></path></svg
-          >
-          Ask a question about this code
-        </button>
       </header>
 
       <div class="prose" set:html={html} />
@@ -192,6 +183,27 @@ const suggestions = [
           )
         }
       </nav>
+
+      <form class="ask-dock" data-ask-launch>
+        <label class="sr-only" for="dock-ask">Ask a question about {wiki.name}</label>
+        <input
+          id="dock-ask"
+          name="question"
+          maxlength="300"
+          autocomplete="off"
+          placeholder={`Ask about ${wiki.repo}`}
+        />
+        <button class="dock-send" type="submit" aria-label="Ask">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"
+            ><path
+              d="M3 8h10M9 4l4 4-4 4"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"></path></svg
+          >
+        </button>
+      </form>
     </article>
 
     <aside class="reader-side">
@@ -230,7 +242,7 @@ const suggestions = [
     </aside>
     <DiagramViewer />
   </div>
-  <Ask repo={wiki.repo} sha={wiki.sha} suggestions={suggestions} />
+  <Ask repo={wiki.repo} sha={wiki.sha} suggestions={suggestions} page={page.slug} />
 </Base>
 
 <script>
@@ -628,28 +640,67 @@ const suggestions = [
     color: var(--text);
   }
 
-  .ask-trigger {
-    display: inline-flex;
+  /* The question box follows the reader down the page and steps aside while the Ask panel is open */
+  .ask-dock {
+    position: sticky;
+    bottom: 20px;
+    z-index: 5;
+    display: flex;
     align-items: center;
     gap: 8px;
-    width: fit-content;
-    height: 34px;
-    margin-top: 6px;
-    padding: 0 12px;
+    margin-top: 40px;
+    padding: 8px 8px 8px 18px;
     border: 1px solid var(--line);
-    border-radius: var(--radius);
-    background: transparent;
-    font-size: var(--t-caption);
-    color: var(--text-2);
-    cursor: pointer;
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--panel) 88%, transparent);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: var(--shadow);
     transition:
-      border-color 140ms ease,
-      color 140ms ease;
+      border-color 160ms ease,
+      opacity 160ms ease;
   }
 
-  .ask-trigger:hover {
+  .ask-dock:focus-within {
     border-color: var(--text-3);
+  }
+
+  :global(html.ask-open) .ask-dock {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .ask-dock input {
+    flex-grow: 1;
+    min-width: 0;
+    height: 40px;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    font-size: var(--t-small);
     color: var(--text);
+  }
+
+  .ask-dock input::placeholder {
+    color: var(--text-3);
+  }
+
+  .dock-send {
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    border: 0;
+    border-radius: 8px;
+    background: var(--button-bg);
+    color: var(--button-ink);
+    cursor: pointer;
+  }
+
+  .dock-send:hover path {
+    transform: translateX(1.5px);
+    transition: transform 160ms var(--ease-out);
   }
 
   .meta .dot {

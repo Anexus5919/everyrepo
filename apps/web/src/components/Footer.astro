@@ -2,6 +2,7 @@
 import BookIcon from "./BookIcon.astro";
 import Logo from "./Logo.astro";
 import Wordmark from "./Wordmark.astro";
+import { PALETTE_GROUPS, PALETTES } from "../lib/palettes.ts";
 import { loadRepos } from "../lib/site-data.ts";
 
 const repos = loadRepos();
@@ -71,6 +72,20 @@ const year = new Date().getFullYear();
       <div class="meta">
         <span>&copy; {year} EveryRepo</span>
         <span class="note">Pages are written from public code at the commit shown on each page.</span>
+        <label class="palette-select">
+          <span class="palette-label">Palette</span>
+          <select data-palette-select>
+            {
+              PALETTE_GROUPS.map((group) => (
+                <optgroup label={group.label}>
+                  {PALETTES.filter((palette) => palette.group === group.id).map((palette) => (
+                    <option value={palette.id}>{palette.name}</option>
+                  ))}
+                </optgroup>
+              ))
+            }
+          </select>
+        </label>
         <div class="theme-switch" role="radiogroup" aria-label="Color theme" data-theme-switch>
           <button type="button" role="radio" data-mode="system" aria-label="Match the system">
             <svg
@@ -126,7 +141,14 @@ const year = new Date().getFullYear();
 </footer>
 
 <script>
+  import { applyPalette, currentPalette } from "../lib/palettes.ts";
   import { changeTheme } from "../lib/theme.ts";
+
+  document.querySelectorAll<HTMLSelectElement>("[data-palette-select]").forEach((select) => {
+    select.value = currentPalette();
+    select.addEventListener("change", () => applyPalette(select.value));
+    window.addEventListener("palettechange", () => (select.value = currentPalette()));
+  });
 
   type Mode = "system" | "light" | "dark";
 
@@ -337,6 +359,34 @@ const year = new Date().getFullYear();
 
   .note {
     flex-grow: 1;
+  }
+
+  .palette-select {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: var(--t-caption);
+    color: var(--text-3);
+  }
+
+  .palette-select select {
+    height: 32px;
+    padding: 0 28px 0 12px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--bg-raise)
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23888' stroke-width='1.4' stroke-linecap='round'/%3E%3C/svg%3E")
+      no-repeat right 11px center;
+    appearance: none;
+    font: inherit;
+    font-size: var(--t-caption);
+    color: var(--text);
+    cursor: pointer;
+  }
+
+  .palette-select select:hover,
+  .palette-select select:focus-visible {
+    border-color: var(--text-3);
   }
 
   .theme-switch {

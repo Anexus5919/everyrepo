@@ -11,11 +11,19 @@ function siteDir(): string {
   return join(config.dataDir, "site");
 }
 
+// Every page of the build reads the same files, so each is parsed once
+const cache = new Map<string, unknown>();
+
+function readJson<T>(name: string): T {
+  const file = join(siteDir(), name);
+  if (!cache.has(file)) cache.set(file, JSON.parse(readFileSync(file, "utf8")));
+  return cache.get(file) as T;
+}
+
 export function loadRepos(): SiteRepo[] {
-  return JSON.parse(readFileSync(join(siteDir(), "repos.json"), "utf8")) as SiteRepo[];
+  return readJson<SiteRepo[]>("repos.json");
 }
 
 export function loadWiki(repo: string): SiteWiki {
-  const file = join(siteDir(), `${repo.replace("/", "__")}.json`);
-  return JSON.parse(readFileSync(file, "utf8")) as SiteWiki;
+  return readJson<SiteWiki>(`${repo.replace("/", "__")}.json`);
 }

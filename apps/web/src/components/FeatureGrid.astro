@@ -1,0 +1,168 @@
+---
+const draw = (markup: string) => markup.replace(/<(path|circle|rect)\s/g, '<$1 pathLength="1" ');
+
+const features = [
+  {
+    title: "Cited to the line",
+    text: "Every paragraph links to the exact lines it was written from.",
+    icon: '<path d="M4 7h11M4 11h8M4 15h10"/><rect x="15" y="13" width="6" height="6" rx="1.5"/>',
+  },
+  {
+    title: "Pinned to a commit",
+    text: "Links open the same version of the code the page describes.",
+    icon: '<circle cx="12" cy="12" r="3.5"/><path d="M3 12h5.5M15.5 12H21"/>',
+  },
+  {
+    title: "Files to open first",
+    text: "Each hub ranks where to start reading, and says why.",
+    icon: '<path d="M6 3h8l4 4v14H6z"/><path d="M9 14h6M13 11l3 3-3 3"/>',
+  },
+  {
+    title: "Real import diagrams",
+    text: "Drawn from how the files actually import each other, never guessed.",
+    icon: '<rect x="2.5" y="4" width="7" height="5" rx="1.2"/><rect x="14.5" y="4" width="7" height="5" rx="1.2"/><rect x="8.5" y="15" width="7" height="5" rx="1.2"/><path d="M6 9v3h12V9M12 12v3"/>',
+  },
+  {
+    title: "Diagrams explained",
+    text: "Ask for any diagram in plain words, box by box.",
+    icon: '<path d="M4 5.5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-8l-5 3.5v-3.5H4a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1z"/><path d="M8 10h8M8 13h5"/>',
+  },
+  {
+    title: "Issues for newcomers",
+    text: "Open issues worth starting with, how serious they are and the files they touch.",
+    icon: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.2"/>',
+  },
+  {
+    title: "The project's own words",
+    text: "A glossary of the terms you will meet, each defined from the code.",
+    icon: '<path d="M5 19V5.5A2.5 2.5 0 0 1 7.5 3H19v14H7.5A2.5 2.5 0 0 0 5 19.5z"/><path d="M9.5 13.5 12 7l2.5 6.5M10.3 11.5h3.4"/>',
+  },
+  {
+    title: "Comfortable for hours",
+    text: "Ten palettes in light and dark, including high contrast and colour-safe.",
+    icon: '<circle cx="8.5" cy="9" r="4.5"/><circle cx="15.5" cy="9" r="4.5"/><circle cx="12" cy="15" r="4.5"/>',
+  },
+];
+---
+
+<ul class="feature-grid">
+  {
+    features.map((feature) => (
+      <li class="feature">
+        <span class="tile" aria-hidden="true">
+          <svg width="26" height="26" viewBox="0 0 24 24" set:html={draw(feature.icon)} />
+        </span>
+        <span class="feature-title">{feature.title}</span>
+        <span class="feature-text">{feature.text}</span>
+      </li>
+    ))
+  }
+</ul>
+
+<style>
+  .feature-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .feature {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 24px 22px;
+    border: 1px solid var(--line-soft);
+    border-radius: 14px;
+    background: var(--bg-raise);
+    transition: border-color 160ms ease;
+  }
+
+  .feature:hover {
+    border-color: var(--line);
+  }
+
+  .tile {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 56px;
+    height: 56px;
+    margin-bottom: 6px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--panel);
+    color: var(--text-2);
+    transition:
+      border-color 160ms ease,
+      color 160ms ease;
+  }
+
+  /* Four small corner points, like the fixings on a plate */
+  .tile::before {
+    content: "";
+    position: absolute;
+    inset: 6px;
+    background:
+      radial-gradient(circle, var(--line) 1.2px, transparent 1.4px) top left / 4px 4px no-repeat,
+      radial-gradient(circle, var(--line) 1.2px, transparent 1.4px) top right / 4px 4px no-repeat,
+      radial-gradient(circle, var(--line) 1.2px, transparent 1.4px) bottom left / 4px 4px no-repeat,
+      radial-gradient(circle, var(--line) 1.2px, transparent 1.4px) bottom right / 4px 4px no-repeat;
+  }
+
+  .tile svg {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .tile svg :global(*) {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 0;
+  }
+
+  .feature:hover .tile {
+    border-color: var(--accent-line);
+    color: var(--accent);
+  }
+
+  /* On hover the icon draws itself again, a small sign the card is about to be read */
+  .feature:hover .tile svg :global(*) {
+    animation: redraw 520ms var(--ease-out) both;
+  }
+
+  @keyframes redraw {
+    from {
+      stroke-dashoffset: 1;
+    }
+  }
+
+  .feature-title {
+    font-size: var(--t-small);
+    font-weight: 500;
+    color: var(--text);
+  }
+
+  .feature-text {
+    font-size: var(--t-caption);
+    line-height: 1.55;
+    color: var(--text-3);
+  }
+
+  @media (max-width: 1000px) {
+    .feature-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 520px) {
+    .feature-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

@@ -80,6 +80,7 @@
   --code-token-string-expression: #c7d39a;
   --code-token-punctuation: #9a9282;
   --code-token-link: #f6b16c;
+  --wordmark-streak: #ffd8ad;
 }
 
 :root[data-theme="light"] {
@@ -92,12 +93,12 @@
   --line-soft: #e6dfd1;
   --text: #1c1a16;
   --text-2: #4b463d;
-  --text-3: #7b7568;
-  --accent: #b8532f;
-  --accent-2: #d9823f;
+  --text-3: #6b6559;
+  --accent: #a6481f;
+  --accent-2: #b8662a;
   --accent-ink: #fff7f0;
   --accent-soft: #f1dfd4;
-  --accent-line: rgba(184, 83, 47, 0.45);
+  --accent-line: rgba(166, 72, 31, 0.45);
   --button-bg: #1c1a16;
   --button-ink: #f5f1e8;
   --header-bg: rgba(245, 241, 232, 0.97);
@@ -120,13 +121,14 @@
   --code-foreground: #3a362f;
   --code-token-constant: #9c4a22;
   --code-token-string: #5d6b2c;
-  --code-token-comment: #9a9384;
+  --code-token-comment: #7e7768;
   --code-token-keyword: #b8532f;
   --code-token-parameter: #3a362f;
   --code-token-function: #6b4a1f;
   --code-token-string-expression: #5d6b2c;
   --code-token-punctuation: #7b7568;
   --code-token-link: #b8532f;
+  --wordmark-streak: #8f3d20;
 }
 
 *,
@@ -268,10 +270,12 @@ h4 {
   font-weight: 500;
 }
 
-.eyebrow .num {
-  font-family: var(--font-mono);
-  color: var(--accent);
-  letter-spacing: 0;
+.eyebrow::before {
+  content: "";
+  width: 16px;
+  height: 1.5px;
+  border-radius: 1px;
+  background: var(--accent);
 }
 
 .btn {
@@ -404,8 +408,17 @@ pre code {
 
 html.theme-sweep *,
 html.theme-sweep *::before,
-html.theme-sweep *::after {
+html.theme-sweep *::after,
+html.palette-fade *,
+html.palette-fade *::before,
+html.palette-fade *::after {
   transition: none !important;
+}
+
+/* A palette change is a short fade, kept apart from the theme sweep */
+html.palette-fade::view-transition-old(root),
+html.palette-fade::view-transition-new(root) {
+  animation-duration: 320ms;
 }
 
 html.theme-sweep::view-transition {

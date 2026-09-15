@@ -85,8 +85,9 @@ TypeScript source directly and run with tsx. Tests use Vitest.
   stages, then the answer or an error; local origins only, per address rate limit)
 - `apps/web`: the Astro website, static pages built from the site JSON; styles are plain CSS with theme
   tokens in `src/styles/global.css` (dark by default, light on request). The home page snaps each section
-  to the viewport and shows every written wiki (hero canvas, a reader preview with a tab per wiki, the
-  footer wordmark). Each written wiki also gets a hub at `/<owner>/<repo>`, a reader page per wiki page at
+  to the viewport and shows every written wiki (hero canvas, a reader preview with a tab per wiki, an Ask
+  example and an import diagram taken from other wikis (`src/lib/showcase.ts`), features, repositories,
+  audiences, method, common questions and the footer wordmark); header menus link every written wiki. Each written wiki also gets a hub at `/<owner>/<repo>`, a reader page per wiki page at
   `/<owner>/<repo>/<slug>` (page tree, cited sources beside the text, import diagrams drawn from the stored
   flowcharts by `src/lib/diagram.ts`: cycle links drawn back, columns chosen for short links, median
   ordering with swaps to cut crossings, long links routed through lanes between boxes and bundled by
@@ -95,7 +96,9 @@ TypeScript source directly and run with tsx. Tests use Vitest.
   (`src/components/Ask.astro`, answer rendering in `src/lib/ask-render.ts`); reader pages keep a question box
   at the bottom of the article that opens it. First visits get a five step
   guide (`src/components/Guide.astro`); theme changes blur the whole page, then sweep the new
-  colours in from the left (`src/lib/theme.ts`). Motion plays on hover or focus
+  colours in from the left (`src/lib/theme.ts`). Readers pick a colour palette separately from light and dark
+  (header menu and footer select; `src/lib/palettes.ts`, tokens in `src/styles/palettes.css`, Ember in
+  `global.css` is the default); every palette keeps text, accents and code at readable contrast in both themes. Motion plays on hover or focus
 
 ## Rules
 

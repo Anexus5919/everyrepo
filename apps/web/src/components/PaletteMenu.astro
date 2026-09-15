@@ -1,0 +1,352 @@
+---
+import { PALETTE_GROUPS, PALETTES } from "../lib/palettes.ts";
+
+interface Props {
+  // Sits inside a full-height header box instead of standing as its own bordered button
+  cell?: boolean;
+}
+const { cell = false } = Astro.props;
+---
+
+<div class:list={["palette-menu", { "in-cell": cell }]} data-palette-menu>
+  <button
+    class="palette-button"
+    type="button"
+    aria-haspopup="true"
+    aria-expanded="false"
+    aria-controls="palette-panel"
+    aria-label="Choose a colour palette"
+    data-palette-button
+  >
+    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+      <circle class="dot dot-a" cx="6.2" cy="6.8" r="3.6"></circle>
+      <circle class="dot dot-b" cx="11.8" cy="6.8" r="3.6"></circle>
+      <circle class="dot dot-c" cx="9" cy="11.6" r="3.6"></circle>
+    </svg>
+  </button>
+
+  <div class="palette-panel" id="palette-panel" role="group" aria-label="Colour palette" data-palette-panel hidden>
+    <div class="panel-head">
+      <span class="panel-title">Palette</span>
+      <span class="panel-note">Colours for reading. Light and dark stay as you set them.</span>
+    </div>
+    {
+      PALETTE_GROUPS.map((group) => (
+        <div class="group">
+          <span class="group-label">{group.label}</span>
+          <div role="radiogroup" aria-label={group.label}>
+            {PALETTES.filter((palette) => palette.group === group.id).map((palette) => (
+              <button
+                class="option"
+                type="button"
+                role="radio"
+                aria-checked="false"
+                data-palette-option={palette.id}
+              >
+                <span class="swatch swatch-dark" aria-hidden="true">
+                  {palette.dark.map((color) => (
+                    <span style={`background:${color}`} />
+                  ))}
+                </span>
+                <span class="swatch swatch-light" aria-hidden="true">
+                  {palette.light.map((color) => (
+                    <span style={`background:${color}`} />
+                  ))}
+                </span>
+                <span class="option-text">
+                  <span class="option-name">{palette.name}</span>
+                  <span class="option-note">{palette.description}</span>
+                </span>
+                <svg class="check" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+                  <path d="M3 7.5l2.6 2.6L11 4.5" />
+                </svg>
+              </button>
+            ))}
+          </div>
+        </div>
+      ))
+    }
+  </div>
+</div>
+
+<script>
+  import { applyPalette, currentPalette } from "../lib/palettes.ts";
+
+  const menu = document.querySelector<HTMLElement>("[data-palette-menu]");
+  if (menu) {
+    const button = menu.querySelector<HTMLButtonElement>("[data-palette-button]")!;
+    const panel = menu.querySelector<HTMLElement>("[data-palette-panel]")!;
+    const options = [...menu.querySelectorAll<HTMLButtonElement>("[data-palette-option]")];
+
+    const reflect = () => {
+      const id = currentPalette();
+      options.forEach((option) =>
+        option.setAttribute("aria-checked", String(option.dataset.paletteOption === id)),
+      );
+    };
+
+    const setOpen = (open: boolean, focusButton = false) => {
+      panel.hidden = !open;
+      button.setAttribute("aria-expanded", String(open));
+      if (open) {
+        (options.find((option) => option.getAttribute("aria-checked") === "true") ?? options[0])?.focus();
+      } else if (focusButton) {
+        button.focus();
+      }
+    };
+
+    reflect();
+    button.addEventListener("click", () => setOpen(panel.hidden));
+    options.forEach((option) =>
+      option.addEventListener("click", () => applyPalette(option.dataset.paletteOption!)),
+    );
+    window.addEventListener("palettechange", reflect);
+
+    // Arrow keys move through the palettes; Escape or a click elsewhere closes the menu
+    panel.addEventListener("keydown", (event) => {
+      const index = options.indexOf(document.activeElement as HTMLButtonElement);
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const step = event.key === "ArrowDown" ? 1 : -1;
+        options[(index + step + options.length) % options.length]?.focus();
+      }
+      if (event.key === "Escape") setOpen(false, true);
+    });
+    document.addEventListener("click", (event) => {
+      if (!panel.hidden && !menu.contains(event.target as Node)) setOpen(false);
+    });
+  }
+</script>
+
+<style>
+  .palette-menu {
+    position: relative;
+  }
+
+  .palette-button {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: transparent;
+    cursor: pointer;
+    transition: border-color 140ms ease;
+  }
+
+  .palette-button:hover,
+  .palette-button[aria-expanded="true"] {
+    border-color: var(--text-3);
+  }
+
+  .in-cell {
+    height: 100%;
+  }
+
+  .in-cell .palette-button {
+    width: 64px;
+    height: 100%;
+    border: 0;
+    border-radius: 0;
+    transition: background-color 140ms ease;
+  }
+
+  .in-cell .palette-button:hover,
+  .in-cell .palette-button[aria-expanded="true"] {
+    background: var(--panel);
+  }
+
+  .in-cell .palette-panel {
+    top: calc(100% + 1px);
+    border-top: 0;
+    border-radius: 0 0 12px 12px;
+  }
+
+  .dot {
+    stroke: var(--header-bg);
+    stroke-width: 1.2;
+    transition: transform 220ms var(--ease-out);
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+
+  .dot-a {
+    fill: var(--accent);
+  }
+
+  .dot-b {
+    fill: var(--accent-2);
+  }
+
+  .dot-c {
+    fill: var(--text-3);
+  }
+
+  /* The three colours step apart a little, the way a palette opens */
+  .palette-button:hover .dot-a {
+    transform: translate(-0.6px, -0.4px);
+  }
+
+  .palette-button:hover .dot-b {
+    transform: translate(0.6px, -0.4px);
+  }
+
+  .palette-button:hover .dot-c {
+    transform: translate(0, 0.6px);
+  }
+
+  .palette-panel {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    z-index: 80;
+    width: min(340px, calc(100vw - 24px));
+    max-height: min(560px, calc(100svh - var(--header) - 24px));
+    overflow-y: auto;
+    padding: 12px 8px 8px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--bg-raise);
+    box-shadow: var(--shadow);
+    animation: panel-in 180ms var(--ease-out);
+  }
+
+  .palette-panel[hidden] {
+    display: none;
+  }
+
+  @keyframes panel-in {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+  }
+
+  .panel-head {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 0 8px 10px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .panel-title {
+    font-family: var(--font-serif);
+    font-size: 18px;
+    color: var(--text);
+  }
+
+  .panel-note {
+    font-size: var(--t-caption);
+    color: var(--text-3);
+  }
+
+  .group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-top: 10px;
+  }
+
+  .group-label {
+    padding: 0 8px 4px;
+    font-size: var(--t-label);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-3);
+  }
+
+  .group [role="radiogroup"] {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .option {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 8px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .option:hover,
+  .option:focus-visible {
+    background: var(--panel-2);
+    outline: none;
+  }
+
+  .option[aria-checked="true"] {
+    background: var(--accent-soft);
+  }
+
+  .swatch {
+    display: inline-flex;
+    flex-shrink: 0;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+  }
+
+  .swatch span {
+    width: 11px;
+    height: 26px;
+  }
+
+  .swatch span:first-child {
+    width: 14px;
+  }
+
+  .swatch-light {
+    display: none;
+  }
+
+  :global([data-theme="light"]) .swatch-light {
+    display: inline-flex;
+  }
+
+  :global([data-theme="light"]) .swatch-dark {
+    display: none;
+  }
+
+  .option-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    margin-right: auto;
+  }
+
+  .option-name {
+    font-size: var(--t-ui);
+    color: var(--text);
+  }
+
+  .option-note {
+    font-size: var(--t-caption);
+    line-height: 1.35;
+    color: var(--text-3);
+  }
+
+  .check {
+    flex-shrink: 0;
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-dasharray: 12;
+    stroke-dashoffset: 12;
+  }
+
+  /* The check draws in on the chosen palette */
+  .option[aria-checked="true"] .check {
+    stroke-dashoffset: 0;
+    transition: stroke-dashoffset 260ms var(--ease-out);
+  }
+</style>

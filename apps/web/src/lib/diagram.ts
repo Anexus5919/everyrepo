@@ -446,11 +446,14 @@ export function layoutDiagram(graph: Graph): DiagramLayout {
   };
 }
 
-export function renderDiagram(source: string): string | undefined {
+// The drawing alone, for places that show a diagram without its buttons and caption
+export function diagramSvg(source: string, label: string): string | undefined {
   const graph = parseFlowchart(source);
   if (!graph) return undefined;
-  const layout = layoutDiagram(graph);
+  return svgFor(graph, layoutDiagram(graph), label);
+}
 
+function svgFor(graph: Graph, layout: DiagramLayout, label: string): string {
   const edgePaths = layout.edges
     .map(
       (edge) =>
@@ -465,7 +468,16 @@ export function renderDiagram(source: string): string | undefined {
     .join("");
   const width = Math.ceil(layout.width);
   const height = Math.ceil(layout.height);
+  return `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="${escape(label)}"><defs><marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L8 4L0 8z"></path></marker></defs><g class="edges">${edgePaths}</g><g class="nodes">${nodeGroups}</g></svg>`;
+}
+
+export function renderDiagram(source: string): string | undefined {
+  const graph = parseFlowchart(source);
+  if (!graph) return undefined;
+  const layout = layoutDiagram(graph);
+
+  const svg = svgFor(graph, layout, "Import links between the files this page covers");
   const expandIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path class="corner corner-a" d="M9.5 2.5H13.5V6.5M13.5 2.5L9 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path><path class="corner corner-b" d="M6.5 13.5H2.5V9.5M2.5 13.5L7 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>`;
   const askIcon = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 3.5h10a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H8l-3 2.5v-2.5H3a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"></path><path class="ask-lines" d="M5 6.5h6M5 9h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path></svg>`;
-  return `<figure class="diagram" data-diagram><div class="diagram-actions"><button class="diagram-ask" type="button" data-diagram-ask>${askIcon}Explain with AI</button><button class="diagram-expand" type="button" aria-label="Open the diagram larger">${expandIcon}Expand</button></div><div class="diagram-scroll"><svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="Import links between the files this page covers"><defs><marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L8 4L0 8z"></path></marker></defs><g class="edges">${edgePaths}</g><g class="nodes">${nodeGroups}</g></svg></div><figcaption>Import links between the most central files, taken from the code graph. Point at a file to see its links, open the diagram to explore it, or ask for a plain explanation.</figcaption></figure>`;
+  return `<figure class="diagram" data-diagram><div class="diagram-actions"><button class="diagram-ask" type="button" data-diagram-ask>${askIcon}Explain with AI</button><button class="diagram-expand" type="button" aria-label="Open the diagram larger">${expandIcon}Expand</button></div><div class="diagram-scroll">${svg}</div><figcaption>Import links between the most central files, taken from the code graph. Point at a file to see its links, open the diagram to explore it, or ask for a plain explanation.</figcaption></figure>`;
 }

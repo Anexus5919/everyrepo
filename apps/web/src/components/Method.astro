@@ -1,17 +1,17 @@
 ---
 const steps = [
   {
-    number: "01",
+    label: "Import graph",
     title: "Read the code",
     text: "Every file is parsed and linked by its imports, then grouped into areas, so pages follow how the code is organized rather than how folders are named.",
   },
   {
-    number: "02",
+    label: "Numbered sources",
     title: "Write from sources",
     text: "Each paragraph is written from numbered excerpts of the code and has to name the excerpts it relies on.",
   },
   {
-    number: "03",
+    label: "Automatic checks",
     title: "Check every sentence",
     text: "Sentences without a source, names the cited code does not contain and snippets not copied from it are removed before a page goes live.",
   },
@@ -130,7 +130,7 @@ const writeLinks = [
             </svg>
           )}
         </div>
-        <span class="number mono">{step.number}</span>
+        <span class="step-label mono">{step.label}</span>
         <h3>{step.title}</h3>
         <p>{step.text}</p>
       </div>
@@ -180,8 +180,10 @@ const writeLinks = [
     height: 100%;
   }
 
-  .number {
-    font-size: var(--t-caption);
+  .step-label {
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
     color: var(--accent);
   }
 

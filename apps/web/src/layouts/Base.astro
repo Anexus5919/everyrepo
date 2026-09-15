@@ -7,9 +7,11 @@ import "@fontsource/ibm-plex-sans/600.css";
 import "@fontsource/ibm-plex-mono/400.css";
 import "@fontsource/ibm-plex-mono/500.css";
 import "../styles/global.css";
+import "../styles/palettes.css";
 import Footer from "../components/Footer.astro";
 import Guide from "../components/Guide.astro";
 import Header from "../components/Header.astro";
+import { PALETTES } from "../lib/palettes.ts";
 
 interface Props {
   title: string;
@@ -19,6 +21,7 @@ interface Props {
   wide?: boolean;
 }
 const { title, description, snap = false, wide = false } = Astro.props;
+const paletteIds = PALETTES.map((palette) => palette.id);
 ---
 
 <!doctype html>
@@ -36,6 +39,18 @@ const { title, description, snap = false, wide = false } = Astro.props;
         if (saved === "system") {
           const light = window.matchMedia("(prefers-color-scheme: light)").matches;
           document.documentElement.dataset.theme = light ? "light" : "dark";
+        }
+      } catch {}
+    </script>
+    <script is:inline define:vars={{ paletteIds }}>
+      // A palette named in the address wins over the saved one, so a palette can be shared as a link
+      try {
+        const named = new URLSearchParams(location.search).get("palette");
+        const saved = localStorage.getItem("palette");
+        const palette = paletteIds.includes(named) ? named : saved;
+        if (named && paletteIds.includes(named)) localStorage.setItem("palette", named);
+        if (paletteIds.includes(palette) && palette !== "ember") {
+          document.documentElement.dataset.palette = palette;
         }
       } catch {}
     </script>

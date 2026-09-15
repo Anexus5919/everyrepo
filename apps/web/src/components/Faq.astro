@@ -1,0 +1,190 @@
+---
+interface Props {
+  ready: number;
+  waiting: number;
+}
+const { ready, waiting } = Astro.props;
+
+const questions = [
+  {
+    question: "What is EveryRepo?",
+    answer:
+      "A wiki for public GitHub repositories, written from their code. It explains how a project is organized, what each part does and where to start, and every sentence links to the lines it came from.",
+  },
+  {
+    question: "Which repositories can I read?",
+    answer: `${ready} wikis are ready now and ${waiting} more are being written. Opening any public repository by its link is coming next.`,
+  },
+  {
+    question: "How do I know a sentence is right?",
+    answer:
+      "Each paragraph cites the lines it was written from, pinned to a commit. Before a page is published, checks remove any paragraph without a source, any name the cited code does not contain and any code that was not copied exactly.",
+  },
+  {
+    question: "What can I ask?",
+    answer:
+      "How something works, where it happens, what a file does, what a diagram shows or which open issue to start with. Answers come from the repository's code and wiki, with the same citations, and say so when the code does not answer.",
+  },
+  {
+    question: "How current is a wiki?",
+    answer:
+      "Every page shows the commit it was written from and the date it was read. Automatic updates for followed repositories are being built.",
+  },
+  {
+    question: "Does it change anything on GitHub?",
+    answer:
+      "No. EveryRepo only reads public code, issues and pull requests. It never comments, opens pull requests or needs access to your account.",
+  },
+  {
+    question: "Which languages does it understand?",
+    answer:
+      "TypeScript, JavaScript, Java, Rust, Python and Go are parsed in depth, including how files import each other. Other files and documentation are still read and cited as text.",
+  },
+];
+---
+
+<div class="faq" data-faq>
+  {
+    questions.map((item, index) => (
+      <details class="item" open={index === 0}>
+        <summary>
+          {item.question}
+          <span class="toggle" aria-hidden="true" />
+        </summary>
+        <div class="answer">
+          <p>{item.answer}</p>
+        </div>
+      </details>
+    ))
+  }
+</div>
+
+<script>
+  // Answers slide open and closed, and opening one question closes the one that was open
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+  document.querySelectorAll<HTMLElement>("[data-faq]").forEach((faq) => {
+    const items = [...faq.querySelectorAll<HTMLDetailsElement>("details")];
+    const running = new WeakMap<HTMLDetailsElement, Animation>();
+    const isOpen = (item: HTMLDetailsElement) => item.open && !item.hasAttribute("data-closing");
+
+    const slide = (item: HTMLDetailsElement, open: boolean) => {
+      const answer = item.querySelector<HTMLElement>(".answer");
+      if (!answer) return;
+      // Start from wherever the answer is now, so a quick second click reverses smoothly
+      const fromHeight = item.open ? answer.getBoundingClientRect().height : 0;
+      const fromOpacity = item.open ? getComputedStyle(answer).opacity : "0";
+      running.get(item)?.cancel();
+      item.toggleAttribute("data-closing", !open);
+      if (open) item.open = true;
+      if (reduceMotion.matches) {
+        if (!open) item.open = false;
+        item.removeAttribute("data-closing");
+        return;
+      }
+      const animation = answer.animate(
+        [
+          { height: `${fromHeight}px`, opacity: fromOpacity },
+          { height: `${open ? answer.scrollHeight : 0}px`, opacity: open ? 1 : 0 },
+        ],
+        { duration: 320, easing: "cubic-bezier(0.16, 1, 0.3, 1)" },
+      );
+      running.set(item, animation);
+      animation.finished.then(
+        () => {
+          running.delete(item);
+          if (open) return;
+          item.open = false;
+          item.removeAttribute("data-closing");
+        },
+        // A cancelled slide was replaced by one going the other way
+        () => {},
+      );
+    };
+
+    for (const item of items) {
+      item.querySelector("summary")?.addEventListener("click", (event) => {
+        event.preventDefault();
+        const open = !isOpen(item);
+        if (open) for (const other of items) if (other !== item && isOpen(other)) slide(other, false);
+        slide(item, open);
+      });
+    }
+  });
+</script>
+
+<style>
+  .faq {
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid var(--line-soft);
+  }
+
+  .item {
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 20px 4px;
+    font-size: var(--t-lead);
+    color: var(--text);
+    list-style: none;
+    cursor: pointer;
+  }
+
+  summary::-webkit-details-marker {
+    display: none;
+  }
+
+  summary:hover {
+    color: var(--accent-2);
+  }
+
+  /* A plus that turns into a minus while the answer is open */
+  .toggle {
+    position: relative;
+    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
+  }
+
+  .toggle::before,
+  .toggle::after {
+    content: "";
+    position: absolute;
+    top: 6.25px;
+    left: 0;
+    width: 14px;
+    height: 1.5px;
+    background: var(--text-3);
+    transition: transform 200ms var(--ease-out);
+  }
+
+  .toggle::after {
+    transform: rotate(90deg);
+  }
+
+  .item[open]:not([data-closing]) summary {
+    color: var(--accent-2);
+  }
+
+  .item[open]:not([data-closing]) .toggle::after {
+    transform: rotate(0deg);
+  }
+
+  .answer {
+    overflow: hidden;
+  }
+
+  p {
+    max-width: 760px;
+    padding: 0 4px 22px;
+    font-size: var(--t-small);
+    line-height: 1.7;
+    color: var(--text-2);
+  }
+</style>

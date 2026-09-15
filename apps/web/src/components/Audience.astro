@@ -1,0 +1,147 @@
+---
+const groups = [
+  {
+    label: "First contribution",
+    title: "New contributors",
+    text: "Find an issue worth starting with, understand why it matters and see which files to open.",
+    points: ["Issues marked for newcomers", "Likely files for each issue", "Contributing steps, cited"],
+  },
+  {
+    label: "First week",
+    title: "Engineers joining a project",
+    text: "Learn how a codebase is organized in an afternoon instead of piecing it together over weeks.",
+    points: ["Architecture in plain words", "Where to start reading", "Diagrams of how parts connect"],
+  },
+  {
+    label: "Before you depend on it",
+    title: "Teams choosing a library",
+    text: "Check how a project really works inside before you build on top of it.",
+    points: ["What each package does", "How data and state move", "Answers checked against code"],
+  },
+  {
+    label: "Fewer repeated questions",
+    title: "Maintainers",
+    text: "Point newcomers to cited explanations instead of writing the same walkthrough again.",
+    points: ["Shareable pages per topic", "Grounded in the current code", "Nothing written to GitHub"],
+  },
+];
+---
+
+<ul class="audience">
+  {
+    groups.map((group) => (
+      <li class="group">
+        <span class="group-label">{group.label}</span>
+        <h3>{group.title}</h3>
+        <p>{group.text}</p>
+        <ul class="points">
+          {group.points.map((point) => (
+            <li>
+              <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+                <path d="M3 7.5l2.6 2.6L11 4.5" />
+              </svg>
+              {point}
+            </li>
+          ))}
+        </ul>
+      </li>
+    ))
+  }
+</ul>
+
+<style>
+  .audience {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin: 0;
+    padding: 0;
+    border: 1px solid var(--line-soft);
+    border-radius: 14px;
+    background: var(--bg-raise);
+    list-style: none;
+    overflow: hidden;
+  }
+
+  .group {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 28px 24px;
+  }
+
+  .group + .group {
+    border-left: 1px solid var(--line-soft);
+  }
+
+  .group-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  h3 {
+    font-size: var(--t-h4);
+    line-height: 1.25;
+  }
+
+  p {
+    flex-grow: 1;
+    font-size: var(--t-caption);
+    line-height: 1.6;
+    color: var(--text-2);
+  }
+
+  .points {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 6px 0 0;
+    padding: 14px 0 0;
+    border-top: 1px solid var(--line-soft);
+    list-style: none;
+  }
+
+  .points li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: var(--t-caption);
+    color: var(--text);
+  }
+
+  .points svg {
+    flex-shrink: 0;
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  @media (max-width: 1000px) {
+    .audience {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .group:nth-child(3) {
+      border-left: 0;
+    }
+
+    .group:nth-child(n + 3) {
+      border-top: 1px solid var(--line-soft);
+    }
+  }
+
+  @media (max-width: 560px) {
+    .audience {
+      grid-template-columns: 1fr;
+    }
+
+    .group + .group {
+      border-left: 0;
+      border-top: 1px solid var(--line-soft);
+    }
+  }
+</style>

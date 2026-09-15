@@ -1,69 +1,332 @@
 ---
 import BookIcon from "./BookIcon.astro";
 import Logo from "./Logo.astro";
+import PaletteMenu from "./PaletteMenu.astro";
+import { diagramPage } from "../lib/showcase.ts";
+import { loadRepos, loadWiki } from "../lib/site-data.ts";
 
-interface Props {
-  // Reader pages span wider than the home page frame
-  wide?: boolean;
+const icons = {
+  page: '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/><path d="M9 12h6M9 15.5h6M9 19h3"/>',
+  ask: '<path d="M4 5.5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-8l-5 3.5v-3.5H4a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1z"/><path d="M8 10h8M8 13h5"/>',
+  diagram:
+    '<rect x="2.5" y="4" width="7" height="5" rx="1.2"/><rect x="14.5" y="4" width="7" height="5" rx="1.2"/><rect x="8.5" y="15" width="7" height="5" rx="1.2"/><path d="M6 9v2.5c0 1 .8 1.5 1.8 1.5H12v2M18 9v2.5c0 1-.8 1.5-1.8 1.5H12"/>',
+  browse:
+    '<rect x="3" y="3" width="7.5" height="7.5" rx="1.2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.2"/><path d="M17.25 14v6.5M14 17.25h6.5"/>',
+  open: '<path d="M10 14 20.5 3.5"/><path d="M14.5 3.5h6v6"/><path d="M19 13.5V19a1.5 1.5 0 0 1-1.5 1.5h-12A1.5 1.5 0 0 1 4 19V7a1.5 1.5 0 0 1 1.5-1.5H11"/>',
+  tour: '<circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/>',
+  method: '<path d="m12 3 9 4.5-9 4.5-9-4.5z"/><path d="m3 12 9 4.5 9-4.5"/><path d="m3 16.5 9 4.5 9-4.5"/>',
+  palette:
+    '<circle cx="8.5" cy="9" r="4.5"/><circle cx="15.5" cy="9" r="4.5"/><circle cx="12" cy="15" r="4.5"/>',
+};
+
+type Action = "guide" | "palette";
+interface Feature {
+  icon: keyof typeof icons;
+  title: string;
+  text: string;
+  href: string;
+  action?: Action;
 }
-const { wide = false } = Astro.props;
+interface Column {
+  label: string;
+  links: Array<{ text: string; href: string; owner?: string; badge?: string; action?: Action }>;
+}
+interface Menu {
+  id: string;
+  label: string;
+  features: Feature[];
+  columns: Column[];
+}
+
+const repos = loadRepos();
+const ready = repos.filter((repo) => repo.status === "ready").sort((a, b) => b.pages - a.pages);
+const waiting = repos.filter((repo) => repo.status !== "ready");
+const diagramLinks = ready.flatMap((repo) => {
+  const page = diagramPage(loadWiki(repo.repo));
+  return page ? [{ text: repo.name, owner: repo.owner, href: `/${repo.repo}/${page.slug}` }] : [];
+});
+
+const menus: Menu[] = [
+  {
+    id: "product",
+    label: "Product",
+    features: [
+      {
+        icon: "page",
+        title: "Cited wiki pages",
+        text: "Every sentence links to the exact lines of code it was written from.",
+        href: "/#wiki",
+      },
+      {
+        icon: "ask",
+        title: "Ask about the code",
+        text: "Answers written from the code itself, with the same citations.",
+        href: "/#ask",
+      },
+      {
+        icon: "diagram",
+        title: "Import diagrams",
+        text: "See how files depend on each other, and have any diagram explained.",
+        href: "/#diagrams",
+      },
+    ],
+    columns: [
+      {
+        label: "Start reading",
+        links: ready.map((repo) => ({ text: repo.name, owner: repo.owner, href: `/${repo.repo}` })),
+      },
+      {
+        label: "Learn more",
+        links: [
+          { text: "What every wiki includes", href: "/#features" },
+          { text: "Who it is for", href: "/#audience" },
+          { text: "How a page is made", href: "/#method" },
+          { text: "Common questions", href: "/#faq" },
+          { text: "Take the tour", href: "?guide", action: "guide" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "repositories",
+    label: "Repositories",
+    features: [
+      {
+        icon: "browse",
+        title: "Browse all wikis",
+        text: `${ready.length} wikis written from their code, ready to read now.`,
+        href: "/#guide",
+      },
+      {
+        icon: "open",
+        title: "Open a repository",
+        text: "Paste a public GitHub link to open its wiki or see where it is in the queue.",
+        href: "/#open",
+      },
+    ],
+    columns: [
+      {
+        label: "Ready to read",
+        links: ready.map((repo) => ({ text: repo.name, owner: repo.owner, href: `/${repo.repo}` })),
+      },
+      {
+        label: "Being written",
+        links: waiting.map((repo) => ({
+          text: repo.name,
+          owner: repo.owner,
+          href: "/#guide",
+          badge: repo.status === "indexing" ? "Reading" : "Queued",
+        })),
+      },
+    ],
+  },
+  {
+    id: "resources",
+    label: "Resources",
+    features: [
+      {
+        icon: "tour",
+        title: "How to use EveryRepo",
+        text: "A short tour of hubs, citations, diagrams and Ask.",
+        href: "?guide",
+        action: "guide",
+      },
+      {
+        icon: "method",
+        title: "How a page is made",
+        text: "What happens between the code and the page you read.",
+        href: "/#method",
+      },
+      {
+        icon: "palette",
+        title: "Reading comfort",
+        text: "Palettes for easier reading, in light or dark.",
+        href: "#",
+        action: "palette",
+      },
+    ],
+    columns: [
+      {
+        label: "Glossaries",
+        links: ready.map((repo) => ({ text: repo.name, owner: repo.owner, href: `/${repo.repo}/glossary` })),
+      },
+      {
+        label: "Diagrams",
+        links: diagramLinks,
+      },
+    ],
+  },
+];
+
+const actionAttributes = (action?: Action) =>
+  action === "guide" ? { "data-guide-open": "" } : action === "palette" ? { "data-open-palette": "" } : {};
 ---
 
-<header class="site-header">
-  <div class:list={["bar", wide ? "wide" : "frame"]}>
-    <a class="brand" href="/">
+<header class="site-header" data-site-header>
+  <div class="bar">
+    <a class="cell brand" href="/">
       <Logo />
       <span>EveryRepo</span>
     </a>
-    <nav class="nav" aria-label="Main">
-      <a href="/#wiki">A wiki page</a>
-      <a href="/#guide">Repositories</a>
-      <a href="/#method">Method</a>
+
+    <nav class="menus" aria-label="Main" data-menus>
+      {
+        menus.map((menu) => (
+          <div class="menu" data-menu>
+            <button
+              class="cell menu-trigger"
+              type="button"
+              aria-expanded="false"
+              aria-controls={`menu-${menu.id}`}
+              data-menu-trigger
+            >
+              {menu.label}
+              <svg class="chevron" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+                <path d="M2 3.5 5 6.5 8 3.5" />
+              </svg>
+            </button>
+            <div class="mega" id={`menu-${menu.id}`} data-menu-panel hidden>
+              <div class="features">
+                {menu.features.map((feature) => (
+                  <a class="feature" href={feature.href} {...actionAttributes(feature.action)}>
+                    <svg
+                      class="feature-icon"
+                      width="22"
+                      height="22"
+                      viewBox="0 0 24 24"
+                      aria-hidden="true"
+                      set:html={icons[feature.icon]}
+                    />
+                    <span class="feature-text">
+                      <span class="feature-title">{feature.title}</span>
+                      <span class="feature-note">{feature.text}</span>
+                    </span>
+                    <svg class="feature-arrow" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                      <path d="M3 8h10M9 4l4 4-4 4" />
+                    </svg>
+                  </a>
+                ))}
+              </div>
+              {menu.columns.map((column) => (
+                <div class="column">
+                  <span class="column-label mono">{column.label}</span>
+                  {column.links.length === 0 && <span class="column-empty">Nothing here yet</span>}
+                  {column.links.map((link) => (
+                    <a class="column-link" href={link.href} {...actionAttributes(link.action)}>
+                      <span>
+                        {link.owner && <span class="owner">{link.owner} / </span>}
+                        {link.text}
+                      </span>
+                      {link.badge && <span class="badge">{link.badge}</span>}
+                    </a>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))
+      }
     </nav>
-    <div class="actions">
-      <button
-        class="icon-btn"
-        type="button"
-        data-theme-toggle
-        aria-label="Switch between dark and light"
-      >
-        <svg
-          class="moon"
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.6"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
-          ><path pathLength="1" d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"></path></svg
-        >
-        <svg
-          class="sun"
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.6"
-          stroke-linecap="round"
-          aria-hidden="true"
-        >
-          <circle pathLength="1" cx="12" cy="12" r="4"></circle>
-          <path pathLength="1" d="M12 2v2" style="--n: 0"></path>
-          <path pathLength="1" d="M17.7 6.3l1.4-1.4" style="--n: 1"></path>
-          <path pathLength="1" d="M20 12h2" style="--n: 2"></path>
-          <path pathLength="1" d="M17.7 17.7l1.4 1.4" style="--n: 3"></path>
-          <path pathLength="1" d="M12 20v2" style="--n: 4"></path>
-          <path pathLength="1" d="M4.9 19.1l1.4-1.4" style="--n: 5"></path>
-          <path pathLength="1" d="M2 12h2" style="--n: 6"></path>
-          <path pathLength="1" d="M4.9 4.9l1.4 1.4" style="--n: 7"></path>
-        </svg>
-      </button>
-      <a class="btn btn-solid book-trigger" href="/#open">Open a repository <BookIcon /></a>
+
+    <a class="cell status mono" href="/#guide">
+      <span class="status-dot" aria-hidden="true"></span>
+      {ready.length} wikis ready
+    </a>
+
+    <div class="cell cell-icon">
+      <PaletteMenu cell />
     </div>
+
+    <button
+      class="cell cell-icon theme-toggle"
+      type="button"
+      data-theme-toggle
+      aria-label="Switch between dark and light"
+    >
+      <svg
+        class="moon"
+        width="17"
+        height="17"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.6"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+        ><path pathLength="1" d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"></path></svg
+      >
+      <svg
+        class="sun"
+        width="17"
+        height="17"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.6"
+        stroke-linecap="round"
+        aria-hidden="true"
+      >
+        <circle pathLength="1" cx="12" cy="12" r="4"></circle>
+        <path pathLength="1" d="M12 2v2" style="--n: 0"></path>
+        <path pathLength="1" d="M17.7 6.3l1.4-1.4" style="--n: 1"></path>
+        <path pathLength="1" d="M20 12h2" style="--n: 2"></path>
+        <path pathLength="1" d="M17.7 17.7l1.4 1.4" style="--n: 3"></path>
+        <path pathLength="1" d="M12 20v2" style="--n: 4"></path>
+        <path pathLength="1" d="M4.9 19.1l1.4-1.4" style="--n: 5"></path>
+        <path pathLength="1" d="M2 12h2" style="--n: 6"></path>
+        <path pathLength="1" d="M4.9 4.9l1.4 1.4" style="--n: 7"></path>
+      </svg>
+    </button>
+
+    <button
+      class="cell cell-icon menu-toggle"
+      type="button"
+      aria-expanded="false"
+      aria-controls="mobile-menu"
+      aria-label="Open the menu"
+      data-mobile-toggle
+    >
+      <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+        <path class="bar-top" d="M3 5.5h12" />
+        <path class="bar-middle" d="M3 9h12" />
+        <path class="bar-bottom" d="M3 12.5h12" />
+      </svg>
+    </button>
+
+    <a class="cell cta book-trigger" href="/#open">Open a repository <BookIcon /></a>
+  </div>
+
+  <div class="mobile-menu" id="mobile-menu" data-mobile-menu hidden>
+    {
+      menus.map((menu) => (
+        <details class="mobile-group">
+          <summary>{menu.label}</summary>
+          <div class="mobile-links">
+            {menu.features.map((feature) => (
+              <a href={feature.href} {...actionAttributes(feature.action)}>
+                <span class="feature-title">{feature.title}</span>
+                <span class="feature-note">{feature.text}</span>
+              </a>
+            ))}
+            {menu.columns.map((column) => (
+              <div class="mobile-column">
+                <span class="column-label mono">{column.label}</span>
+                {column.links.map((link) => (
+                  <a class="column-link" href={link.href} {...actionAttributes(link.action)}>
+                    <span>
+                      {link.owner && <span class="owner">{link.owner} / </span>}
+                      {link.text}
+                    </span>
+                    {link.badge && <span class="badge">{link.badge}</span>}
+                  </a>
+                ))}
+              </div>
+            ))}
+          </div>
+        </details>
+      ))
+    }
   </div>
 </header>
 
@@ -81,76 +344,292 @@ const { wide = false } = Astro.props;
 
   .bar {
     display: flex;
-    align-items: center;
-    gap: 40px;
+    align-items: stretch;
     height: 100%;
-    padding: 0 24px;
   }
 
-  .bar.wide {
-    width: min(100%, 1640px);
-    margin-inline: auto;
-    padding: 0 20px;
+  /* Every item is a full-height box divided by thin rules */
+  .cell {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 100%;
+    padding: 0 22px;
+    border: 0;
+    border-right: 1px solid var(--line-soft);
+    background: transparent;
+    font: inherit;
+    font-size: var(--t-ui);
+    color: var(--text-2);
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      background-color 140ms ease,
+      color 140ms ease;
+  }
+
+  .cell:hover,
+  .menu-trigger[aria-expanded="true"] {
+    background: var(--panel);
+    color: var(--text);
   }
 
   .brand {
-    display: flex;
-    align-items: center;
     gap: 10px;
+    padding: 0 24px;
     font-family: var(--font-serif);
     font-size: 21px;
     font-weight: 600;
     letter-spacing: -0.01em;
-  }
-
-  .nav {
-    display: flex;
-    gap: 28px;
-    font-size: var(--t-ui);
-  }
-
-  .nav a {
-    color: var(--text-2);
-    transition: color 140ms ease;
-  }
-
-  .nav a:hover {
     color: var(--text);
   }
 
-  .actions {
+  .brand:hover {
+    background: transparent;
+  }
+
+  .menus {
+    position: relative;
+    display: flex;
+    align-items: stretch;
+    margin-right: auto;
+  }
+
+  .menu {
+    display: flex;
+  }
+
+  .chevron {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.4;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    color: var(--text-3);
+    transition: transform 180ms var(--ease-out);
+  }
+
+  .menu-trigger[aria-expanded="true"] .chevron {
+    transform: rotate(180deg);
+  }
+
+  .status {
+    gap: 10px;
+    border-left: 1px solid var(--line-soft);
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-3);
+  }
+
+  .status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+
+  .cell-icon {
+    justify-content: center;
+    width: 64px;
+    padding: 0;
+  }
+
+  .cell-icon:has(.palette-menu) {
+    cursor: default;
+  }
+
+  .cta {
+    gap: 10px;
+    padding: 0 26px;
+    border-right: 0;
+    background: var(--button-bg);
+    color: var(--button-ink);
+    font-weight: 500;
+  }
+
+  .cta:hover {
+    background: var(--accent-2);
+    color: var(--accent-ink);
+  }
+
+  .mega {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 70;
+    display: flex;
+    margin-top: 1px;
+    border: 1px solid var(--line);
+    border-top: 0;
+    border-radius: 0 0 12px 12px;
+    background: var(--bg-raise);
+    box-shadow: var(--shadow);
+    animation: mega-in 180ms var(--ease-out);
+  }
+
+  .mega[hidden] {
+    display: none;
+  }
+
+  @keyframes mega-in {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+  }
+
+  .features {
+    display: flex;
+    flex-direction: column;
+    width: 400px;
+    border-right: 1px solid var(--line-soft);
+  }
+
+  .feature {
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr) 16px;
+    align-items: center;
+    gap: 18px;
+    padding: 20px 24px;
+    color: var(--text);
+    transition: background-color 140ms ease;
+  }
+
+  .feature + .feature {
+    border-top: 1px solid var(--line-soft);
+  }
+
+  .feature:hover,
+  .feature:focus-visible {
+    background: var(--panel);
+    outline: none;
+  }
+
+  .feature-icon {
+    fill: none;
+    stroke: var(--text-2);
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transition: stroke 140ms ease;
+  }
+
+  .feature:hover .feature-icon {
+    stroke: var(--accent);
+  }
+
+  .feature-text {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .feature-title {
+    font-size: var(--t-small);
+    font-weight: 500;
+    color: var(--text);
+  }
+
+  .feature-note {
+    font-size: var(--t-caption);
+    line-height: 1.5;
+    color: var(--text-3);
+    white-space: normal;
+  }
+
+  .feature-arrow {
+    fill: none;
+    stroke: var(--text-3);
+    stroke-width: 1.4;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transition:
+      transform 180ms var(--ease-out),
+      stroke 140ms ease;
+  }
+
+  /* The arrow steps toward where the link goes */
+  .feature:hover .feature-arrow {
+    transform: translateX(3px);
+    stroke: var(--text);
+  }
+
+  .column {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 240px;
+    padding: 22px 16px 20px;
+  }
+
+  .column + .column {
+    border-left: 1px solid var(--line-soft);
+  }
+
+  /* Menus with three columns stay inside the window on smaller laptops */
+  @media (max-width: 1240px) {
+    .features {
+      width: 320px;
+    }
+
+    .column {
+      min-width: 200px;
+    }
+  }
+
+  .column-label {
+    padding: 0 10px 10px;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-3);
+  }
+
+  .column-link {
     display: flex;
     align-items: center;
-    gap: 12px;
-    margin-left: auto;
-  }
-
-  .icon-btn {
-    display: grid;
-    place-items: center;
-    width: 40px;
-    height: 40px;
-    border: 1px solid var(--line);
+    justify-content: space-between;
+    gap: 16px;
+    white-space: nowrap;
+    padding: 8px 10px;
     border-radius: var(--radius);
-    background: transparent;
-    color: var(--text-2);
-    cursor: pointer;
-    transition:
-      color 140ms ease,
-      border-color 140ms ease;
-  }
-
-  .icon-btn:hover {
+    font-size: var(--t-ui);
     color: var(--text);
-    border-color: var(--text-3);
+    transition: background-color 140ms ease;
   }
 
-  .icon-btn svg {
+  .column-link:hover,
+  .column-link:focus-visible {
+    background: var(--panel-2);
+    outline: none;
+  }
+
+  .owner {
+    color: var(--text-3);
+  }
+
+  .badge {
+    padding: 1px 8px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    font-size: 11px;
+    color: var(--text-3);
+  }
+
+  .column-empty {
+    padding: 8px 10px;
+    font-size: var(--t-caption);
+    color: var(--text-3);
+  }
+
+  .theme-toggle svg {
     grid-area: 1 / 1;
   }
 
-  .icon-btn path,
-  .icon-btn circle {
+  .theme-toggle path,
+  .theme-toggle circle {
     stroke-dasharray: 1;
     stroke-dashoffset: 0;
   }
@@ -168,12 +647,12 @@ const { wide = false } = Astro.props;
   }
 
   /* After a switch the new icon draws itself: the moon as one stroke, the sun core then its rays */
-  .icon-btn.switched .moon path,
-  .icon-btn.switched .sun circle {
+  .theme-toggle.switched .moon path,
+  .theme-toggle.switched .sun circle {
     animation: draw-in 420ms var(--ease-out) both;
   }
 
-  .icon-btn.switched .sun path {
+  .theme-toggle.switched .sun path {
     animation: draw-in 240ms var(--ease-out) both;
     animation-delay: calc(260ms + var(--n) * 35ms);
   }
@@ -187,19 +666,142 @@ const { wide = false } = Astro.props;
     }
   }
 
-  @media (max-width: 820px) {
-    .nav {
-      display: none;
-    }
+  .menu-toggle {
+    display: none;
+  }
 
-    .bar {
-      padding: 0;
+  .menu-toggle path {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    transform-box: fill-box;
+    transform-origin: center;
+    transition:
+      transform 200ms var(--ease-out),
+      opacity 140ms ease;
+  }
+
+  /* The three bars fold into a cross while the menu is open */
+  .menu-toggle[aria-expanded="true"] .bar-top {
+    transform: translateY(3.5px) rotate(45deg);
+  }
+
+  .menu-toggle[aria-expanded="true"] .bar-middle {
+    opacity: 0;
+  }
+
+  .menu-toggle[aria-expanded="true"] .bar-bottom {
+    transform: translateY(-3.5px) rotate(-45deg);
+  }
+
+  .mobile-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 70;
+    max-height: calc(100svh - var(--header));
+    overflow-y: auto;
+    border-bottom: 1px solid var(--line);
+    background: var(--bg-raise);
+    box-shadow: var(--shadow);
+  }
+
+  .mobile-menu[hidden] {
+    display: none;
+  }
+
+  .mobile-group {
+    border-top: 1px solid var(--line-soft);
+  }
+
+  .mobile-group summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    font-size: var(--t-small);
+    color: var(--text);
+    list-style: none;
+    cursor: pointer;
+  }
+
+  .mobile-group summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .mobile-group summary::after {
+    content: "";
+    width: 7px;
+    height: 7px;
+    margin-right: 4px;
+    border-right: 1.5px solid var(--text-3);
+    border-bottom: 1.5px solid var(--text-3);
+    transform: translateY(-2px) rotate(45deg);
+    transition: transform 180ms var(--ease-out);
+  }
+
+  .mobile-group[open] summary::after {
+    transform: translateY(2px) rotate(225deg);
+  }
+
+  .mobile-links {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 0 12px 16px;
+  }
+
+  .mobile-links > a {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 10px 8px;
+    border-radius: var(--radius);
+  }
+
+  .mobile-links > a:hover {
+    background: var(--panel-2);
+  }
+
+  .mobile-column {
+    display: flex;
+    flex-direction: column;
+    padding-top: 10px;
+  }
+
+  @media (max-width: 1180px) {
+    .status {
+      display: none;
     }
   }
 
-  @media (max-width: 480px) {
-    .actions .btn {
+  @media (max-width: 1023px) {
+    .menus {
       display: none;
+    }
+
+    .menu-toggle {
+      display: flex;
+    }
+
+    .brand {
+      margin-right: auto;
+    }
+  }
+
+  @media (max-width: 560px) {
+    .cta {
+      display: none;
+    }
+
+    .brand {
+      padding: 0 16px;
+    }
+
+    .cell-icon {
+      width: 52px;
     }
   }
 </style>
@@ -210,20 +812,111 @@ const { wide = false } = Astro.props;
   const toggle = document.querySelector<HTMLButtonElement>("[data-theme-toggle]");
   toggle?.addEventListener("click", () => {
     const next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
-    changeTheme(
-      next,
-      () => {
-        document.documentElement.dataset.theme = next;
-        toggle.classList.remove("switched");
-        void toggle.offsetWidth;
-        toggle.classList.add("switched");
-        try {
-          localStorage.setItem("theme", next);
-        } catch {
-          // Storage can be blocked, so the choice lasts only for this page view
-        }
-        window.dispatchEvent(new Event("themechange"));
-      },
-    );
+    changeTheme(next, () => {
+      document.documentElement.dataset.theme = next;
+      toggle.classList.remove("switched");
+      void toggle.offsetWidth;
+      toggle.classList.add("switched");
+      try {
+        localStorage.setItem("theme", next);
+      } catch {
+        // Storage can be blocked, so the choice lasts only for this page view
+      }
+      window.dispatchEvent(new Event("themechange"));
+    });
   });
+
+  const header = document.querySelector<HTMLElement>("[data-site-header]");
+  if (header) {
+    const menus = [...header.querySelectorAll<HTMLElement>("[data-menu]")];
+    const hoverable = window.matchMedia("(hover: hover) and (pointer: fine)");
+    let closeTimer = 0;
+
+    const parts = (menu: HTMLElement) => ({
+      trigger: menu.querySelector<HTMLButtonElement>("[data-menu-trigger]")!,
+      panel: menu.querySelector<HTMLElement>("[data-menu-panel]")!,
+    });
+
+    function setOpen(menu: HTMLElement | null) {
+      window.clearTimeout(closeTimer);
+      for (const item of menus) {
+        const { trigger, panel } = parts(item);
+        const open = item === menu;
+        panel.hidden = !open;
+        trigger.setAttribute("aria-expanded", String(open));
+      }
+    }
+
+    const openMenu = () => menus.find((menu) => !parts(menu).panel.hidden) ?? null;
+
+    for (const menu of menus) {
+      const { trigger, panel } = parts(menu);
+      trigger.addEventListener("click", () => setOpen(panel.hidden ? menu : null));
+      // Pointing opens a menu straight away; leaving waits a moment so the pointer can cross into the panel
+      menu.addEventListener("pointerenter", () => {
+        if (hoverable.matches) setOpen(menu);
+      });
+      menu.addEventListener("pointerleave", () => {
+        if (!hoverable.matches) return;
+        window.clearTimeout(closeTimer);
+        closeTimer = window.setTimeout(() => {
+          if (openMenu() === menu) setOpen(null);
+        }, 160);
+      });
+      menu.addEventListener("keydown", (event) => {
+        const links = [...panel.querySelectorAll<HTMLElement>("a")];
+        const index = links.indexOf(document.activeElement as HTMLElement);
+        if (event.key === "ArrowDown" && links.length > 0) {
+          event.preventDefault();
+          if (panel.hidden) setOpen(menu);
+          links[(index + 1) % links.length]?.focus();
+        }
+        if (event.key === "ArrowUp" && index >= 0) {
+          event.preventDefault();
+          (index === 0 ? trigger : links[index - 1])?.focus();
+        }
+        if (event.key === "Escape" && !panel.hidden) {
+          setOpen(null);
+          trigger.focus();
+        }
+      });
+      menu.addEventListener("focusout", (event) => {
+        if (!menu.contains(event.relatedTarget as Node | null) && openMenu() === menu) setOpen(null);
+      });
+      panel.addEventListener("click", (event) => {
+        if ((event.target as Element).closest("a")) setOpen(null);
+      });
+    }
+
+    document.addEventListener("click", (event) => {
+      if (!header.contains(event.target as Node)) setOpen(null);
+    });
+
+    // The reading comfort link opens the palette menu in the header
+    header.addEventListener("click", (event) => {
+      const link = (event.target as Element).closest("[data-open-palette]");
+      if (!link) return;
+      event.preventDefault();
+      setOpen(null);
+      closeMobile();
+      window.setTimeout(() => header.querySelector<HTMLButtonElement>("[data-palette-button]")?.click(), 0);
+    });
+
+    const mobileToggle = header.querySelector<HTMLButtonElement>("[data-mobile-toggle]")!;
+    const mobileMenu = header.querySelector<HTMLElement>("[data-mobile-menu]")!;
+    function closeMobile() {
+      mobileMenu.hidden = true;
+      mobileToggle.setAttribute("aria-expanded", "false");
+      mobileToggle.setAttribute("aria-label", "Open the menu");
+    }
+    mobileToggle.addEventListener("click", () => {
+      const open = mobileMenu.hidden;
+      mobileMenu.hidden = !open;
+      mobileToggle.setAttribute("aria-expanded", String(open));
+      mobileToggle.setAttribute("aria-label", open ? "Close the menu" : "Open the menu");
+    });
+    mobileMenu.addEventListener("click", (event) => {
+      if ((event.target as Element).closest("a")) closeMobile();
+    });
+  }
 </script>

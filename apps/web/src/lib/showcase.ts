@@ -111,3 +111,66 @@ export function pipelineItems(wikis: readonly SiteWiki[], formatFiles: (count: n
   }
   return items;
 }
+
+const MERMAID = /```mermaid\n([\s\S]*?)```/;
+
+// The first written page of a wiki that carries an import diagram
+export function diagramPage(wiki: SiteWiki): SitePage | undefined {
+  return wiki.wikiPages.find(
+    (page) => page.status === "written" && page.markdown && MERMAID.test(page.markdown),
+  );
+}
+
+export interface DiagramExample {
+  repo: string;
+  page: SitePage;
+  source: string;
+  boxes: number;
+}
+
+// A diagram that reads well on its own: enough boxes to be interesting, few enough links to stay calm
+export function diagramExample(
+  wikis: readonly SiteWiki[],
+  measure: (source: string) => { boxes: number; links: number; crossings: number } | undefined,
+): DiagramExample | undefined {
+  const candidates = wikis.flatMap((wiki) =>
+    wiki.wikiPages
+      .filter((page) => page.status === "written" && page.markdown && MERMAID.test(page.markdown))
+      .flatMap((page) => {
+        const source = MERMAID.exec(page.markdown!)![1]!;
+        const size = measure(source);
+        if (!size || size.boxes < 6 || size.boxes > 10) return [];
+        const score = size.crossings * 3 + Math.abs(size.links - size.boxes * 1.4);
+        return [{ repo: wiki.repo, page, source, boxes: size.boxes, score }];
+      }),
+  );
+  candidates.sort((a, b) => a.score - b.score);
+  const best = candidates[0];
+  return best
+    ? { repo: best.repo, page: best.page, source: best.source, boxes: best.boxes }
+    : undefined;
+}
+
+export interface AskExample {
+  repo: string;
+  page: SitePage;
+  question: string;
+  answer: string;
+  sources: SitePage["citations"];
+}
+
+// A question a newcomer might ask about a cited page, answered with that page's own opening paragraph
+export function askExample(wiki: SiteWiki): AskExample | undefined {
+  const page = samplePage(wiki);
+  if (!page) return undefined;
+  const answer = sampleText(page).intro;
+  const numbers = new Set([...answer.matchAll(/\[\[(\d+)\]\]/g)].map((match) => Number(match[1])));
+  if (numbers.size === 0) return undefined;
+  return {
+    repo: wiki.repo,
+    page,
+    question: `How does ${page.title} work?`,
+    answer,
+    sources: page.citations.filter((citation) => numbers.has(citation.number)).slice(0, 4),
+  };
+}

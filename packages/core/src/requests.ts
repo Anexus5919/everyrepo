@@ -43,17 +43,8 @@ export const BUILD_STAGES: readonly BuildStage[] = [
 export const REQUEST_DECISIONS = ["approved", "review", "rejected"] as const;
 export type RequestDecision = (typeof REQUEST_DECISIONS)[number];
 
-export const REQUEST_REASONS = [
-  // Rejections
-  "empty",
-  "no-source",
-  "unavailable",
-  "declined",
-  // Reasons a request waits for review
-  "large",
-  "daily-limit",
-  "queue-full",
-] as const;
+// Why a stored request waits for review or was declined
+export const REQUEST_REASONS = ["large", "daily-limit", "queue-full", "declined"] as const;
 export type RequestReason = (typeof REQUEST_REASONS)[number];
 
 export const REPO_STATES = [
@@ -76,9 +67,9 @@ export type RepoState = (typeof REPO_STATES)[number];
 
 export interface GithubSummary {
   description: string | null;
-  stars: number;
+  stars: number | null;
   language: string | null;
-  defaultBranch: string;
+  defaultBranch: string | null;
   archived: boolean;
   fork: boolean;
   parent: string | null;

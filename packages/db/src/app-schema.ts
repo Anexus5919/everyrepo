@@ -132,7 +132,8 @@ export const repoRequests = sqliteTable(
     firstAt: timestamp("first_at").notNull(),
     lastAt: timestamp("last_at").notNull(),
     decidedAt: timestamp("decided_at").notNull(),
-    decidedBy: text("decided_by", { enum: ["rules", "owner"] }).notNull(),
+    // Rules and the owner decide new builds; "existing" joins a build that was already under way
+    decidedBy: text("decided_by", { enum: ["rules", "owner", "existing"] }).notNull(),
   },
   (table) => [index("repo_request_decision").on(table.decision, table.decidedAt)],
 );

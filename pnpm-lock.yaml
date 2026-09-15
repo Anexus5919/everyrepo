@@ -191,6 +191,12 @@ importers:
         specifier: ^4.6.4
         version: 4.6.4
 
+  packages/github:
+    dependencies:
+      '@everyrepo/core':
+        specifier: workspace:*
+        version: link:../core
+
   packages/graph:
     dependencies:
       '@everyrepo/core':
@@ -296,6 +302,24 @@ importers:
       '@everyrepo/core':
         specifier: workspace:*
         version: link:../core
+
+  packages/requests:
+    dependencies:
+      '@everyrepo/core':
+        specifier: workspace:*
+        version: link:../core
+      '@everyrepo/db':
+        specifier: workspace:*
+        version: link:../db
+      '@everyrepo/detect':
+        specifier: workspace:*
+        version: link:../detect
+      '@everyrepo/github':
+        specifier: workspace:*
+        version: link:../github
+      '@everyrepo/queue':
+        specifier: workspace:*
+        version: link:../queue
 
   packages/search:
     dependencies:

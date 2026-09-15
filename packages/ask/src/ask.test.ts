@@ -323,6 +323,49 @@ describe("askQuestion", () => {
     engine.$client.close();
   });
 
+  it("explains a diagram from its boxes and the code behind them without planning", async () => {
+    const { engine, index } = buildEngine();
+    const calls: string[] = [];
+    let prompt = "";
+    const answer = await askQuestion({
+      engine,
+      index,
+      router: fakeRouter(
+        {
+          plan: () => "unused",
+          answer: (request) => {
+            prompt = request.messages[1]!.content;
+            const diagram = labelFor(request, "Diagram");
+            const code = labelFor(request, "src/config/load.ts");
+            return `The renderer relies on the config loader [${diagram}].
+
+The loader reads \`PORT\` with \`loadConfig\` [${code}].`;
+          },
+        },
+        calls,
+      ),
+      embedQuery: async () => Float32Array.from([1, 0, 0]),
+      repo: "acme/app",
+      sha: SHA,
+      question: "Explain this diagram in simple words",
+      page: "configuration",
+      diagram: {
+        nodes: [
+          { id: 0, label: "src/render.ts" },
+          { id: 1, label: "config/load.ts" },
+        ],
+        edges: [{ from: 0, to: 1 }],
+      },
+    });
+    expect(calls).toEqual(["answer"]);
+    expect(prompt).toContain("Source S1 describes the diagram on the page");
+    expect(prompt).toContain("- src/render.ts imports config/load.ts");
+    expect(answer).toMatchObject({ status: "answered", intent: "diagram" });
+    expect(answer.sources.map((source) => source.kind)).toEqual(["diagram", "code"]);
+    expect(answer.sources[1]!.path).toBe("src/config/load.ts");
+    engine.$client.close();
+  });
+
   it("rejects questions that are too short or too long", () => {
     expect(() => cleanQuestion(" a ")).toThrow(AskInputError);
     expect(() => cleanQuestion("x".repeat(301))).toThrow(AskInputError);

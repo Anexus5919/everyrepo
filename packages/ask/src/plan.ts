@@ -3,7 +3,8 @@ import { z } from "zod";
 
 export const PLAN_PROMPT_VERSION = "ask-plan-1";
 export const ASK_INTENTS = ["code", "overview", "contribute", "general"] as const;
-export type AskIntent = (typeof ASK_INTENTS)[number];
+// A diagram explanation is chosen by the reader's button, never by the planner
+export type AskIntent = (typeof ASK_INTENTS)[number] | "diagram";
 export type ReaderLevel = "beginner" | "experienced" | "unknown";
 
 export interface AskTurn {

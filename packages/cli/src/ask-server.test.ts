@@ -3,7 +3,7 @@ import type { AddressInfo } from "node:net";
 import { AskInputError, type AskAnswer } from "@everyrepo/ask";
 import { ModelUnavailableError } from "@everyrepo/llm";
 import { afterEach, describe, expect, it } from "vitest";
-import { createAskHandler, readRequest, type AskBackend } from "./ask-server.ts";
+import { createAskHandler, readDiagram, readRequest, type AskBackend } from "./ask-server.ts";
 
 const answer: AskAnswer = {
   status: "answered",
@@ -84,6 +84,7 @@ describe("Ask API", () => {
       question: "Where is the port read?",
       page: "configuration",
       history: [{ question: "What is this?", answer: "An app." }],
+      diagram: null,
     });
   });
 
@@ -142,7 +143,33 @@ describe("readRequest", () => {
       question: "Why?",
       page: null,
       history: [{ question: "Q", answer: "A".repeat(1_000) }],
+      diagram: null,
     });
     expect(readRequest({ question: "Why?" })).toBeNull();
+  });
+
+  it("keeps only boxes with ids and arrows between known boxes", () => {
+    expect(
+      readDiagram({
+        nodes: [
+          { id: 0, label: "a.ts" },
+          { id: 1.5, label: "b.ts" },
+          { id: 2, label: "c.ts" },
+          "x",
+        ],
+        edges: [
+          { from: 0, to: 2 },
+          { from: 0, to: 1.5 },
+          { from: 9, to: 0 },
+        ],
+      }),
+    ).toEqual({
+      nodes: [
+        { id: 0, label: "a.ts" },
+        { id: 2, label: "c.ts" },
+      ],
+      edges: [{ from: 0, to: 2 }],
+    });
+    expect(readDiagram({ nodes: [{ id: 0, label: "a" }], edges: [] })).toBeNull();
   });
 });

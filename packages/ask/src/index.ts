@@ -19,6 +19,7 @@ export {
   type IssueCard,
   type SourceKind,
 } from "./answer.ts";
+export { diagramChunks, diagramText, type AskDiagram } from "./diagram.ts";
 export {
   createGithubIssues,
   IssueLookupError,

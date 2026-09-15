@@ -4,6 +4,7 @@ import {
   AskInputError,
   createGithubIssues,
   type AskAnswer,
+  type AskDiagram,
   type AskEvent,
   type AskTurn,
 } from "@everyrepo/ask";
@@ -27,6 +28,7 @@ export interface AskRequest {
   // Slug of the wiki page the reader is on
   page?: string | null;
   history?: AskTurn[];
+  diagram?: AskDiagram | null;
 }
 
 export interface AskSession {
@@ -89,7 +91,7 @@ export async function openAskSession(context: CliContext): Promise<AskSession> {
   }
 
   return {
-    async ask({ repo: repoArg, question, page, history }, onEvent) {
+    async ask({ repo: repoArg, question, page, history, diagram }, onEvent) {
       let ref;
       try {
         ref = parseRepoRef(repoArg);
@@ -118,6 +120,7 @@ export async function openAskSession(context: CliContext): Promise<AskSession> {
         question,
         page: page ?? null,
         history: history ?? [],
+        diagram: diagram ?? null,
         issues,
         ...(onEvent ? { onEvent } : {}),
       });

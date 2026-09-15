@@ -2,9 +2,11 @@ import type { EngineDb } from "@everyrepo/db";
 import type { ChatMessage, LlmRouter } from "@everyrepo/llm";
 import type { VectorIndex } from "@everyrepo/search";
 import { githubLink, splitBlocks, verifyPage, type Source } from "@everyrepo/wiki";
+import { diagramChunks, diagramText, type AskDiagram } from "./diagram.ts";
 import { IssueLookupError, type GithubIssue, type IssueSource } from "./issues.ts";
 import { loadKnowledge, pageText, summaryText, type WikiPageInfo } from "./knowledge.ts";
 import {
+  heuristicPlan,
   planQuestion,
   type AskIntent,
   type AskPlan,
@@ -16,7 +18,7 @@ import { documentChunks, retrieveSources, type RetrieveOptions } from "./retriev
 export const ASK_PROMPT_VERSION = "ask-3";
 export const QUESTION_LIMITS = { min: 3, max: 300 };
 
-export type SourceKind = "code" | "issue" | "page" | "summary";
+export type SourceKind = "code" | "issue" | "page" | "summary" | "diagram";
 
 export interface AskSource {
   number: number;
@@ -86,6 +88,8 @@ export interface AskInput {
   // Earlier questions and answers in this conversation, oldest first
   history?: readonly AskTurn[];
   issues?: IssueSource;
+  // The diagram the reader asked to have explained
+  diagram?: AskDiagram | null;
   retrieve?: RetrieveOptions;
   onEvent?: (event: AskEvent) => void;
 }
@@ -237,7 +241,12 @@ export function formatAskSources(sources: readonly ContextSource[]): string {
           fence,
         ].join("\n");
       }
-      const kind = { issue: "GitHub issue", page: "wiki page", summary: "wiki" }[source.kind];
+      const kind = {
+        issue: "GitHub issue",
+        page: "wiki page",
+        summary: "wiki",
+        diagram: "diagram on the page",
+      }[source.kind];
       return `[${source.label}] ${source.title} (${kind})\n${source.content}`;
     })
     .join("\n\n");
@@ -279,6 +288,14 @@ function answerMessages(
       "- Keep it between 150 and 350 words.",
     ],
     general: [],
+    diagram: [
+      "- Source S1 describes the diagram on the page. Explain it to someone new to the code, in plain words.",
+      "- Start with one or two sentences on what the diagram shows as a whole and how to read its arrows.",
+      "- Then walk through it from left to right in a few stages: which boxes belong together, what each group does according to the code sources, and what it relies on.",
+      "- Point out the box most others depend on, and say where a newcomer should start reading.",
+      "- If the diagram has loops, say in one sentence what that means.",
+      "- Keep it between 150 and 320 words. A short numbered list for the stages is fine.",
+    ],
   };
 
   const earlier = history
@@ -335,14 +352,30 @@ export async function askQuestion(input: AskInput): Promise<AskAnswer> {
   const emit = (stage: AskStage, label: string, files?: string[]) =>
     input.onEvent?.({ type: "stage", stage, label, ...(files ? { files } : {}) });
 
-  emit("understanding", "Understanding the question");
-  const plan = await planQuestion(input.router, {
-    repo,
-    summary: knowledge.summary,
-    page,
-    history,
-    question,
-  });
+  const diagram = input.diagram && input.diagram.nodes.length >= 2 ? input.diagram : null;
+  let plan: AskPlan;
+  if (diagram) {
+    // The reader already said what they want explained, so no planning call is spent
+    plan = {
+      intent: "diagram",
+      question: page
+        ? `${question} It is the import diagram on the wiki page "${page.title}".`
+        : question,
+      search: diagram.nodes.map((node) => node.label).join(" "),
+      level: heuristicPlan(question).level,
+      issue: null,
+      planned: false,
+    };
+  } else {
+    emit("understanding", "Understanding the question");
+    plan = await planQuestion(input.router, {
+      repo,
+      summary: knowledge.summary,
+      page,
+      history,
+      question,
+    });
+  }
 
   const answer: AskAnswer = {
     status: "not-found",
@@ -378,7 +411,21 @@ export async function askQuestion(input: AskInput): Promise<AskAnswer> {
   let code: ContextSource[];
   let issue: GithubIssue | null = null;
 
-  if (plan.intent === "contribute") {
+  if (plan.intent === "diagram" && diagram) {
+    emit("reading", "Reading the diagram and the code behind its boxes");
+    context.push({
+      label: "",
+      chunkId: 0,
+      kind: "diagram",
+      title: page ? `Diagram on "${page.title}"` : "Diagram on this page",
+      path: "diagram",
+      startLine: 0,
+      endLine: 0,
+      content: diagramText(diagram),
+      url: page ? `/${repo}/${page.slug}` : `/${repo}`,
+    });
+    code = diagramChunks(engine, diagram, 11_000).map(codeSource);
+  } else if (plan.intent === "contribute") {
     if (!input.issues) return { ...answer, note: "Issues cannot be looked up here." };
     emit(
       "issues",

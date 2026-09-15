@@ -1,5 +1,11 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { AskInputError, type AskAnswer, type AskEvent, type AskTurn } from "@everyrepo/ask";
+import {
+  AskInputError,
+  type AskAnswer,
+  type AskDiagram,
+  type AskEvent,
+  type AskTurn,
+} from "@everyrepo/ask";
 import { EmbeddingBudgetError } from "@everyrepo/embed";
 import { ModelUnavailableError } from "@everyrepo/llm";
 
@@ -8,6 +14,7 @@ export interface AskRequestBody {
   question: string;
   page: string | null;
   history: AskTurn[];
+  diagram: AskDiagram | null;
 }
 
 export interface AskBackend {
@@ -30,10 +37,34 @@ const LOCAL_ORIGIN = /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/;
 const PAGE_SLUG = /^[a-z0-9][a-z0-9-]{0,150}$/i;
 const HISTORY_TURNS = 6;
 
+const DIAGRAM_NODES = 40;
+const DIAGRAM_EDGES = 200;
+
+// A diagram keeps only whole-number ids, short labels and arrows between boxes it names
+export function readDiagram(value: unknown): AskDiagram | null {
+  if (typeof value !== "object" || value === null) return null;
+  const { nodes, edges } = value as Record<string, unknown>;
+  if (!Array.isArray(nodes) || !Array.isArray(edges)) return null;
+  const cleanNodes = nodes.slice(0, DIAGRAM_NODES).flatMap((node: unknown) => {
+    const { id, label } = (node ?? {}) as Record<string, unknown>;
+    return Number.isInteger(id) && typeof label === "string" && label.trim() !== ""
+      ? [{ id: id as number, label: label.slice(0, 200) }]
+      : [];
+  });
+  const ids = new Set(cleanNodes.map((node) => node.id));
+  const cleanEdges = edges.slice(0, DIAGRAM_EDGES).flatMap((edge: unknown) => {
+    const { from, to } = (edge ?? {}) as Record<string, unknown>;
+    return ids.has(from as number) && ids.has(to as number)
+      ? [{ from: from as number, to: to as number }]
+      : [];
+  });
+  return cleanNodes.length >= 2 ? { nodes: cleanNodes, edges: cleanEdges } : null;
+}
+
 // Only the expected fields and sizes pass; anything else in the body is ignored
 export function readRequest(body: unknown): AskRequestBody | null {
   if (typeof body !== "object" || body === null) return null;
-  const { repo, question, page, history } = body as Record<string, unknown>;
+  const { repo, question, page, history, diagram } = body as Record<string, unknown>;
   if (typeof repo !== "string" || typeof question !== "string") return null;
   const turns = Array.isArray(history) ? history.slice(-HISTORY_TURNS) : [];
   return {
@@ -47,6 +78,7 @@ export function readRequest(body: unknown): AskRequestBody | null {
         ? [{ question: asked.slice(0, 400), answer: answer.slice(0, 1_000) }]
         : [];
     }),
+    diagram: readDiagram(diagram),
   };
 }
 

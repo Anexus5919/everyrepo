@@ -1,8 +1,14 @@
 ---
 import { PALETTE_GROUPS, PALETTES } from "../lib/palettes.ts";
+
+interface Props {
+  // Sits inside a full-height header box instead of standing as its own bordered button
+  cell?: boolean;
+}
+const { cell = false } = Astro.props;
 ---
 
-<div class="palette-menu" data-palette-menu>
+<div class:list={["palette-menu", { "in-cell": cell }]} data-palette-menu>
   <button
     class="palette-button"
     type="button"
@@ -132,6 +138,29 @@ import { PALETTE_GROUPS, PALETTES } from "../lib/palettes.ts";
   .palette-button:hover,
   .palette-button[aria-expanded="true"] {
     border-color: var(--text-3);
+  }
+
+  .in-cell {
+    height: 100%;
+  }
+
+  .in-cell .palette-button {
+    width: 64px;
+    height: 100%;
+    border: 0;
+    border-radius: 0;
+    transition: background-color 140ms ease;
+  }
+
+  .in-cell .palette-button:hover,
+  .in-cell .palette-button[aria-expanded="true"] {
+    background: var(--panel);
+  }
+
+  .in-cell .palette-panel {
+    top: calc(100% + 1px);
+    border-top: 0;
+    border-radius: 0 0 12px 12px;
   }
 
   .dot {

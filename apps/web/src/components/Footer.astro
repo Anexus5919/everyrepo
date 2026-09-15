@@ -125,6 +125,8 @@ const year = new Date().getFullYear();
 </footer>
 
 <script>
+  import { changeTheme } from "../lib/theme.ts";
+
   type Mode = "system" | "light" | "dark";
 
   const root = document.documentElement;
@@ -145,8 +147,10 @@ const year = new Date().getFullYear();
     });
   }
 
+  const resolve = (mode: Mode) => (mode === "system" ? (system.matches ? "light" : "dark") : mode);
+
   function apply(mode: Mode) {
-    root.dataset.theme = mode === "system" ? (system.matches ? "light" : "dark") : mode;
+    root.dataset.theme = resolve(mode);
     try {
       localStorage.setItem("theme", mode);
     } catch {
@@ -159,7 +163,9 @@ const year = new Date().getFullYear();
   document.querySelectorAll<HTMLElement>("[data-theme-switch]").forEach((group) => {
     group.addEventListener("click", (event) => {
       const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-mode]");
-      if (button) apply(button.dataset.mode as Mode);
+      if (!button) return;
+      const mode = button.dataset.mode as Mode;
+      changeTheme(resolve(mode), () => apply(mode), button);
     });
   });
   system.addEventListener("change", () => {

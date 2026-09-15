@@ -205,18 +205,26 @@ const { wide = false } = Astro.props;
 </style>
 
 <script>
+  import { changeTheme } from "../lib/theme.ts";
+
   const toggle = document.querySelector<HTMLButtonElement>("[data-theme-toggle]");
   toggle?.addEventListener("click", () => {
     const next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
-    document.documentElement.dataset.theme = next;
-    toggle.classList.remove("switched");
-    void toggle.offsetWidth;
-    toggle.classList.add("switched");
-    try {
-      localStorage.setItem("theme", next);
-    } catch {
-      // Storage can be blocked, so the choice lasts only for this page view
-    }
-    window.dispatchEvent(new Event("themechange"));
+    changeTheme(
+      next,
+      () => {
+        document.documentElement.dataset.theme = next;
+        toggle.classList.remove("switched");
+        void toggle.offsetWidth;
+        toggle.classList.add("switched");
+        try {
+          localStorage.setItem("theme", next);
+        } catch {
+          // Storage can be blocked, so the choice lasts only for this page view
+        }
+        window.dispatchEvent(new Event("themechange"));
+      },
+      toggle,
+    );
   });
 </script>

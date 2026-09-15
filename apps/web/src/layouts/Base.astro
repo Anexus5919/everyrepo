@@ -8,6 +8,7 @@ import "@fontsource/ibm-plex-mono/400.css";
 import "@fontsource/ibm-plex-mono/500.css";
 import "../styles/global.css";
 import Footer from "../components/Footer.astro";
+import Guide from "../components/Guide.astro";
 import Header from "../components/Header.astro";
 
 interface Props {
@@ -46,5 +47,6 @@ const { title, description, snap = false, wide = false } = Astro.props;
       <slot />
     </main>
     <Footer />
+    <Guide />
   </body>
 </html>

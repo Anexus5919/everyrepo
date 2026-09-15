@@ -10,6 +10,7 @@ export {
   inArray,
   isNotNull,
   isNull,
+  like,
   lt,
   lte,
   ne,
@@ -23,6 +24,8 @@ export {
   neuronsUsedLastDay,
   recordUsage,
   requestsLastDay,
+  usageBuckets,
+  type UsageBucket,
   type UsageRecord,
 } from "./budget.ts";
 export { LlmCache, llmCachePath, type CachedResponse } from "./llm-cache.ts";
@@ -32,6 +35,7 @@ export {
   engineDbPath,
   openAppDb,
   openEngineDb,
+  openEngineReadonly,
   type AppDb,
   type AppExecutor,
   type EngineDb,

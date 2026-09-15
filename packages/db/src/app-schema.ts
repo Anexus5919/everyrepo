@@ -165,6 +165,31 @@ export const rateLimits = sqliteTable(
   (table) => [primaryKey({ columns: [table.key, table.windowStart] })],
 );
 
+// Who is waiting on a request, so each person has one request in progress at a time. Owners are a hash of
+// the browser's random id, or the day's salted address hash; neither identifies a person
+export const requestOwners = sqliteTable(
+  "request_owner",
+  {
+    repoId: integer("repo_id")
+      .notNull()
+      .references(() => repos.id, { onDelete: "cascade" }),
+    owner: text("owner").notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.repoId, table.owner] }),
+    index("request_owner_owner").on(table.owner),
+  ],
+);
+
+// Running workers report in regularly; a stale heartbeat means the builder is offline
+export const workers = sqliteTable("worker", {
+  id: text("id").primaryKey(),
+  startedAt: timestamp("started_at").notNull(),
+  heartbeatAt: timestamp("heartbeat_at").notNull(),
+  jobId: integer("job_id"),
+});
+
 // GitHub API answers with their entity tags, so repeat lookups can be revalidated cheaply
 export const githubCache = sqliteTable("github_cache", {
   key: text("key").primaryKey(),

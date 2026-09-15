@@ -1,9 +1,13 @@
 import {
   formatRepoRef,
   repoKey,
+  type BuilderStatus,
   type QueueView,
+  type RepoEta,
   type RepoRef,
+  type RepoState,
   type RepoView,
+  type SizeEstimate,
 } from "@everyrepo/core";
 import {
   and,
@@ -16,17 +20,31 @@ import {
   inArray,
   indexJobs,
   isNotNull,
+  like,
   lt,
   orgs,
   repoRequests,
   repos,
+  requestOwners,
   requestVoters,
   sql,
+  usageBuckets,
   type AppDb,
   type RepoRow,
+  type UsageBucket,
 } from "@everyrepo/db";
 import { GithubError, type GithubClient } from "@everyrepo/github";
+import type { Job } from "@everyrepo/queue";
+import { builderStatus } from "./builders.ts";
 import { enqueueBuild } from "./builds.ts";
+import { CapacityLedger, type CapacityConfig } from "./capacity.ts";
+import {
+  PUBLISH_MS,
+  simulateLine,
+  workFromEstimate,
+  type BuildWork,
+  type LineItem,
+} from "./eta.ts";
 import { reasonMessage } from "./messages.ts";
 import {
   buildPriority,
@@ -42,6 +60,7 @@ import {
   loadRecord,
   queuePositions,
   summaryFromGithub,
+  type Positions,
   type RepoRecord,
 } from "./views.ts";
 
@@ -57,11 +76,34 @@ export class RequestsUnavailableError extends Error {
   }
 }
 
+// Each person may have one request in progress; this is the one they already have
+export class OneRequestAtATimeError extends Error {
+  override readonly name = "OneRequestAtATimeError";
+
+  constructor(readonly active: RepoView) {
+    super(
+      "We are working on handling several requests at once. For now you can request one repository at a time.",
+    );
+  }
+}
+
+export interface Requester {
+  // Today's salted hash of the address, which counts each person asking once a day
+  voter: string;
+  // Keys that stay with one person across requests: a hash of the browser's random id and today's address hash
+  owners: readonly string[];
+}
+
 export interface RequestServiceOptions {
   db: AppDb;
   github: GithubClient;
   policy?: RequestPolicy;
   now?: () => Date;
+  // Model and embedding allowances; without them no completion time is estimated
+  capacity?: CapacityConfig | undefined;
+  usage?: () => UsageBucket[];
+  // Work still left for a repository that has been read, measured from its engine database
+  workFor?: (repo: RepoRow) => BuildWork | undefined;
 }
 
 export interface SubmitResult {
@@ -72,7 +114,7 @@ export interface SubmitResult {
 
 export interface RequestService {
   lookup(ref: RepoRef): Promise<RepoView>;
-  submit(ref: RepoRef, requester: string): Promise<SubmitResult>;
+  submit(ref: RepoRef, requester: Requester): Promise<SubmitResult>;
   queue(): QueueView;
   // Owner decisions from the command line
   approve(ref: RepoRef): Promise<RepoView>;
@@ -88,24 +130,176 @@ const DAY_MS = 86_400_000;
 const FAILED_RETRY_MS = 6 * 3_600_000;
 const RECENT_MS = 30 * DAY_MS;
 const RECENT_LIMIT = 6;
+const ACTIVE_STATES: ReadonlySet<RepoState> = new Set(["queued", "building", "paused", "review"]);
+
+const iso = (time: number) => new Date(time).toISOString();
+
+// Everything a set of views shares, worked out once per call
+interface Snapshot {
+  now: Date;
+  positions: Positions;
+  builder: BuilderStatus;
+  ledger: CapacityLedger | undefined;
+  line: Array<LineItem & { priority: number; running: boolean }>;
+  estimates: ReturnType<typeof simulateLine>;
+}
 
 export function createRequestService(options: RequestServiceOptions): RequestService {
   const { db, github } = options;
   const policy = options.policy ?? DEFAULT_REQUEST_POLICY;
   const now = options.now ?? (() => new Date());
+  const usage = options.usage ?? (() => usageBuckets(db, now()));
 
-  const describe = (record: RepoRecord, extra: { inspection?: Inspection } = {}) => {
+  // Work left for a build of this repository, from its engine database once read, or from its size before that
+  function workLeft(
+    repo: RepoRow,
+    job: Job | undefined,
+    estimate: SizeEstimate | null | undefined,
+  ): BuildWork {
+    const measured = repo.lastIndexedSha ? options.workFor?.(repo) : undefined;
+    const sized = workFromEstimate(
+      estimate ?? {
+        files: 0,
+        sourceFiles: 0,
+        sourceTokens: 50_000,
+        sizeTier: repo.sizeTier ?? "S",
+        truncated: false,
+        languages: [],
+      },
+    );
+    const noCalls = { summary: 0, plan: 0, page: 0 };
+    if (job?.kind === "publish") {
+      return { readingMs: 0, embedTokens: 0, calls: noCalls, publishMs: PUBLISH_MS };
+    }
+    const reading = !repo.lastIndexedSha || job?.kind === "full";
+    return {
+      readingMs: reading ? sized.readingMs : 0,
+      embedTokens: reading ? sized.embedTokens : 0,
+      calls: measured?.calls ?? sized.calls,
+      publishMs: PUBLISH_MS,
+    };
+  }
+
+  function takeSnapshot(): Snapshot {
     const at = now();
+    const positions = queuePositions(db, at);
+    const builder = builderStatus(db, at);
+    const ledger = options.capacity ? new CapacityLedger(options.capacity, usage()) : undefined;
+    if (!ledger) return { now: at, positions, builder, ledger, line: [], estimates: new Map() };
+
+    // The running build first, then the rest in the order the worker claims them
+    const jobs = db
+      .select({ job: indexJobs, repo: repos, request: repoRequests })
+      .from(indexJobs)
+      .innerJoin(repos, eq(repos.id, indexJobs.repoId))
+      .leftJoin(repoRequests, eq(repoRequests.repoId, indexJobs.repoId))
+      .where(and(inArray(indexJobs.status, ["queued", "running"]), eq(indexJobs.origin, "request")))
+      .orderBy(asc(indexJobs.priority), asc(indexJobs.id))
+      .all()
+      .sort((a, b) => Number(b.job.status === "running") - Number(a.job.status === "running"));
+    const line = jobs.map(({ job, repo, request }) => ({
+      id: job.id,
+      priority: job.priority,
+      running: job.status === "running",
+      work: workLeft(repo, job, request?.estimate),
+      notBefore: Math.max(at.getTime(), job.runAfter?.getTime() ?? 0),
+    }));
+    return {
+      now: at,
+      positions,
+      builder,
+      ledger,
+      line,
+      estimates: simulateLine(line, ledger, at.getTime()),
+    };
+  }
+
+  function toEta(
+    basis: RepoEta["basis"],
+    estimate: {
+      startsAt: number;
+      readyAt: number;
+      workMs: number;
+      allowanceWaitUntil: number | null;
+    },
+    ahead: number,
+  ): RepoEta {
+    return {
+      basis,
+      readyAt: iso(estimate.readyAt),
+      startsAt: iso(estimate.startsAt),
+      ahead,
+      workMinutes: Math.max(1, Math.round(estimate.workMs / 60_000)),
+      allowanceUntil:
+        estimate.allowanceWaitUntil === null ? null : iso(estimate.allowanceWaitUntil),
+    };
+  }
+
+  // Plays the line with one more build added where its size would place it
+  function hypothetical(
+    snap: Snapshot,
+    work: BuildWork,
+    priority: number,
+    basis: RepoEta["basis"],
+  ): RepoEta | null {
+    if (!snap.ledger) return null;
+    const id = -1;
+    // A new job joins behind the running one and every job of its size or smaller
+    const index = snap.line.findIndex((item) => !item.running && item.priority > priority);
+    const at = index < 0 ? snap.line.length : index;
+    const line = [...snap.line];
+    line.splice(at, 0, { id, priority, running: false, work, notBefore: snap.now.getTime() });
+    const estimate = simulateLine(line, snap.ledger, snap.now.getTime()).get(id);
+    return estimate ? toEta(basis, estimate, at) : null;
+  }
+
+  function etaFor(snap: Snapshot, record: RepoRecord, state: RepoState): RepoEta | null {
+    const job = record.openJob;
+    if (
+      job &&
+      job.origin === "request" &&
+      (state === "queued" || state === "building" || state === "paused")
+    ) {
+      const estimate = snap.estimates.get(job.id);
+      const ahead = snap.line.findIndex((item) => item.id === job.id);
+      if (!estimate) return null;
+      // A paused job already knows when its allowance comes back: it is the time it runs again
+      const pausedUntil = isPaused(job, snap.now) && job.runAfter ? job.runAfter.getTime() : null;
+      return toEta(
+        "line",
+        { ...estimate, allowanceWaitUntil: estimate.allowanceWaitUntil ?? pausedUntil },
+        Math.max(0, ahead),
+      );
+    }
+    if (state === "review" || (state === "available" && record.request?.estimate)) {
+      const estimate = record.request?.estimate;
+      return hypothetical(
+        snap,
+        workLeft(record.repo, undefined, estimate),
+        buildPriority(estimate?.sizeTier ?? record.repo.sizeTier),
+        state === "review" ? "if-approved" : "if-requested",
+      );
+    }
+    return null;
+  }
+
+  const describe = (
+    record: RepoRecord,
+    extra: { inspection?: Inspection; snap?: Snapshot } = {},
+  ) => {
+    const snap = extra.snap ?? takeSnapshot();
     const inspection = extra.inspection;
     return describeRecord(record, {
-      now: at,
-      positions: queuePositions(db, at),
+      now: snap.now,
+      positions: snap.positions,
+      builder: snap.builder,
       github: inspection?.repository ?? undefined,
       estimate: inspection?.eligible ? inspection.estimate : undefined,
+      etaFor: (target, state) => etaFor(snap, target, state),
     });
   };
 
-  const viewOf = (repo: RepoRow, extra: { inspection?: Inspection } = {}) =>
+  const viewOf = (repo: RepoRow, extra: { inspection?: Inspection; snap?: Snapshot } = {}) =>
     describe(loadRecord(db, repo), extra);
 
   async function inspect(ref: RepoRef): Promise<Inspection> {
@@ -124,13 +318,12 @@ export function createRequestService(options: RequestServiceOptions): RequestSer
     }
   }
 
-  function unavailableView(ref: RepoRef, inspection: Inspection & { eligible: false }): RepoView {
-    const name = inspection.repository?.fullName ?? formatRepoRef(ref);
+  function emptyView(repo: string, builder: BuilderStatus): RepoView {
     return {
-      repo: name,
+      repo,
       state: "unavailable",
-      reason: { code: inspection.code, message: reasonMessage(inspection.code, name) },
-      github: inspection.repository ? summaryFromGithub(inspection.repository) : null,
+      reason: null,
+      github: null,
       estimate: null,
       queue: null,
       progress: null,
@@ -139,6 +332,17 @@ export function createRequestService(options: RequestServiceOptions): RequestSer
       updatedAt: null,
       resumeAt: null,
       href: null,
+      eta: null,
+      builder,
+    };
+  }
+
+  function unavailableView(ref: RepoRef, inspection: Inspection & { eligible: false }): RepoView {
+    const name = inspection.repository?.fullName ?? formatRepoRef(ref);
+    return {
+      ...emptyView(name, builderStatus(db, now())),
+      reason: { code: inspection.code, message: reasonMessage(inspection.code, name) },
+      github: inspection.repository ? summaryFromGithub(inspection.repository) : null,
     };
   }
 
@@ -195,14 +399,14 @@ export function createRequestService(options: RequestServiceOptions): RequestSer
   }
 
   // Each requester counts once while their salted hash is kept, which is one day
-  function countRequester(repoId: number, requester: string): boolean {
+  function countRequester(repoId: number, voter: string): boolean {
     const at = now();
     db.delete(requestVoters)
       .where(lt(requestVoters.createdAt, new Date(at.getTime() - DAY_MS)))
       .run();
     const inserted = db
       .insert(requestVoters)
-      .values({ repoId, voter: requester, createdAt: at })
+      .values({ repoId, voter, createdAt: at })
       .onConflictDoNothing()
       .run();
     if (inserted.changes === 0) return false;
@@ -211,6 +415,42 @@ export function createRequestService(options: RequestServiceOptions): RequestSer
       .where(eq(repoRequests.repoId, repoId))
       .run();
     return true;
+  }
+
+  function recordOwners(repoId: number, owners: readonly string[]): void {
+    const at = now();
+    for (const owner of owners) {
+      db.insert(requestOwners).values({ repoId, owner, createdAt: at }).onConflictDoNothing().run();
+    }
+  }
+
+  // The request this person is still waiting on, if any; finished ones free the person to ask again
+  function activeRequest(owners: readonly string[]): { repo: RepoRow; view: RepoView } | undefined {
+    if (owners.length === 0) return undefined;
+    const at = now();
+    // Address hashes change daily, so they are forgotten after a day like the voters
+    db.delete(requestOwners)
+      .where(
+        and(
+          like(requestOwners.owner, "address:%"),
+          lt(requestOwners.createdAt, new Date(at.getTime() - DAY_MS)),
+        ),
+      )
+      .run();
+    const rows = db
+      .select({ repo: repos, owner: requestOwners })
+      .from(requestOwners)
+      .innerJoin(repos, eq(repos.id, requestOwners.repoId))
+      .where(inArray(requestOwners.owner, [...owners]))
+      .orderBy(desc(requestOwners.createdAt))
+      .all();
+    const snap = takeSnapshot();
+    for (const { repo } of rows) {
+      const view = viewOf(repo, { snap });
+      if (ACTIVE_STATES.has(view.state)) return { repo, view };
+      db.delete(requestOwners).where(eq(requestOwners.repoId, repo.id)).run();
+    }
+    return undefined;
   }
 
   function recordRequest(
@@ -228,7 +468,7 @@ export function createRequestService(options: RequestServiceOptions): RequestSer
   }
 
   // Requests for a repository whose state is already settled: join it, or ask again after a failure
-  function joinExisting(repo: RepoRow, record: RepoRecord, requester: string): SubmitResult {
+  function joinExisting(repo: RepoRow, record: RepoRecord, requester: Requester): SubmitResult {
     const view = describe(record);
     if (view.state === "ready") return { view, counted: false };
     if (!record.request) {
@@ -243,17 +483,35 @@ export function createRequestService(options: RequestServiceOptions): RequestSer
     if (view.state === "failed" && now().getTime() - failedAt >= FAILED_RETRY_MS) {
       enqueueBuild(db, repo, buildPriority(record.request?.estimate?.sizeTier));
     }
-    const counted = countRequester(repo.id, requester);
-    return { view: viewOf(repo), counted };
+    const counted = countRequester(repo.id, requester.voter);
+    const joined = viewOf(repo);
+    if (ACTIVE_STATES.has(joined.state)) recordOwners(repo.id, requester.owners);
+    return { view: joined, counted };
   }
 
   const settled = (view: RepoView) => view.state !== "available";
 
+  // A second request is refused unless it names the repository the person already waits on, even by an old name
+  async function guardOneAtATime(ref: RepoRef, requester: Requester): Promise<void> {
+    const active = activeRequest(requester.owners);
+    if (!active) return;
+    if (repoKey(ref) === active.repo.key) return;
+    if (!findRepo(db, ref) && active.repo.githubId !== null) {
+      const same = await github
+        .repository(ref)
+        .then((repository) => repository.id === active.repo.githubId)
+        .catch(() => false);
+      if (same) return;
+    }
+    throw new OneRequestAtATimeError(active.view);
+  }
+
   return {
     async lookup(ref) {
+      const snap = takeSnapshot();
       const known = findRepo(db, ref);
       if (known) {
-        const view = viewOf(known);
+        const view = viewOf(known, { snap });
         if (settled(view)) return view;
       }
       const inspection = await inspect(ref);
@@ -262,13 +520,15 @@ export function createRequestService(options: RequestServiceOptions): RequestSer
         findRepo(db, { owner: inspection.repository.owner, name: inspection.repository.name }) ??
         db.select().from(repos).where(eq(repos.githubId, inspection.repository.id)).get();
       if (row) {
-        const view = viewOf(row, { inspection });
+        const view = viewOf(row, { inspection, snap });
         if (settled(view)) return view;
       }
       const decision = decideRequest(inspection.estimate, policy, decisionCounts());
       const name = inspection.repository.fullName;
+      const priority = buildPriority(inspection.estimate.sizeTier);
+      const work = workFromEstimate(inspection.estimate);
       return {
-        repo: name,
+        ...emptyView(name, snap.builder),
         state: "available",
         reason:
           decision.decision === "review"
@@ -276,17 +536,17 @@ export function createRequestService(options: RequestServiceOptions): RequestSer
             : null,
         github: summaryFromGithub(inspection.repository),
         estimate: inspection.estimate,
-        queue: null,
-        progress: null,
-        requests: 0,
-        requestedAt: null,
-        updatedAt: null,
-        resumeAt: null,
-        href: null,
+        eta: hypothetical(
+          snap,
+          work,
+          priority,
+          decision.decision === "review" ? "if-approved" : "if-requested",
+        ),
       };
     },
 
     async submit(ref, requester) {
+      await guardOneAtATime(ref, requester);
       const known = findRepo(db, ref);
       if (known) {
         const record = loadRecord(db, known);
@@ -311,7 +571,8 @@ export function createRequestService(options: RequestServiceOptions): RequestSer
           if (decision.decision === "approved") {
             enqueueBuild(db, repo, buildPriority(inspection.estimate.sizeTier));
           }
-          return countRequester(repo.id, requester);
+          recordOwners(repo.id, requester.owners);
+          return countRequester(repo.id, requester.voter);
         },
         { behavior: "immediate" },
       );
@@ -319,13 +580,14 @@ export function createRequestService(options: RequestServiceOptions): RequestSer
     },
 
     queue() {
-      const at = now();
+      const snap = takeSnapshot();
+      const at = snap.now;
       const seen = new Set<number>();
       const views = (rows: RepoRow[]) =>
         rows.flatMap((row) => {
           if (seen.has(row.id)) return [];
           seen.add(row.id);
-          return [viewOf(row)];
+          return [viewOf(row, { snap })];
         });
       const reposFor = (ids: number[]) => {
         if (ids.length === 0) return [];
@@ -360,6 +622,7 @@ export function createRequestService(options: RequestServiceOptions): RequestSer
         .from(repoRequests)
         .where(eq(repoRequests.decision, "review"))
         .orderBy(desc(repoRequests.count), asc(repoRequests.firstAt))
+        .limit(20)
         .all();
       const published = db
         .select()
@@ -379,6 +642,7 @@ export function createRequestService(options: RequestServiceOptions): RequestSer
         waiting: views(reposFor([...inLine, ...others].map((job) => job.repoId))),
         review: views(reposFor(review.map((row) => row.repoId))),
         recent: views(published),
+        builder: snap.builder,
         updatedAt: at.toISOString(),
       };
     },
@@ -437,13 +701,14 @@ export function createRequestService(options: RequestServiceOptions): RequestSer
     },
 
     requests() {
+      const snap = takeSnapshot();
       const rows = db
         .select({ repo: repos })
         .from(repoRequests)
         .innerJoin(repos, eq(repos.id, repoRequests.repoId))
         .orderBy(desc(repoRequests.lastAt))
         .all();
-      return rows.map((row) => viewOf(row.repo));
+      return rows.map((row) => viewOf(row.repo, { snap }));
     },
 
     reconcile() {

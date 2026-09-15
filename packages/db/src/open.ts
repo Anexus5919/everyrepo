@@ -34,6 +34,11 @@ export function openEngineDb(path: string) {
   return db;
 }
 
+// Reads an engine database another process may be writing to, without running migrations
+export function openEngineReadonly(path: string): Database.Database {
+  return new Database(path, { readonly: true, fileMustExist: true });
+}
+
 export type AppDb = ReturnType<typeof openAppDb>;
 export type EngineDb = ReturnType<typeof openEngineDb>;
 

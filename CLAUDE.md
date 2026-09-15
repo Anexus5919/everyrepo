@@ -42,7 +42,8 @@ TypeScript source directly and run with tsx. Tests use Vitest.
     `approve` also adds a repository nobody asked for
   - `worker [--once] [--poll <seconds>] [--no-build]` builds requested repositories in turn: reads the code,
     writes the wiki, exports the site data, builds the website and marks the wiki published; it only claims
-    jobs that came from requests, so command line jobs are left alone
+    jobs that came from requests, so command line jobs are left alone. It reports a heartbeat every 15 seconds
+    (`worker` table), and a job paused for a used-up allowance waits until the moment that allowance frees up
 - `pnpm --filter @everyrepo/web dev` runs the website; it reads the site JSON from `EVERYREPO_SITE_DATA`
   or from `dataDir/site`, and calls the API at `PUBLIC_API_URL` (falling back to `PUBLIC_ASK_URL`, then the
   local `serve` address); `PUBLIC_TURNSTILE_SITE_KEY` turns on the person check before a request
@@ -99,8 +100,13 @@ TypeScript source directly and run with tsx. Tests use Vitest.
   detector's own file classes (`estimateFromTree`) and rejects private, missing, empty and code-free
   repositories without storing them. Rules approve tiers up to `requests.autoApproveMaxTier` within
   `autoApprovePerDay` and `maxWaiting`; other requests wait for owner review. Each requester counts once per
-  day by a salted hash. Approved builds queue a read job, then a wiki job, then a publish job, smaller tiers
-  first; `describeRecord` turns the registry, request and jobs into the state a status page shows
+  day by a salted hash, and each person (a hash of the browser's random id or of the day's address) has one
+  request in progress at a time until it is ready, failed or declined. Approved builds queue a read job, then
+  a wiki job, then a publish job, smaller tiers first; `describeRecord` turns the registry, request and jobs
+  into the state a status page shows. Ready times come from `simulateLine`, which plays the line forward for
+  one worker against each model's rolling-day request limit and the embedding neuron budget (`capacity.ts`),
+  with work taken from each engine database once read (`packages/cli/src/build-work.ts`) or sized from the
+  file list before that; builds not yet requested or approved get a ready time as if they were
 - `packages/eval`: gold question sets and retrieval metrics
 - `packages/pipeline`: index stage handlers, cost estimate, snapshot report
 - `packages/cli`: the `everyrepo` command, plus the local API. Ask streams one JSON object per line
@@ -116,8 +122,10 @@ TypeScript source directly and run with tsx. Tests use Vitest.
   The repository box (`src/components/RepoOpener.astro`, logic in `src/lib/opener.ts`) suggests written
   wikis, turns a pasted link into owner/name, previews any repository live from the API and opens, requests
   or follows it; the header button opens the same box in a dialog (`RepoDialog.astro`). `/request/?repo=`
-  follows one build through four steps and polls while something changes; `/queue/` lists builds, the line,
-  requests in review and recent wikis. Each written wiki also gets a hub at `/<owner>/<repo>`, a reader page per wiki page at
+  follows one build through four steps, shows the estimated ready day, date and time with what it is made
+  of, says when the builder is offline, and polls while something changes; `/queue/` lists builds, the line,
+  requests in review and recent wikis with their ready times. A second request from the same person opens a
+  window explaining the one request rule (`src/lib/notice.ts`). Each written wiki also gets a hub at `/<owner>/<repo>`, a reader page per wiki page at
   `/<owner>/<repo>/<slug>` (page tree, cited sources beside the text, import diagrams drawn from the stored
   flowcharts by `src/lib/diagram.ts`: cycle links drawn back, columns chosen for short links, median
   ordering with swaps to cut crossings, long links routed through lanes between boxes and bundled by

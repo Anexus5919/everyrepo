@@ -3,6 +3,7 @@ import {
   ensureRepo,
   eq,
   indexJobs,
+  jobStages,
   openAppDb,
   repoRequests,
   repos,
@@ -16,8 +17,15 @@ import {
 } from "@everyrepo/github";
 import { claimJob, claimNextJob, runJob, StageDeferredError } from "@everyrepo/queue";
 import { beforeEach, describe, expect, it } from "vitest";
+import { touchWorker } from "./builders.ts";
 import { followUp, markPublished } from "./builds.ts";
-import { createRequestService, RequestsUnavailableError, type RequestService } from "./service.ts";
+import type { CapacityConfig } from "./capacity.ts";
+import {
+  createRequestService,
+  OneRequestAtATimeError,
+  RequestsUnavailableError,
+  type RequestService,
+} from "./service.ts";
 
 interface FakeRepo {
   repository?: Partial<GithubRepository>;
@@ -101,6 +109,8 @@ function service(
 }
 
 const ref = parseRepoRef;
+// One person per name, identified the way the API identifies a browser
+const person = (name: string) => ({ voter: name, owners: [`client:${name}`] });
 const jobsFor = (name: string) => {
   const row = db.select().from(repos).where(eq(repos.fullName, name)).get();
   return row ? db.select().from(indexJobs).where(eq(indexJobs.repoId, row.id)).all() : [];
@@ -175,7 +185,7 @@ describe("requesting a repository", () => {
     const { requests } = service({
       "acme/app": { repository: { fullName: "Acme/App" }, files: sourceFiles(20_000) },
     });
-    const first = await requests.submit(ref("acme/APP"), "visitor-1");
+    const first = await requests.submit(ref("acme/APP"), person("visitor-1:acme/app"));
     expect(first.counted).toBe(true);
     expect(first.view).toMatchObject({
       repo: "Acme/App",
@@ -186,14 +196,18 @@ describe("requesting a repository", () => {
     const [job] = jobsFor("Acme/App");
     expect(job).toMatchObject({ kind: "full", origin: "request", priority: 80, status: "queued" });
 
-    expect((await requests.submit(ref("Acme/App"), "visitor-1")).counted).toBe(false);
-    const third = await requests.submit(ref("acme/app"), "visitor-2");
+    expect((await requests.submit(ref("Acme/App"), person("visitor-1:acme/app"))).counted).toBe(
+      false,
+    );
+    const third = await requests.submit(ref("acme/app"), person("visitor-2:acme/app"));
     expect(third).toMatchObject({ counted: true, view: { requests: 2 } });
     expect(jobsFor("Acme/App")).toHaveLength(1);
 
     // The same person counts again on a later day, once their hash has been forgotten
     at("2026-09-17T09:00:00Z");
-    expect((await requests.submit(ref("acme/app"), "visitor-1")).counted).toBe(true);
+    expect((await requests.submit(ref("acme/app"), person("visitor-1:acme/app"))).counted).toBe(
+      true,
+    );
   });
 
   it("puts smaller repositories ahead in the queue", async () => {
@@ -201,8 +215,8 @@ describe("requesting a repository", () => {
       "acme/medium": { files: sourceFiles(400_000) },
       "acme/small": { files: sourceFiles(10_000) },
     });
-    await requests.submit(ref("acme/medium"), "a");
-    const small = await requests.submit(ref("acme/small"), "a");
+    await requests.submit(ref("acme/medium"), person("a:acme/medium"));
+    const small = await requests.submit(ref("acme/small"), person("a:acme/small"));
     expect(small.view.queue).toEqual({ position: 1, total: 2 });
     expect((await requests.lookup(ref("acme/medium"))).queue).toEqual({ position: 2, total: 2 });
   });
@@ -216,13 +230,17 @@ describe("requesting a repository", () => {
       },
       { autoApproveMaxTier: "M", autoApprovePerDay: 1, maxWaiting: 10 },
     );
-    expect((await requests.submit(ref("acme/big"), "a")).view).toMatchObject({
+    expect((await requests.submit(ref("acme/big"), person("a:acme/big"))).view).toMatchObject({
       state: "review",
       reason: { code: "large" },
     });
     expect(jobsFor("acme/big")).toEqual([]);
-    expect((await requests.submit(ref("acme/one"), "a")).view.state).toBe("queued");
-    expect((await requests.submit(ref("acme/two"), "a")).view.reason?.code).toBe("daily-limit");
+    expect((await requests.submit(ref("acme/one"), person("a:acme/one"))).view.state).toBe(
+      "queued",
+    );
+    expect((await requests.submit(ref("acme/two"), person("a:acme/two"))).view.reason?.code).toBe(
+      "daily-limit",
+    );
 
     const approved = await requests.approve(ref("acme/big"));
     expect(approved.state).toBe("queued");
@@ -234,7 +252,7 @@ describe("requesting a repository", () => {
 
   it("does not store requests for repositories that cannot have a wiki", async () => {
     const { requests } = service({ "acme/docs": { files: [{ path: "README.md", bytes: 10 }] } });
-    const result = await requests.submit(ref("acme/docs"), "a");
+    const result = await requests.submit(ref("acme/docs"), person("a:acme/docs"));
     expect(result).toMatchObject({ counted: false, view: { state: "unavailable" } });
     expect(db.select().from(repos).all()).toEqual([]);
   });
@@ -245,7 +263,7 @@ describe("requesting a repository", () => {
     const { requests } = service({
       "new-owner/app": { repository: { id: 77, fullName: "new-owner/app" }, files: sourceFiles(1) },
     });
-    await requests.submit(ref("new-owner/app"), "a");
+    await requests.submit(ref("new-owner/app"), person("a:new-owner/app"));
     expect(db.select({ name: repos.fullName }).from(repos).all()).toEqual([
       { name: "new-owner/app" },
     ]);
@@ -257,7 +275,7 @@ describe("requesting a repository", () => {
     db.insert(indexJobs)
       .values({ repoId: row.id, kind: "wiki", stages: ["summarize"], params: {} })
       .run();
-    const result = await requests.submit(ref("medusajs/medusa"), "a");
+    const result = await requests.submit(ref("medusajs/medusa"), person("a:medusajs/medusa"));
     expect(result).toMatchObject({ counted: true, view: { state: "queued", requests: 1 } });
     expect(db.select().from(repoRequests).get()?.decidedBy).toBe("existing");
     expect(calls).toEqual([]);
@@ -267,7 +285,7 @@ describe("requesting a repository", () => {
 describe("following a build", () => {
   it("shows the stage, counts and overall share while a job runs", async () => {
     const { requests } = service({ "acme/app": { files: sourceFiles(1_000) } });
-    await requests.submit(ref("acme/app"), "a");
+    await requests.submit(ref("acme/app"), person("a:acme/app"));
     let during: unknown;
     const job = claimNextJob(db, "worker", { origin: "request", now: clock })!;
     await runJob(
@@ -308,7 +326,7 @@ describe("following a build", () => {
 
   it("reports a failed build and lets people ask again after a while", async () => {
     const { requests } = service({ "acme/app": { files: sourceFiles(1_000) } });
-    await requests.submit(ref("acme/app"), "a");
+    await requests.submit(ref("acme/app"), person("a:acme/app"));
     const [queued] = jobsFor("acme/app");
     const crash = { source: async () => "ok", detect: async () => Promise.reject(new Error("x")) };
     for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -321,16 +339,18 @@ describe("following a build", () => {
     expect(failed.reason?.message).toContain("sorting the files");
     expect(failed.progress).toMatchObject({ stage: "detect", phase: "reading" });
 
-    await requests.submit(ref("acme/app"), "b");
+    await requests.submit(ref("acme/app"), person("b:acme/app"));
     expect(jobsFor("acme/app")).toHaveLength(1);
     at("2026-09-16T15:00:00Z");
-    expect((await requests.submit(ref("acme/app"), "c")).view.state).toBe("queued");
+    expect((await requests.submit(ref("acme/app"), person("c:acme/app"))).view.state).toBe(
+      "queued",
+    );
     expect(jobsFor("acme/app")).toHaveLength(2);
   });
 
   it("chains reading, writing and publishing, and restarts builds that lost their job", async () => {
     const { requests } = service({ "acme/app": { files: sourceFiles(1_000) } });
-    await requests.submit(ref("acme/app"), "a");
+    await requests.submit(ref("acme/app"), person("a:acme/app"));
     const pass = (stages: readonly string[]) =>
       Object.fromEntries(stages.map((stage) => [stage, async () => stage]));
 
@@ -370,9 +390,9 @@ describe("following a build", () => {
       "acme/waiting": { files: sourceFiles(1_000) },
       "acme/huge": { files: sourceFiles(9_000_000, 100), truncated: true },
     });
-    await requests.submit(ref("acme/running"), "a");
-    await requests.submit(ref("acme/waiting"), "a");
-    await requests.submit(ref("acme/huge"), "a");
+    await requests.submit(ref("acme/running"), person("a:acme/running"));
+    await requests.submit(ref("acme/waiting"), person("a:acme/waiting"));
+    await requests.submit(ref("acme/huge"), person("a:acme/huge"));
     claimNextJob(db, "worker", { origin: "request", now: clock });
     const done = ensureRepo(db, ref("acme/done"));
     markPublished(db, done.id, "abc", clock);
@@ -386,5 +406,136 @@ describe("following a build", () => {
       ["acme/huge", "XL"],
     ]);
     expect(queue.recent.map((view) => view.repo)).toEqual(["acme/done"]);
+  });
+});
+
+describe("one request at a time", () => {
+  it("refuses a second repository until the first one is finished", async () => {
+    const { requests } = service({
+      "acme/one": { files: sourceFiles(5_000) },
+      "acme/two": { files: sourceFiles(5_000) },
+      "acme/three": { files: sourceFiles(5_000) },
+    });
+    const visitor = { voter: "v", owners: ["client:browser-1", "address:today-1"] };
+    await requests.submit(ref("acme/one"), visitor);
+
+    const refused = await requests
+      .submit(ref("acme/two"), visitor)
+      .catch((error: unknown) => error);
+    expect(refused).toBeInstanceOf(OneRequestAtATimeError);
+    expect((refused as OneRequestAtATimeError).active).toMatchObject({
+      repo: "acme/one",
+      state: "queued",
+    });
+    // The same browser from another address, or another browser from the same address, is the same person
+    await expect(
+      requests.submit(ref("acme/two"), { voter: "w", owners: ["client:browser-1"] }),
+    ).rejects.toBeInstanceOf(OneRequestAtATimeError);
+    await expect(
+      requests.submit(ref("acme/two"), { voter: "w", owners: ["address:today-1"] }),
+    ).rejects.toBeInstanceOf(OneRequestAtATimeError);
+    expect(jobsFor("acme/two")).toEqual([]);
+
+    // Asking again for the repository already requested is fine
+    expect((await requests.submit(ref("acme/one"), visitor)).view.repo).toBe("acme/one");
+
+    const one = db.select().from(repos).where(eq(repos.fullName, "acme/one")).get()!;
+    markPublished(db, one.id, "abc", clock);
+    expect((await requests.submit(ref("acme/two"), visitor)).view.state).toBe("queued");
+
+    // A declined request frees the person too
+    requests.decline(ref("acme/two"));
+    expect((await requests.submit(ref("acme/three"), visitor)).view.state).toBe("queued");
+  });
+
+  it("forgets address hashes after a day", async () => {
+    const { requests } = service({
+      "acme/one": { files: sourceFiles(5_000) },
+      "acme/two": { files: sourceFiles(5_000) },
+    });
+    await requests.submit(ref("acme/one"), { voter: "v", owners: ["address:day-1"] });
+    at("2026-09-17T09:00:00Z");
+    expect(
+      (await requests.submit(ref("acme/two"), { voter: "v2", owners: ["address:day-1"] })).view
+        .state,
+    ).toBe("queued");
+  });
+});
+
+describe("estimates", () => {
+  const capacity: CapacityConfig = {
+    models: [
+      {
+        id: "lite",
+        provider: "gemini",
+        model: "lite",
+        requestsPerDay: 100,
+        requestsPerMinute: 15,
+        tokensPerMinute: 250_000,
+      },
+      {
+        id: "flash",
+        provider: "gemini",
+        model: "flash",
+        requestsPerDay: 18,
+        requestsPerMinute: 5,
+        tokensPerMinute: 250_000,
+      },
+    ],
+    tasks: { summary: ["lite"], plan: ["flash", "lite"], page: ["lite", "flash"] },
+  };
+  // The lite model used its day's allowance at 07:00, so summaries wait until 07:00 tomorrow
+  const usage = () => [
+    { hour: "2026-09-16T07", provider: "gemini", model: "lite", requests: 100, neurons: 0 },
+  ];
+
+  it("gives builds in line and repositories not yet requested a ready time, counting builds ahead", async () => {
+    const { client } = fakeGithub({
+      "acme/first": { files: sourceFiles(20_000) },
+      "acme/later": { files: sourceFiles(20_000) },
+    });
+    const requests = createRequestService({
+      db,
+      github: client,
+      now: () => clock,
+      capacity,
+      usage,
+    });
+
+    const first = (await requests.submit(ref("acme/first"), person("a"))).view;
+    expect(first.eta).toMatchObject({
+      basis: "line",
+      ahead: 0,
+      allowanceUntil: "2026-09-17T07:00:00.000Z",
+    });
+    expect(Date.parse(first.eta!.readyAt)).toBeGreaterThan(Date.parse("2026-09-17T07:00:00Z"));
+    expect(Date.parse(first.eta!.readyAt)).toBeLessThan(Date.parse("2026-09-17T08:00:00Z"));
+
+    const later = await requests.lookup(ref("acme/later"));
+    expect(later.eta).toMatchObject({ basis: "if-requested", ahead: 1 });
+    expect(Date.parse(later.eta!.readyAt)).toBeGreaterThan(Date.parse(first.eta!.readyAt));
+    expect(later.builder).toEqual({ online: false, lastSeenAt: null });
+
+    touchWorker(db, "worker-1", null, clock);
+    expect((await requests.lookup(ref("acme/first"))).builder).toEqual({
+      online: true,
+      lastSeenAt: clock.toISOString(),
+    });
+    at("2026-09-16T08:05:00Z");
+    expect(requests.queue().builder.online).toBe(false);
+
+    // A build paused for its allowance says when that allowance comes back
+    const [job] = jobsFor("acme/first");
+    db.update(indexJobs)
+      .set({ deferrals: 1, runAfter: new Date("2026-09-17T07:00:00Z") })
+      .where(eq(indexJobs.id, job!.id))
+      .run();
+    db.insert(jobStages)
+      .values({ jobId: job!.id, stage: "source", status: "failed", startedAt: clock })
+      .run();
+    expect((await requests.lookup(ref("acme/first"))).eta).toMatchObject({
+      basis: "line",
+      allowanceUntil: "2026-09-17T07:00:00.000Z",
+    });
   });
 });

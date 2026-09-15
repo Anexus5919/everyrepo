@@ -33,13 +33,6 @@ const SIZE_NAMES: Record<SizeTier, string> = {
   XL: "Very large",
 };
 
-const TYPICAL_TIME: Record<SizeTier, string> = {
-  S: "Small repositories are usually written within a few hours.",
-  M: "Medium repositories usually take about a day.",
-  L: "Large repositories take several days on the free models EveryRepo uses.",
-  XL: "Very large repositories take a week or more on the free models EveryRepo uses.",
-};
-
 const UNAVAILABLE_TITLES: Record<string, string> = {
   "not-found": "Repository not found",
   private: "Private repository",
@@ -50,10 +43,6 @@ const UNAVAILABLE_TITLES: Record<string, string> = {
 
 export function sizeName(tier: SizeTier): string {
   return SIZE_NAMES[tier];
-}
-
-export function typicalTime(tier: SizeTier | undefined): string {
-  return tier ? TYPICAL_TIME[tier] : "";
 }
 
 const UNITS: Array<[Intl.RelativeTimeFormatUnit, number]> = [
@@ -79,9 +68,122 @@ function counts(view: RepoView): string {
   return `${progress.done.toLocaleString("en-US")} of ${progress.total.toLocaleString("en-US")}`;
 }
 
-export function statusCopy(view: RepoView, now: number): StatusCopy {
+const MINUTE_MS = 60_000;
+const HOUR_MS = 3_600_000;
+const DAY_MS = 86_400_000;
+// Estimates are rough, so ready times are rounded up to the next quarter hour
+const ROUND_MS = 15 * MINUTE_MS;
+
+function dateParts(time: number, timeZone: string | undefined) {
+  const zone = timeZone ? { timeZone } : {};
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    ...zone,
+  }).formatToParts(new Date(time));
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)?.value ?? "";
+  const clock = new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    ...zone,
+  }).format(new Date(time));
+  const day = new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    ...zone,
+  }).format(new Date(time));
+  return { weekday: part("weekday"), date: `${part("day")} ${part("month")}`, clock, day };
+}
+
+// How far away a time is, in words that fit an estimate
+export function inAbout(iso: string, now: number): string {
+  const difference = Date.parse(iso) - now;
+  if (difference < 10 * MINUTE_MS) return "in a few minutes";
+  if (difference < HOUR_MS) return `in about ${Math.round(difference / MINUTE_MS)} minutes`;
+  if (difference < 1.5 * HOUR_MS) return "in about an hour";
+  if (difference < DAY_MS) return `in about ${Math.round(difference / HOUR_MS)} hours`;
+  if (difference < 1.5 * DAY_MS) return "in about a day";
+  return `in about ${Math.round(difference / DAY_MS)} days`;
+}
+
+// A day, date and time, such as "Thursday, 17 September, around 4:30 PM (tomorrow)"
+export function readyTime(iso: string, now: number, timeZone?: string): string {
+  const time = Math.ceil(Date.parse(iso) / ROUND_MS) * ROUND_MS;
+  const target = dateParts(time, timeZone);
+  const today = dateParts(now, timeZone).day;
+  const tomorrow = dateParts(now + DAY_MS, timeZone).day;
+  const hint = target.day === today ? " (today)" : target.day === tomorrow ? " (tomorrow)" : "";
+  return `${target.weekday}, ${target.date}, around ${target.clock}${hint}`;
+}
+
+// A compact ready time for lists, such as "Thu 17 Sep, 10:45 AM"
+export function shortReadyTime(iso: string, timeZone?: string): string {
+  const time = new Date(Math.ceil(Date.parse(iso) / ROUND_MS) * ROUND_MS);
+  const zone = timeZone ? { timeZone } : {};
+  const parts = new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+    ...zone,
+  }).formatToParts(time);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)?.value ?? "";
+  return `${part("weekday")} ${part("day")} ${part("month")}, ${part("hour")}:${part("minute")} ${part("dayPeriod")}`;
+}
+
+// The estimate as one sentence, worded for a build in line or one that is not requested yet
+export function etaSentence(view: RepoView, now: number, timeZone?: string): string {
+  const eta = view.eta;
+  if (!eta) return "";
+  const when = readyTime(eta.readyAt, now, timeZone);
+  if (eta.basis === "if-requested") return `If you request it now, expect it by ${when}.`;
+  if (eta.basis === "if-approved") return `If approved now, expect it by ${when}.`;
+  return `Expected ready by ${when}.`;
+}
+
+function workLength(minutes: number): string {
+  if (minutes < 60) return `about ${minutes} ${minutes === 1 ? "minute" : "minutes"}`;
+  const hours = Math.round(minutes / 60);
+  return `about ${hours} ${hours === 1 ? "hour" : "hours"}`;
+}
+
+// What the estimate is made of, so a date far away does not look arbitrary
+export function estimateReasons(view: RepoView, now: number, timeZone?: string): string[] {
+  const eta = view.eta;
+  if (!eta) return [];
+  const reasons: string[] = [];
+  if (!view.builder.online) {
+    reasons.push("The builder is offline right now; the estimate assumes it starts again soon");
+  }
+  if (eta.ahead > 0) {
+    reasons.push(`${eta.ahead} ${eta.ahead === 1 ? "build" : "builds"} ahead of it in line`);
+  } else if (eta.basis === "line" && view.state !== "building") {
+    reasons.push("Nothing ahead of it in line");
+  }
+  if (eta.allowanceUntil && Date.parse(eta.allowanceUntil) > now) {
+    reasons.push(
+      `The free model allowance it needs is used up until ${readyTime(eta.allowanceUntil, now, timeZone)}`,
+    );
+  }
+  reasons.push(`${workLength(eta.workMinutes)} of work for this repository itself`);
+  return reasons;
+}
+
+export interface CopyOptions {
+  timeZone?: string;
+  // Pages that show the estimate on its own leave it out of the detail
+  withEta?: boolean;
+}
+
+export function statusCopy(view: RepoView, now: number, options: CopyOptions = {}): StatusCopy {
   const reason = view.reason?.message ?? "";
-  const tier = view.estimate?.sizeTier;
+  const eta = options.withEta === false ? "" : etaSentence(view, now, options.timeZone);
+  const join = (...parts: string[]) => parts.filter(Boolean).join(" ");
   switch (view.state) {
     case "ready":
       return {
@@ -91,20 +193,20 @@ export function statusCopy(view: RepoView, now: number): StatusCopy {
       };
     case "building": {
       const label = view.progress?.label ?? "Working on it";
-      const detail = [
+      const done = [
         counts(view),
         view.progress ? `${view.progress.percent}% of the whole build` : "",
       ]
         .filter(Boolean)
         .join(", ");
-      return { tone: "active", title: label, detail: detail || "Started just now." };
+      return { tone: "active", title: label, detail: join(done ? `${done}.` : "", eta) };
     }
     case "queued": {
       if (view.resumeAt) {
         return {
           tone: "waiting",
           title: "Trying again shortly",
-          detail: `${reason} Next try ${relativeTime(view.resumeAt, now)}.`.trim(),
+          detail: join(reason, `Next try ${relativeTime(view.resumeAt, now)}.`, eta),
         };
       }
       // A build that already did some work picks up where it stopped
@@ -116,19 +218,22 @@ export function statusCopy(view: RepoView, now: number): StatusCopy {
           : "In line to be written";
       const detail = started
         ? "Work done so far is kept, and the build picks up where it stopped."
-        : typicalTime(tier) || "It starts as soon as the builds ahead of it finish.";
-      return { tone: "waiting", title, detail };
+        : "";
+      return { tone: "waiting", title, detail: join(detail, eta) };
     }
     case "paused":
       return {
         tone: "waiting",
         title: "Paused until the free allowance refills",
-        detail: view.resumeAt
-          ? `It carries on by itself ${relativeTime(view.resumeAt, now)}.`
-          : "It carries on by itself.",
+        detail: join(
+          view.resumeAt
+            ? `It carries on by itself ${relativeTime(view.resumeAt, now)}.`
+            : "It carries on by itself.",
+          eta,
+        ),
       };
     case "review":
-      return { tone: "attention", title: "Waiting for approval", detail: reason };
+      return { tone: "attention", title: "Waiting for approval", detail: join(reason, eta) };
     case "failed":
       return { tone: "blocked", title: "The build stopped", detail: reason };
     case "rejected":
@@ -146,7 +251,7 @@ export function statusCopy(view: RepoView, now: number): StatusCopy {
       return {
         tone: "open",
         title: view.reason ? "Needs approval" : "No wiki yet",
-        detail: [size, view.reason ? reason : typicalTime(tier)].filter(Boolean).join(" "),
+        detail: join(size, view.reason ? reason : "", eta),
       };
     }
   }

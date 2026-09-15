@@ -142,6 +142,14 @@ describe("index pipeline", () => {
     await expect(runEmbedStage({ ...stageInput, embedder: limited })).rejects.toBeInstanceOf(
       StageDeferredError,
     );
+    // Given the time the allowance frees up, the deferred job waits exactly until then
+    const refill = new Date("2026-09-17T07:00:00Z");
+    const deferred = await runEmbedStage({
+      ...stageInput,
+      embedder: limited,
+      allowanceAt: () => refill,
+    }).catch((error: unknown) => error);
+    expect((deferred as StageDeferredError).retryAt).toEqual(refill);
     const resumed = await runEmbedStage({
       ...stageInput,
       embedder: { ...embedder, model: "limited" },

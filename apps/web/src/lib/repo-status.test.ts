@@ -1,6 +1,17 @@
 import type { RepoView } from "@everyrepo/core/requests";
 import { describe, expect, it } from "vitest";
-import { milestones, pollDelay, primaryAction, relativeTime, statusCopy } from "./repo-status.ts";
+import {
+  estimateReasons,
+  etaSentence,
+  inAbout,
+  milestones,
+  pollDelay,
+  primaryAction,
+  readyTime,
+  relativeTime,
+  shortReadyTime,
+  statusCopy,
+} from "./repo-status.ts";
 
 const NOW = Date.parse("2026-09-16T08:00:00Z");
 
@@ -24,6 +35,8 @@ const view = (overrides: Partial<RepoView>): RepoView => ({
   updatedAt: null,
   resumeAt: null,
   href: null,
+  eta: null,
+  builder: { online: true, lastSeenAt: null },
   ...overrides,
 });
 
@@ -46,8 +59,7 @@ describe("status copy", () => {
     expect(statusCopy(view({}), NOW)).toEqual({
       tone: "open",
       title: "No wiki yet",
-      detail:
-        "Small repository with 80 source files. Small repositories are usually written within a few hours.",
+      detail: "Small repository with 80 source files.",
     });
     expect(
       statusCopy(view({ state: "queued", queue: { position: 2, total: 5 }, requests: 3 }), NOW)
@@ -64,7 +76,7 @@ describe("status copy", () => {
     ).toEqual({
       tone: "active",
       title: "Summarizing each part of the code",
-      detail: "120 of 278, 49% of the whole build",
+      detail: "120 of 278, 49% of the whole build.",
     });
     expect(
       statusCopy(view({ state: "paused", resumeAt: "2026-09-16T11:00:00Z" }), NOW).detail,
@@ -158,5 +170,73 @@ describe("milestones", () => {
     expect(relativeTime("2026-09-16T07:59:40Z", NOW)).toBe("just now");
     expect(relativeTime("2026-09-16T07:55:00Z", NOW)).toBe("5 minutes ago");
     expect(relativeTime("2026-09-17T08:00:00Z", NOW)).toBe("tomorrow");
+  });
+});
+
+describe("estimates", () => {
+  const eta = {
+    basis: "line" as const,
+    readyAt: "2026-09-17T10:38:00Z",
+    startsAt: "2026-09-17T10:20:00Z",
+    ahead: 2,
+    workMinutes: 18,
+    allowanceUntil: "2026-09-17T10:20:00Z",
+  };
+
+  it("names the day, the date and a rounded time", () => {
+    expect(readyTime("2026-09-17T10:38:00Z", NOW, "UTC")).toBe(
+      "Thursday, 17 September, around 10:45 AM (tomorrow)",
+    );
+    expect(readyTime("2026-09-16T18:00:00Z", NOW, "UTC")).toBe(
+      "Wednesday, 16 September, around 6:00 PM (today)",
+    );
+    expect(readyTime("2026-09-20T09:01:00Z", NOW, "Asia/Kolkata")).toBe(
+      "Sunday, 20 September, around 2:45 PM",
+    );
+    expect(shortReadyTime("2026-09-17T10:38:00Z", "UTC")).toBe("Thu 17 Sep, 10:45 AM");
+    expect(inAbout("2026-09-16T08:05:00Z", NOW)).toBe("in a few minutes");
+    expect(inAbout("2026-09-16T13:10:00Z", NOW)).toBe("in about 5 hours");
+    expect(inAbout("2026-09-19T08:00:00Z", NOW)).toBe("in about 3 days");
+  });
+
+  it("words the estimate for builds in line and for ones not requested or approved yet", () => {
+    const inLine = view({ state: "queued", queue: { position: 3, total: 3 }, eta });
+    expect(etaSentence(inLine, NOW, "UTC")).toBe(
+      "Expected ready by Thursday, 17 September, around 10:45 AM (tomorrow).",
+    );
+    expect(statusCopy(inLine, NOW, { timeZone: "UTC" }).detail).toBe(
+      "Expected ready by Thursday, 17 September, around 10:45 AM (tomorrow).",
+    );
+    expect(etaSentence(view({ eta: { ...eta, basis: "if-requested" } }), NOW, "UTC")).toMatch(
+      /^If you request it now, expect it by Thursday/,
+    );
+    expect(
+      etaSentence(view({ state: "review", eta: { ...eta, basis: "if-approved" } }), NOW, "UTC"),
+    ).toMatch(/^If approved now, expect it by Thursday/);
+  });
+
+  it("explains what the estimate is made of, including an offline builder", () => {
+    const offline = view({
+      state: "queued",
+      eta,
+      builder: { online: false, lastSeenAt: "2026-09-16T06:00:00Z" },
+    });
+    expect(estimateReasons(offline, NOW, "UTC")).toEqual([
+      "The builder is offline right now; the estimate assumes it starts again soon",
+      "2 builds ahead of it in line",
+      "The free model allowance it needs is used up until Thursday, 17 September, around 10:30 AM (tomorrow)",
+      "about 18 minutes of work for this repository itself",
+    ]);
+    expect(
+      estimateReasons(
+        view({
+          state: "queued",
+          eta: { ...eta, ahead: 0, allowanceUntil: null, workMinutes: 150 },
+        }),
+        NOW,
+        "UTC",
+      ),
+    ).toEqual(["Nothing ahead of it in line", "about 3 hours of work for this repository itself"]);
+    expect(estimateReasons(view({ state: "ready" }), NOW)).toEqual([]);
   });
 });

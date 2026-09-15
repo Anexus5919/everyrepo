@@ -1,8 +1,13 @@
 import type { QueueView, RepoRef, RepoView } from "@everyrepo/core";
 import { openAppDb } from "@everyrepo/db";
-import { RequestsUnavailableError, type RequestService } from "@everyrepo/requests";
+import {
+  OneRequestAtATimeError,
+  RequestsUnavailableError,
+  type Requester,
+  type RequestService,
+} from "@everyrepo/requests";
 import { describe, expect, it } from "vitest";
-import { createRequestApi, hashAddress, type RequestApiOptions } from "./request-api.ts";
+import { clientKey, createRequestApi, hashAddress, type RequestApiOptions } from "./request-api.ts";
 
 const view = (repo: string, state: RepoView["state"] = "available"): RepoView => ({
   repo,
@@ -17,10 +22,12 @@ const view = (repo: string, state: RepoView["state"] = "available"): RepoView =>
   updatedAt: null,
   resumeAt: null,
   href: null,
+  eta: null,
+  builder: { online: true, lastSeenAt: null },
 });
 
 function fakeService(overrides: Partial<RequestService> = {}) {
-  const submitted: Array<{ ref: RepoRef; requester: string }> = [];
+  const submitted: Array<{ ref: RepoRef; requester: Requester }> = [];
   const service: RequestService = {
     lookup: async (ref) => view(`${ref.owner}/${ref.name}`),
     submit: async (ref, requester) => {
@@ -32,6 +39,7 @@ function fakeService(overrides: Partial<RequestService> = {}) {
       waiting: [view("acme/app", "queued")],
       review: [],
       recent: [],
+      builder: { online: true, lastSeenAt: null },
       updatedAt: "2026-09-16T08:00:00.000Z",
     }),
     approve: async () => view("x/y"),
@@ -145,8 +153,9 @@ describe("request API", () => {
     expect(reply.status).toBe(200);
     expect(await reply.json()).toMatchObject({ counted: true, view: { state: "queued" } });
     expect(submitted[0]?.ref).toEqual({ owner: "medusajs", name: "medusa" });
-    expect(submitted[0]?.requester).toBe(await hashAddress("test-secret", "9.9.9.9", NOW));
-    expect(submitted[0]?.requester).not.toContain("9.9.9.9");
+    const visitor = await hashAddress("test-secret", "9.9.9.9", NOW);
+    expect(submitted[0]?.requester).toEqual({ voter: visitor, owners: [`address:${visitor}`] });
+    expect(JSON.stringify(submitted[0])).not.toContain("9.9.9.9");
 
     for (const [body, code] of [
       ["not json", "invalid-body"],
@@ -157,6 +166,31 @@ describe("request API", () => {
       expect(bad.status).toBe(400);
       expect(((await bad.json()) as { error: { code: string } }).error.code).toBe(code);
     }
+  });
+
+  it("keeps one person to one request and says which request they are waiting on", async () => {
+    const client = "3f1c6f1e-6a55-4d2b-9e0a-1f0b5a1d9c22";
+    const { service, submitted } = fakeService({
+      submit: async (ref, requester) => {
+        submitted.push({ ref, requester });
+        throw new OneRequestAtATimeError(view("acme/first", "queued"));
+      },
+    });
+    const { handle } = api(service);
+    const reply = (await handle(post({ repo: "acme/second", client }), "4.4.4.4"))!;
+    expect(reply.status).toBe(409);
+    expect(await reply.json()).toMatchObject({
+      error: { code: "one-at-a-time" },
+      active: { repo: "acme/first", state: "queued" },
+    });
+    const key = await clientKey(client);
+    expect(key).toMatch(/^client:[0-9a-f]{32}$/);
+    expect(submitted[0]?.requester.owners).toEqual([
+      key,
+      `address:${await hashAddress("test-secret", "4.4.4.4", NOW)}`,
+    ]);
+    expect(await clientKey("short")).toBeUndefined();
+    expect(await clientKey({ id: client })).toBeUndefined();
   });
 
   it("changes a visitor's hash every day", async () => {

@@ -1,7 +1,7 @@
 import { hostname } from "node:os";
 import { eq, repos, type AppDb, type RepoRow } from "@everyrepo/db";
 import { claimNextJob, runJob, type Job, type StageHandler } from "@everyrepo/queue";
-import { followUp, type RequestService } from "@everyrepo/requests";
+import { followUp, removeWorker, touchWorker, type RequestService } from "@everyrepo/requests";
 
 export interface JobRuntime {
   handlers: Record<string, StageHandler>;
@@ -33,11 +33,20 @@ export function createWorker(options: WorkerOptions) {
   const { db, service } = options;
   const workerId = options.workerId ?? `worker-${hostname()}-${process.pid}`;
   const log = options.log ?? (() => {});
+  let currentJob: number | null = null;
 
   return {
     workerId,
+    // Tells status pages the builder is running; called on a timer and around every job
+    heartbeat(): void {
+      touchWorker(db, workerId, currentJob);
+    },
+    stop(): void {
+      removeWorker(db, workerId);
+    },
     // Runs the next waiting requested job, if there is one, and queues the step after it
     async step(): Promise<WorkerStep | undefined> {
+      touchWorker(db, workerId, null);
       const restarted = service.reconcile();
       if (restarted > 0) log(`queued ${restarted} approved builds that had no job`);
       const job = claimNextJob(db, workerId, {
@@ -45,6 +54,8 @@ export function createWorker(options: WorkerOptions) {
         staleAfterMs: options.staleAfterMs ?? 60_000,
       });
       if (!job) return undefined;
+      currentJob = job.id;
+      touchWorker(db, workerId, job.id);
       const repo = db.select().from(repos).where(eq(repos.id, job.repoId)).get();
       if (!repo) throw new Error(`Job ${job.id} names a repository that does not exist`);
       const jobLog = (message: string) => log(`${repo.fullName} ${message}`);
@@ -70,6 +81,8 @@ export function createWorker(options: WorkerOptions) {
         });
       } finally {
         await runtime.close();
+        currentJob = null;
+        touchWorker(db, workerId, null);
       }
       const seconds = ((Date.now() - started) / 1000).toFixed(1);
       if (result.status === "succeeded") {

@@ -18,6 +18,7 @@ import {
 } from "@everyrepo/embed";
 import { createGithubClient, type GithubClient } from "@everyrepo/github";
 import { createRouterFromConfig, type LlmRouter } from "@everyrepo/llm";
+import { capacityConfig, createWorkMeasure } from "./build-work.ts";
 import {
   createRequestService,
   DEFAULT_REQUEST_POLICY,
@@ -106,6 +107,8 @@ export function openRequests(context: CliContext): RequestService {
     db: context.appDb,
     github: openGithub(context),
     policy: { ...DEFAULT_REQUEST_POLICY, ...context.config.requests },
+    capacity: capacityConfig(context.config),
+    workFor: createWorkMeasure(context.config.dataDir),
   });
 }
 

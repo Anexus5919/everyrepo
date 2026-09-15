@@ -1,6 +1,10 @@
 import { readRepoInput, repoInputMessage, type ApiError, type RepoRef } from "@everyrepo/core";
 import { hitRateLimit, type AppDb } from "@everyrepo/db";
-import { RequestsUnavailableError, type RequestService } from "@everyrepo/requests";
+import {
+  OneRequestAtATimeError,
+  RequestsUnavailableError,
+  type RequestService,
+} from "@everyrepo/requests";
 
 export interface RequestLimits {
   lookupsPerMinute: number;
@@ -58,6 +62,18 @@ export async function hashAddress(secret: string, address: string, now: number):
   return Buffer.from(signature).subarray(0, 16).toString("hex");
 }
 
+// A browser keeps a random id so one person keeps one request across days; only its hash is stored
+const CLIENT_ID = /^[A-Za-z0-9-]{16,64}$/;
+
+export async function clientKey(client: unknown): Promise<string | undefined> {
+  if (typeof client !== "string" || !CLIENT_ID.test(client)) return undefined;
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(`everyrepo-client:${client}`),
+  );
+  return `client:${Buffer.from(digest).subarray(0, 16).toString("hex")}`;
+}
+
 async function etagFor(body: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(body));
   return `"${Buffer.from(digest).subarray(0, 12).toString("base64url")}"`;
@@ -103,6 +119,15 @@ export function createRequestApi(options: RequestApiOptions) {
   }
 
   function unavailable(caught: unknown): Response {
+    if (caught instanceof OneRequestAtATimeError) {
+      return Response.json(
+        {
+          error: { code: "one-at-a-time", message: caught.message },
+          active: caught.active,
+        },
+        { status: 409, headers: { "cache-control": "no-store" } },
+      );
+    }
     if (caught instanceof RequestsUnavailableError) {
       const wait = caught.retryAt ? caught.retryAt.getTime() - now() : 60_000;
       return error(503, "github-unavailable", caught.message, retryAfter(wait));
@@ -199,8 +224,10 @@ export function createRequestApi(options: RequestApiOptions) {
     if (!(await verifyTurnstile(body["token"], address))) {
       return error(403, "verification", "The check that you are a person did not pass. Try again.");
     }
+    const client = await clientKey(body["client"]);
+    const owners = client ? [client, `address:${visitor}`] : [`address:${visitor}`];
     try {
-      const result = await options.service.submit(read.ref, visitor);
+      const result = await options.service.submit(read.ref, { voter: visitor, owners });
       options.log?.(
         `request ${result.view.repo}: ${result.view.state}${result.view.reason ? ` (${result.view.reason.code})` : ""}${result.counted ? "" : ", not counted"}`,
       );

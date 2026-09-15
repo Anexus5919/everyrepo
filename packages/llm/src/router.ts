@@ -80,7 +80,10 @@ export class LlmRouter {
         failures.push(error.message);
       }
     }
-    throw new ModelUnavailableError(`No model available for "${task}": ${failures.join("; ")}`);
+    throw new ModelUnavailableError(
+      `No model available for "${task}": ${failures.join("; ")}`,
+      task,
+    );
   }
 
   // Validates a JSON answer and asks once more with the validation error when it does not fit

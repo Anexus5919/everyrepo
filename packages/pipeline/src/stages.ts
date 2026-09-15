@@ -47,6 +47,8 @@ export interface PipelineOptions {
   repoId: number;
   fetch: boolean;
   embedder?: Embedder | undefined;
+  // When the embedding allowance frees up again, for resuming a paused job on time
+  embeddingsAt?: (() => Date | undefined) | undefined;
 }
 
 export interface SourceOutput {
@@ -249,6 +251,7 @@ export function createIndexHandlers(options: PipelineOptions): Record<IndexStage
       log,
       heartbeat,
       progress,
+      allowanceAt: options.embeddingsAt,
     });
   };
 

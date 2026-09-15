@@ -104,6 +104,25 @@ export interface BuildProgress {
   startedAt: string | null;
 }
 
+// Whether a worker has reported in recently; builds only move while one is running
+export interface BuilderStatus {
+  online: boolean;
+  lastSeenAt: string | null;
+}
+
+export interface RepoEta {
+  // A build already in line, or what would happen if the repository were requested or approved now
+  basis: "line" | "if-requested" | "if-approved";
+  readyAt: string;
+  startsAt: string;
+  // Builds that finish before this one starts
+  ahead: number;
+  // Time spent on this repository alone, without waiting
+  workMinutes: number;
+  // When the free model or embedding allowance this build waits for comes back, if it waits
+  allowanceUntil: string | null;
+}
+
 export interface RepoView {
   repo: string;
   state: RepoState;
@@ -118,6 +137,8 @@ export interface RepoView {
   updatedAt: string | null;
   resumeAt: string | null;
   href: string | null;
+  eta: RepoEta | null;
+  builder: BuilderStatus;
 }
 
 export interface QueueView {
@@ -125,6 +146,7 @@ export interface QueueView {
   waiting: RepoView[];
   review: RepoView[];
   recent: RepoView[];
+  builder: BuilderStatus;
   updatedAt: string;
 }
 

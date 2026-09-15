@@ -3,10 +3,14 @@ import type { RepoView } from "@everyrepo/core/requests";
 import { ApiProblem, pollRepo, requestRepo, type Poller } from "./api.ts";
 import { h, icon } from "./dom.ts";
 import { formatCount, languageName } from "./format.ts";
+import { showOneRequestNotice } from "./notice.ts";
 import {
+  estimateReasons,
+  inAbout,
   milestones,
   pollDelay,
   primaryAction,
+  readyTime,
   relativeTime,
   sizeName,
   statusCopy,
@@ -78,6 +82,54 @@ function progressBar(view: RepoView): HTMLElement | null {
       h("span", { class: "progress-fill", style: `width: ${percent}%` }),
     ),
     h("span", { class: "progress-value mono" }, `${view.progress.percent}%`),
+  );
+}
+
+const LABELS = {
+  line: "Estimated ready",
+  "if-requested": "If you request it now",
+  "if-approved": "If it is approved now",
+} as const;
+
+// When the wiki should be ready, and what that time is made of
+function estimatePanel(view: RepoView, now: number): HTMLElement | null {
+  const eta = view.eta;
+  if (!eta) return null;
+  return h(
+    "section",
+    { class: "estimate", "aria-label": "Estimate" },
+    h(
+      "div",
+      { class: "estimate-head" },
+      h("span", { class: "estimate-label" }, LABELS[eta.basis]),
+      h("strong", { class: "estimate-when" }, readyTime(eta.readyAt, now)),
+      h("span", { class: "estimate-in" }, inAbout(eta.readyAt, now)),
+    ),
+    h(
+      "ul",
+      { class: "estimate-reasons" },
+      ...estimateReasons(view, now).map((reason) => h("li", {}, reason)),
+    ),
+    h(
+      "p",
+      { class: "estimate-note" },
+      "Estimates follow the free model allowances, the builds ahead and the size of the code, and they update as work finishes.",
+    ),
+  );
+}
+
+const WAITING_STATES = new Set(["queued", "building", "paused", "review"]);
+
+function offlineBanner(view: RepoView, now: number): HTMLElement | null {
+  if (view.builder.online || !WAITING_STATES.has(view.state)) return null;
+  const seen = view.builder.lastSeenAt
+    ? ` It was last seen ${relativeTime(view.builder.lastSeenAt, now)}.`
+    : "";
+  return h(
+    "p",
+    { class: "offline" },
+    icon("clock"),
+    `The builder is offline right now. Your place in line is kept, and building carries on when it is back.${seen}`,
   );
 }
 
@@ -184,10 +236,14 @@ export function mountStatusPage(): void {
       problem = undefined;
       poller?.refresh();
     } catch (error) {
-      problem =
-        error instanceof ApiProblem
-          ? error
-          : new ApiProblem(error instanceof Error ? error.message : "Try again.", 0, "check");
+      if (error instanceof ApiProblem && error.code === "one-at-a-time") {
+        showOneRequestNotice(error.active, error.message);
+      } else {
+        problem =
+          error instanceof ApiProblem
+            ? error
+            : new ApiProblem(error instanceof Error ? error.message : "Try again.", 0, "check");
+      }
     } finally {
       requesting = false;
       render();
@@ -215,7 +271,7 @@ export function mountStatusPage(): void {
       return;
     }
     const view = latest;
-    const copy = statusCopy(view, now);
+    const copy = statusCopy(view, now, { withEta: false });
     const steps = milestones(view, now);
     const live = pollDelay(view) !== null;
     // Screen readers hear a change of state once, not every redraw
@@ -240,11 +296,13 @@ export function mountStatusPage(): void {
           h("span", { class: "status-mark", "aria-hidden": "true" }),
           h("div", {}, h("h2", {}, copy.title), copy.detail ? h("p", {}, copy.detail) : null),
         ),
+        offlineBanner(view, now),
         progressBar(view),
         problem ? h("p", { class: "status-problem" }, problem.message) : null,
         actions(view),
         check,
       ),
+      estimatePanel(view, now),
       settled
         ? null
         : h(

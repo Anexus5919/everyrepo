@@ -23,6 +23,7 @@ import Base from "../../layouts/Base.astro";
         </button>
       </header>
       <p class="queue-summary" aria-live="polite" data-queue-summary>Loading the queue</p>
+      <p class="queue-offline" data-queue-offline hidden></p>
       <div class="queue-root" data-queue-root>
         <noscript><p class="queue-empty">This page needs JavaScript to show the live queue.</p></noscript>
       </div>
@@ -83,6 +84,27 @@ import Base from "../../layouts/Base.astro";
     border-bottom: 1px solid var(--line-soft);
     font-size: var(--t-caption);
     color: var(--text-3);
+  }
+
+  .queue-offline {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--panel);
+    font-size: var(--t-caption);
+    color: var(--text-2);
+  }
+
+  .queue-offline[hidden] {
+    display: none;
+  }
+
+  .build-eta {
+    font-size: var(--t-caption);
+    color: var(--text-2);
   }
 
   .queue-root {

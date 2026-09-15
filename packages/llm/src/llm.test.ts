@@ -177,6 +177,18 @@ describe("router", () => {
     expect(() => router.models("missing")).toThrow(/No models configured/);
   });
 
+  it("names the task when no model can take it, so a job can wait for that task's allowance", async () => {
+    const router = new LlmRouter({
+      summary: [fakeModel("only", [new ModelUnavailableError("daily request limit reached")])],
+    });
+    const request = { messages: [{ role: "user" as const, content: "sum" }] };
+    const error = await router
+      .complete("summary", request, { promptVersion: "1" })
+      .catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(ModelUnavailableError);
+    expect((error as ModelUnavailableError).task).toBe("summary");
+  });
+
   it("parses fenced JSON and reports schema problems", () => {
     const schema = z.object({ pages: z.array(z.string()) });
     expect(parseJson('```json\n{"pages":["a"]}\n```', schema)).toEqual({

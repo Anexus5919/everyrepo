@@ -2,7 +2,7 @@ import { parseRepoRef } from "@everyrepo/core";
 import { ensureRepo, eq, indexJobs, openAppDb, repos, type AppDb } from "@everyrepo/db";
 import type { GithubClient } from "@everyrepo/github";
 import { enqueueJob, StageDeferredError, type StageHandler } from "@everyrepo/queue";
-import { createRequestService, markPublished } from "@everyrepo/requests";
+import { builderStatus, createRequestService, markPublished } from "@everyrepo/requests";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createWorker, type RuntimeFactory } from "./worker.ts";
 
@@ -93,6 +93,23 @@ describe("worker", () => {
       "publish",
     ]);
     expect(logs[0]).toBe("queued 1 approved builds that had no job");
+  });
+
+  it("reports in while it runs and goes offline when it stops", async () => {
+    const worker = createWorker({
+      db,
+      service: createRequestService({ db, github }),
+      runtimeFor: async () => ({ handlers: {}, close: () => {} }),
+      workerId: "beating",
+    });
+    expect(builderStatus(db).online).toBe(false);
+    await worker.step();
+    expect(builderStatus(db).online).toBe(true);
+    worker.heartbeat();
+    expect(builderStatus(db, new Date(Date.now() + 60_000)).online).toBe(true);
+    expect(builderStatus(db, new Date(Date.now() + 5 * 60_000)).online).toBe(false);
+    worker.stop();
+    expect(builderStatus(db)).toEqual({ online: false, lastSeenAt: null });
   });
 
   it("leaves command line jobs alone and fails a job whose runtime cannot open", async () => {

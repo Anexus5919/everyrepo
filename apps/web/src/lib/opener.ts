@@ -4,6 +4,7 @@ import { ApiProblem, lookupRepo, requestRepo } from "./api.ts";
 import { h, icon } from "./dom.ts";
 import { formatCount, languageName } from "./format.ts";
 import { primaryAction, sizeName, statusCopy, statusHref } from "./repo-status.ts";
+import { showOneRequestNotice } from "./notice.ts";
 import { prepareTurnstile, turnstileToken } from "./turnstile.ts";
 
 export interface KnownWiki {
@@ -44,6 +45,8 @@ function knownView(wiki: KnownWiki): RepoView {
     updatedAt: null,
     resumeAt: null,
     href: `/${wiki.repo}`,
+    eta: null,
+    builder: { online: true, lastSeenAt: null },
   };
 }
 
@@ -96,7 +99,23 @@ export function renderPreviewCard(view: RepoView, wiki?: KnownWiki): HTMLElement
         h("strong", {}, copy.title),
         copy.detail ? h("span", { class: "status-detail" }, copy.detail) : null,
       ),
+      offlineNote(view),
     ),
+  );
+}
+
+const WAITING_STATES = new Set(["available", "queued", "building", "paused", "review"]);
+
+// Builds only move while the worker runs, so a waiting repository says when it is not running
+function offlineNote(view: RepoView): HTMLElement | null {
+  if (view.builder.online || !WAITING_STATES.has(view.state)) return null;
+  return h(
+    "span",
+    { class: "preview-offline" },
+    icon("clock"),
+    view.state === "available"
+      ? "The builder is offline right now. A request still takes its place in line."
+      : "The builder is offline right now. The place in line is kept.",
   );
 }
 
@@ -378,8 +397,13 @@ export function mountOpener(form: HTMLFormElement, known: readonly KnownWiki[]):
         error instanceof ApiProblem || error instanceof Error
           ? error.message
           : "Something went wrong. Try again.";
-      if (error instanceof ApiProblem) renderPreview({ kind: "problem", message });
-      else setNote(message);
+      if (error instanceof ApiProblem && error.code === "one-at-a-time") {
+        showOneRequestNotice(error.active, message);
+      } else if (error instanceof ApiProblem) {
+        renderPreview({ kind: "problem", message });
+      } else {
+        setNote(message);
+      }
     } finally {
       busy = false;
       submit.disabled = false;

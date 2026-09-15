@@ -457,6 +457,19 @@ const { id, variant = "hero", shortcut = false, label = "Open", value = "" } = A
     box-shadow: inset 0 0 0 2px var(--text-3);
   }
 
+  .preview :global(.preview-offline) {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--t-caption);
+    color: var(--text-3);
+  }
+
+  .preview :global(.preview-offline .icon) {
+    flex-shrink: 0;
+    color: var(--accent-2);
+  }
+
   .preview :global(.preview-icon) {
     display: grid;
     place-items: center;

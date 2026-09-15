@@ -2,7 +2,7 @@ import type { QueueView, RepoView } from "@everyrepo/core/requests";
 import { pollQueue, type ApiProblem } from "./api.ts";
 import { h, icon } from "./dom.ts";
 import { formatCount } from "./format.ts";
-import { relativeTime, sizeName, statusCopy, statusHref } from "./repo-status.ts";
+import { relativeTime, shortReadyTime, sizeName, statusCopy, statusHref } from "./repo-status.ts";
 
 const REVIEW_REASONS: Record<string, string> = {
   large: "Large repository",
@@ -75,6 +75,9 @@ function building(views: RepoView[], now: number): HTMLElement {
           h("span", { style: `width: ${Math.max(2, percent)}%` }),
         ),
         copy.detail ? h("span", { class: "build-detail" }, copy.detail) : null,
+        view.eta
+          ? h("span", { class: "build-eta" }, `Ready by ${shortReadyTime(view.eta.readyAt)}`)
+          : null,
       );
     }),
   );
@@ -108,7 +111,8 @@ function rows(
 export function mountQueuePage(): void {
   const root = document.querySelector<HTMLElement>("[data-queue-root]");
   const summary = document.querySelector<HTMLElement>("[data-queue-summary]");
-  if (!root || !summary) return;
+  const offline = document.querySelector<HTMLElement>("[data-queue-offline]");
+  if (!root || !summary || !offline) return;
   let latest: QueueView | undefined;
   let problem: ApiProblem | undefined;
 
@@ -125,6 +129,12 @@ export function mountQueuePage(): void {
         ? problem.message
         : `${queue.building.length} being written, ${queue.waiting.length} in line, ${queue.review.length} waiting for approval. Updates by itself.`,
     );
+    offline!.hidden =
+      queue.builder.online || (queue.building.length === 0 && queue.waiting.length === 0);
+    offline!.replaceChildren(
+      icon("clock"),
+      "The builder is offline right now. Every place in line is kept, and the estimates assume it starts again soon.",
+    );
     root!.replaceChildren(
       section(
         "Being written now",
@@ -140,8 +150,10 @@ export function mountQueuePage(): void {
           queue.waiting,
           (view) => (view.queue ? String(view.queue.position) : icon("clock")),
           (view) => {
-            const copy = statusCopy(view, now);
-            return view.queue ? null : copy.title;
+            const ready = view.eta ? `Ready by ${shortReadyTime(view.eta.readyAt)}` : null;
+            return view.queue
+              ? ready
+              : [statusCopy(view, now).title, ready].filter(Boolean).join(". ");
           },
         ),
       ),

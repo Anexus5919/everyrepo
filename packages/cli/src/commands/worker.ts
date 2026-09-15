@@ -7,6 +7,7 @@ import { createIndexHandlers, createWikiHandlers } from "@everyrepo/pipeline";
 import type { Job } from "@everyrepo/queue";
 import { markPublished } from "@everyrepo/requests";
 import { Command } from "commander";
+import { createAllowanceClock, type AllowanceClock } from "../build-work.ts";
 import {
   openContext,
   openEmbedder,
@@ -55,6 +56,7 @@ async function runtimeFor(
   job: Job,
   repo: RepoRow,
   build: boolean,
+  clock: AllowanceClock,
 ): Promise<JobRuntime> {
   const ref = parseRepoRef(repo.fullName);
   const base = { config: context.config, appDb: context.appDb, ref, repoId: repo.id };
@@ -62,14 +64,23 @@ async function runtimeFor(
   if (job.kind === "full") {
     const configured = await openEmbedder(context);
     return {
-      handlers: createIndexHandlers({ ...base, fetch: true, embedder: configured?.embedder }),
+      handlers: createIndexHandlers({
+        ...base,
+        fetch: true,
+        embedder: configured?.embedder,
+        embeddingsAt: () => clock.embeddingsAt(),
+      }),
       close: () => configured?.server.stop(),
     };
   }
   if (job.kind === "wiki") {
     const llm = openLlm(context);
     return {
-      handlers: createWikiHandlers({ ...base, router: llm.router }),
+      handlers: createWikiHandlers({
+        ...base,
+        router: llm.router,
+        allowanceAt: (task) => clock.modelsAt(task),
+      }),
       close: () => llm.close(),
     };
   }
@@ -87,8 +98,9 @@ async function runtimeFor(
           if (build) await buildWebsite(out, log);
           const at = new Date();
           for (const wiki of result.ready) {
-            if (wiki.publishedSha !== wiki.sha)
+            if (wiki.publishedSha !== wiki.sha) {
               markPublished(context.appDb, wiki.repoId, wiki.sha, at);
+            }
           }
           progress(steps, steps);
           return { wikis: result.ready.length, built: build };
@@ -112,18 +124,28 @@ export function workerCommand(): Command {
     .action(async (options: WorkerOptions) => {
       const context = await openContext();
       const log = (message: string) => console.log(`${timestamp()} ${message}`);
+      const clock = createAllowanceClock(context.appDb, context.config);
       const worker = createWorker({
         db: context.appDb,
         service: openRequests(context),
-        runtimeFor: (job, repo) => runtimeFor(context, job, repo, options.build),
+        runtimeFor: (job, repo) => runtimeFor(context, job, repo, options.build, clock),
         log,
       });
+      // Status pages show the builder as online while these heartbeats keep coming
+      worker.heartbeat();
+      const beat = setInterval(() => worker.heartbeat(), 15_000);
+      const shutdown = () => {
+        clearInterval(beat);
+        worker.stop();
+        context.close();
+      };
+
       let busy = false;
       let stopping = false;
       // The first Ctrl+C lets the current job finish; a second one stops at once and the job is retried later
       const stop = () => {
         if (stopping || !busy) {
-          context.close();
+          shutdown();
           process.exit(130);
         }
         stopping = true;
@@ -143,7 +165,7 @@ export function workerCommand(): Command {
           await sleep(Number(options.poll) * 1_000);
         }
       } finally {
-        context.close();
+        shutdown();
       }
     });
 }

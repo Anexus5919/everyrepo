@@ -1,8 +1,11 @@
 import {
   BUILD_STAGES,
   buildPercent,
+  type BuilderStatus,
   type BuildProgress,
   type GithubSummary,
+  type RepoEta,
+  type RepoState,
   type RepoView,
   type SizeEstimate,
 } from "@everyrepo/core";
@@ -139,8 +142,11 @@ function summaryFromRow(repo: RepoRow): GithubSummary {
 export interface DescribeContext {
   now: Date;
   positions: Positions;
+  builder: BuilderStatus;
   github?: GithubRepository | undefined;
   estimate?: SizeEstimate | undefined;
+  // Estimates when the wiki will be ready, given the state the record is in
+  etaFor?: ((record: RepoRecord, state: RepoState) => RepoEta | null) | undefined;
 }
 
 function latest(...dates: Array<Date | null | undefined>): Date | null {
@@ -170,51 +176,57 @@ export function describeRecord(record: RepoRecord, context: DescribeContext): Re
     ),
     resumeAt: null,
     href: null,
+    eta: null,
+    builder: context.builder,
   };
+  const finish = (view: RepoView): RepoView => ({
+    ...view,
+    eta: context.etaFor?.(record, view.state) ?? null,
+  });
 
-  if (repo.publishedAt) return { ...base, state: "ready", href: `/${name}` };
+  if (repo.publishedAt) return finish({ ...base, state: "ready", href: `/${name}` });
   if (openJob?.status === "running") {
-    return { ...base, state: "building", progress: progressFor(openJob, stages) };
+    return finish({ ...base, state: "building", progress: progressFor(openJob, stages) });
   }
   if (openJob) {
     const progress = progressFor(openJob, stages);
     if (isPaused(openJob, context.now)) {
-      return {
+      return finish({
         ...base,
         state: "paused",
         reason: reason("allowance"),
         resumeAt: iso(openJob.runAfter),
         progress,
-      };
+      });
     }
     const retrying =
       openJob.runAfter !== null && openJob.runAfter.getTime() > context.now.getTime();
-    return {
+    return finish({
       ...base,
       state: "queued",
       queue: context.positions.get(openJob.id) ?? null,
       progress,
       reason: retrying ? reason("retry") : null,
       resumeAt: retrying ? iso(openJob.runAfter) : null,
-    };
+    });
   }
   if (request?.decision === "review") {
-    return { ...base, state: "review", reason: reason(request.reason ?? "large") };
+    return finish({ ...base, state: "review", reason: reason(request.reason ?? "large") });
   }
   if (request?.decision === "rejected") {
-    return { ...base, state: "rejected", reason: reason("declined") };
+    return finish({ ...base, state: "rejected", reason: reason("declined") });
   }
   if (request?.decision === "approved") {
     if (lastJob?.status === "failed" || lastJob?.status === "cancelled") {
       const failed = stages.find((row) => row.status === "failed")?.stage;
-      return {
+      return finish({
         ...base,
         state: "failed",
         reason: reason("failed", BUILD_STAGES.find((stage) => stage.key === failed)?.label),
         progress: progressFor(lastJob, stages),
-      };
+      });
     }
-    return { ...base, state: "queued" };
+    return finish({ ...base, state: "queued" });
   }
-  return base;
+  return finish(base);
 }

@@ -15,8 +15,27 @@ export class ApiProblem extends Error {
     readonly status: number,
     readonly code: string,
     readonly retryAfterMs: number | null = null,
+    // The request this person is already waiting on, when the API refuses a second one
+    readonly active: RepoView | null = null,
   ) {
     super(message);
+  }
+}
+
+const REQUESTER_KEY = "everyrepo.requester";
+let memoryId: string | undefined;
+
+// A random id kept in this browser, so the one request a person has in progress stays with them across days
+export function requesterId(): string {
+  try {
+    const saved = localStorage.getItem(REQUESTER_KEY);
+    if (saved && /^[A-Za-z0-9-]{16,64}$/.test(saved)) return saved;
+    const created = crypto.randomUUID();
+    localStorage.setItem(REQUESTER_KEY, created);
+    return created;
+  } catch {
+    memoryId ??= crypto.randomUUID();
+    return memoryId;
   }
 }
 
@@ -41,13 +60,14 @@ async function call<T>(
     return { status: 304, body: null, etag: response.headers.get("etag") };
   const body = (await response.json().catch(() => null)) as T | ApiError | null;
   if (!response.ok) {
-    const problem = (body as ApiError | null)?.error;
+    const failure = body as (ApiError & { active?: RepoView }) | null;
     const retryAfter = Number(response.headers.get("retry-after"));
     throw new ApiProblem(
-      problem?.message ?? "Something went wrong. Try again in a moment.",
+      failure?.error.message ?? "Something went wrong. Try again in a moment.",
       response.status,
-      problem?.code ?? "unknown",
+      failure?.error.code ?? "unknown",
       retryAfter > 0 ? retryAfter * 1_000 : null,
+      failure?.active ?? null,
     );
   }
   return { status: response.status, body: body as T, etag: response.headers.get("etag") };
@@ -73,7 +93,7 @@ export async function requestRepo(repo: string, token?: string): Promise<SubmitR
   const { body } = await call<SubmitResult>("/api/requests", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(token ? { repo, token } : { repo }),
+    body: JSON.stringify({ repo, client: requesterId(), ...(token ? { token } : {}) }),
   });
   return body!;
 }

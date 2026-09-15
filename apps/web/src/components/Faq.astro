@@ -43,7 +43,7 @@ const questions = [
 ];
 ---
 
-<div class="faq">
+<div class="faq" data-faq>
   {
     questions.map((item, index) => (
       <details class="item" open={index === 0}>
@@ -51,11 +51,67 @@ const questions = [
           {item.question}
           <span class="toggle" aria-hidden="true" />
         </summary>
-        <p>{item.answer}</p>
+        <div class="answer">
+          <p>{item.answer}</p>
+        </div>
       </details>
     ))
   }
 </div>
+
+<script>
+  // Answers slide open and closed, and opening one question closes the one that was open
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+  document.querySelectorAll<HTMLElement>("[data-faq]").forEach((faq) => {
+    const items = [...faq.querySelectorAll<HTMLDetailsElement>("details")];
+    const running = new WeakMap<HTMLDetailsElement, Animation>();
+    const isOpen = (item: HTMLDetailsElement) => item.open && !item.hasAttribute("data-closing");
+
+    const slide = (item: HTMLDetailsElement, open: boolean) => {
+      const answer = item.querySelector<HTMLElement>(".answer");
+      if (!answer) return;
+      // Start from wherever the answer is now, so a quick second click reverses smoothly
+      const fromHeight = item.open ? answer.getBoundingClientRect().height : 0;
+      const fromOpacity = item.open ? getComputedStyle(answer).opacity : "0";
+      running.get(item)?.cancel();
+      item.toggleAttribute("data-closing", !open);
+      if (open) item.open = true;
+      if (reduceMotion.matches) {
+        if (!open) item.open = false;
+        item.removeAttribute("data-closing");
+        return;
+      }
+      const animation = answer.animate(
+        [
+          { height: `${fromHeight}px`, opacity: fromOpacity },
+          { height: `${open ? answer.scrollHeight : 0}px`, opacity: open ? 1 : 0 },
+        ],
+        { duration: 320, easing: "cubic-bezier(0.16, 1, 0.3, 1)" },
+      );
+      running.set(item, animation);
+      animation.finished.then(
+        () => {
+          running.delete(item);
+          if (open) return;
+          item.open = false;
+          item.removeAttribute("data-closing");
+        },
+        // A cancelled slide was replaced by one going the other way
+        () => {},
+      );
+    };
+
+    for (const item of items) {
+      item.querySelector("summary")?.addEventListener("click", (event) => {
+        event.preventDefault();
+        const open = !isOpen(item);
+        if (open) for (const other of items) if (other !== item && isOpen(other)) slide(other, false);
+        slide(item, open);
+      });
+    }
+  });
+</script>
 
 <style>
   .faq {
@@ -112,8 +168,16 @@ const questions = [
     transform: rotate(90deg);
   }
 
-  .item[open] .toggle::after {
+  .item[open]:not([data-closing]) summary {
+    color: var(--accent-2);
+  }
+
+  .item[open]:not([data-closing]) .toggle::after {
     transform: rotate(0deg);
+  }
+
+  .answer {
+    overflow: hidden;
   }
 
   p {

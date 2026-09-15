@@ -80,6 +80,7 @@
   --code-token-string-expression: #c7d39a;
   --code-token-punctuation: #9a9282;
   --code-token-link: #f6b16c;
+  --wordmark-streak: #ffd8ad;
 }
 
 :root[data-theme="light"] {
@@ -127,6 +128,7 @@
   --code-token-string-expression: #5d6b2c;
   --code-token-punctuation: #7b7568;
   --code-token-link: #b8532f;
+  --wordmark-streak: #8f3d20;
 }
 
 *,

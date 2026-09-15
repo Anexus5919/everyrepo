@@ -1,0 +1,183 @@
+---
+// A comparison tool for choosing the site palette; it keeps the choice for later visits
+const palettes = [
+  { id: "ember", name: "Ember", swatch: ["#0d0c0a", "#ee7a43", "#f6b16c"] },
+  { id: "tide", name: "Tide", swatch: ["#0a0f12", "#2fd3a6", "#4cb6ff"] },
+  { id: "cobalt", name: "Cobalt", swatch: ["#0b0c10", "#5b8cff", "#56d4f5"] },
+  { id: "moss", name: "Moss", swatch: ["#0b0d0a", "#9bd46c", "#e2c46a"] },
+  { id: "amethyst", name: "Amethyst", swatch: ["#0d0b12", "#a98bff", "#ff9e7a"] },
+];
+---
+
+<div class="palette-picker" data-palette-picker>
+  <button class="picker-toggle" type="button" aria-expanded="false" data-picker-toggle>
+    <span class="picker-dots" aria-hidden="true"><span></span><span></span><span></span></span>
+    Palette <span class="picker-current" data-picker-current>Ember</span>
+  </button>
+  <div class="picker-list" role="radiogroup" aria-label="Site palette" data-picker-list hidden>
+    {
+      palettes.map((palette) => (
+        <button type="button" role="radio" aria-checked="false" data-palette-option={palette.id}>
+          <span class="swatch" aria-hidden="true">
+            {palette.swatch.map((color) => (
+              <span style={`background:${color}`} />
+            ))}
+          </span>
+          {palette.name}
+        </button>
+      ))
+    }
+  </div>
+</div>
+
+<script>
+  const picker = document.querySelector<HTMLElement>("[data-palette-picker]");
+  if (picker) {
+    const toggle = picker.querySelector<HTMLButtonElement>("[data-picker-toggle]")!;
+    const list = picker.querySelector<HTMLElement>("[data-picker-list]")!;
+    const current = picker.querySelector<HTMLElement>("[data-picker-current]")!;
+    const options = [...picker.querySelectorAll<HTMLButtonElement>("[data-palette-option]")];
+
+    const show = (id: string) => {
+      const option = options.find((item) => item.dataset.paletteOption === id) ?? options[0]!;
+      options.forEach((item) => item.setAttribute("aria-checked", String(item === option)));
+      current.textContent = option.textContent?.trim() ?? "";
+    };
+
+    const choose = (id: string) => {
+      if (id === "ember") delete document.documentElement.dataset.palette;
+      else document.documentElement.dataset.palette = id;
+      try {
+        localStorage.setItem("palette", id);
+      } catch {
+        // The choice then lasts only for this page view
+      }
+      show(id);
+    };
+
+    show(document.documentElement.dataset.palette ?? "ember");
+    toggle.addEventListener("click", () => {
+      list.hidden = !list.hidden;
+      toggle.setAttribute("aria-expanded", String(!list.hidden));
+    });
+    options.forEach((option) =>
+      option.addEventListener("click", () => choose(option.dataset.paletteOption!)),
+    );
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !list.hidden) {
+        list.hidden = true;
+        toggle.setAttribute("aria-expanded", "false");
+      }
+    });
+  }
+</script>
+
+<style>
+  .palette-picker {
+    position: fixed;
+    left: 16px;
+    bottom: 16px;
+    z-index: 85;
+    display: flex;
+    flex-direction: column-reverse;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .picker-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 36px;
+    padding: 0 12px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--panel);
+    box-shadow: var(--shadow);
+    font-size: var(--t-caption);
+    color: var(--text-2);
+    cursor: pointer;
+  }
+
+  .picker-toggle:hover {
+    color: var(--text);
+    border-color: var(--text-3);
+  }
+
+  .picker-current {
+    color: var(--text);
+  }
+
+  .picker-dots {
+    display: inline-flex;
+  }
+
+  .picker-dots span {
+    width: 10px;
+    height: 10px;
+    margin-left: -3px;
+    border: 1px solid var(--panel);
+    border-radius: 50%;
+  }
+
+  .picker-dots span:nth-child(1) {
+    margin-left: 0;
+    background: var(--bg);
+  }
+
+  .picker-dots span:nth-child(2) {
+    background: var(--accent);
+  }
+
+  .picker-dots span:nth-child(3) {
+    background: var(--accent-2);
+  }
+
+  .picker-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 180px;
+    padding: 6px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--panel);
+    box-shadow: var(--shadow);
+  }
+
+  .picker-list[hidden] {
+    display: none;
+  }
+
+  .picker-list button {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 8px;
+    border: 0;
+    border-radius: var(--radius);
+    background: transparent;
+    font-size: var(--t-ui);
+    text-align: left;
+    color: var(--text-2);
+    cursor: pointer;
+  }
+
+  .picker-list button:hover,
+  .picker-list button[aria-checked="true"] {
+    background: var(--panel-2);
+    color: var(--text);
+  }
+
+  .swatch {
+    display: inline-flex;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+  }
+
+  .swatch span {
+    width: 12px;
+    height: 16px;
+  }
+</style>

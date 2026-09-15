@@ -709,7 +709,10 @@ const names = [...new Set(items.map((item) => item.repo))].join(", ");
     new MutationObserver(() => {
       colors = read();
       refresh();
-    }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    }).observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme", "data-palette"],
+    });
   }
 
   document.querySelectorAll<HTMLElement>("[data-pipeline]").forEach(start);

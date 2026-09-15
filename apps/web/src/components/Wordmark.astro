@@ -35,26 +35,22 @@
   }
 
   function rgba(hex: string, alpha: number): string {
-    const value = parseInt(hex.replace("#", ""), 16);
+    const value = parseInt(hex.trim().replace("#", ""), 16);
     return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, ${alpha})`;
   }
 
+  // Colours come from the active palette, so the wordmark follows palette and theme changes
   function palette(): Palette {
-    return document.documentElement.dataset.theme === "light"
-      ? {
-          a: rgba("#b8532f", 0.5),
-          b: rgba("#d9823f", 0.26),
-          streak: "#8f3d20",
-          outline: rgba("#1c1a16", 0.14),
-          base: rgba("#1c1a16", 0.025),
-        }
-      : {
-          a: rgba("#ee7a43", 0.36),
-          b: rgba("#f6b16c", 0.16),
-          streak: "#ffd8ad",
-          outline: rgba("#f3efe7", 0.12),
-          base: rgba("#f3efe7", 0.02),
-        };
+    const style = getComputedStyle(document.documentElement);
+    const token = (name: string) => style.getPropertyValue(name).trim();
+    const light = document.documentElement.dataset.theme === "light";
+    return {
+      a: rgba(token("--accent"), light ? 0.5 : 0.36),
+      b: rgba(token("--accent-2"), light ? 0.26 : 0.16),
+      streak: token("--wordmark-streak"),
+      outline: rgba(token("--text"), light ? 0.14 : 0.12),
+      base: rgba(token("--text"), light ? 0.025 : 0.02),
+    };
   }
 
   function start(host: HTMLElement) {
@@ -208,7 +204,10 @@
     new MutationObserver(() => {
       colors = palette();
       draw(clock);
-    }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    }).observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme", "data-palette"],
+    });
   }
 
   document.querySelectorAll<HTMLElement>("[data-wordmark]").forEach(start);

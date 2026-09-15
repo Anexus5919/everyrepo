@@ -52,5 +52,10 @@
       "page": ["gemini-lite", "gemini-flash"],
       "ask": ["groq-oss", "groq-qwen", "gemini-lite"]
     }
+  },
+  "requests": {
+    "autoApproveMaxTier": "M",
+    "autoApprovePerDay": 3,
+    "maxWaiting": 20
   }
 }

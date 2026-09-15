@@ -33,21 +33,34 @@ TypeScript source directly and run with tsx. Tests use Vitest.
   - `wiki <owner/repo> [--until <stage>]` generates wiki content for the indexed snapshot (stages:
     summarize, plan, write, glossary); a used-up model allowance pauses the job and a rerun resumes it
   - `export <owner/repo> [--out <dir>]` writes the generated pages as Markdown files for review
-  - `site [--out <dir>]` writes the JSON the website is built from (`site` in dataDir by default)
+  - `site [--out <dir>]` writes the JSON the website is built from (`site` in dataDir by default) and
+    marks the wikis it contains as published
   - `ask <owner/repo> <question...> [--page <slug>]` answers a question with checked citations
-  - `serve [--port <n>]` runs the Ask API on 127.0.0.1 (default port 8787) for the website
+  - `serve [--port <n>]` runs the Ask and repository request API on 127.0.0.1 (default port 8787) for the
+    website; Ask is switched off when embeddings or models are not configured, requests keep working
+  - `requests list|show|approve|decline|retry <owner/repo>` reviews repositories requested on the site;
+    `approve` also adds a repository nobody asked for
+  - `worker [--once] [--poll <seconds>] [--no-build]` builds requested repositories in turn: reads the code,
+    writes the wiki, exports the site data, builds the website and marks the wiki published; it only claims
+    jobs that came from requests, so command line jobs are left alone
 - `pnpm --filter @everyrepo/web dev` runs the website; it reads the site JSON from `EVERYREPO_SITE_DATA`
-  or from `dataDir/site`, and its Ask panel calls `PUBLIC_ASK_URL` (the local `serve` address by default)
+  or from `dataDir/site`, and calls the API at `PUBLIC_API_URL` (falling back to `PUBLIC_ASK_URL`, then the
+  local `serve` address); `PUBLIC_TURNSTILE_SITE_KEY` turns on the person check before a request
 - `pnpm --filter @everyrepo/db db:generate` regenerates SQL migrations after schema changes.
 
 ## Layout
 
-- `packages/core`: shared vocabulary (size tiers, file and module kinds), repository references,
-  local config, test repository set
+- `packages/core`: shared vocabulary (size tiers, file and module kinds), repository references
+  (`readRepoInput` reads owner/name and any GitHub web, clone or SSH address and says what is wrong with
+  anything else), local config, test repository set, and the request shapes shared with the website
+  (`@everyrepo/core/requests`: build stages with public labels, repository states, views)
 - `packages/db`: Drizzle schemas and migrations for `app.sqlite` (registry, jobs) and per-snapshot
   engine databases (`engine/<owner>__<repo>/<sha>.sqlite`); re-exports drizzle query helpers so all
   packages share one instance
-- `packages/queue`: SQLite job queue with ordered stages, heartbeats, retries and resume
+- `packages/queue`: SQLite job queue with ordered stages, heartbeats, retries and resume; jobs record an
+  origin (command line or request), progress inside the running stage, and a time before which they are not
+  claimed again: deferrals for a used-up allowance wait from 15 minutes doubling to 4 hours, crashes retry
+  after a minute doubling to 30
 - `packages/repo`: resolves a repository's upstream commit and reads trees and blobs straight from
   git objects without a checkout
 - `packages/detect`: languages, file kinds, modules (npm, pnpm, Maven, Gradle, Cargo, Go, Python),
@@ -79,15 +92,32 @@ TypeScript source directly and run with tsx. Tests use Vitest.
   call). A diagram sent from a page skips planning and is explained from its boxes, arrows and the
   opening code of each box. One answer call follows; the wiki verifier drops uncited or ungrounded blocks and links
   citations to pinned lines, issues or wiki pages
+- `packages/github`: GitHub REST client for repositories and file lists, with entity tag revalidation
+  through a cache (`github_cache` in `app.sqlite`), one retry, and typed errors (not found, unavailable,
+  empty, rate limited, unreachable)
+- `packages/requests`: repository requests. A lookup sizes a repository from GitHub's file list with the
+  detector's own file classes (`estimateFromTree`) and rejects private, missing, empty and code-free
+  repositories without storing them. Rules approve tiers up to `requests.autoApproveMaxTier` within
+  `autoApprovePerDay` and `maxWaiting`; other requests wait for owner review. Each requester counts once per
+  day by a salted hash. Approved builds queue a read job, then a wiki job, then a publish job, smaller tiers
+  first; `describeRecord` turns the registry, request and jobs into the state a status page shows
 - `packages/eval`: gold question sets and retrieval metrics
 - `packages/pipeline`: index stage handlers, cost estimate, snapshot report
-- `packages/cli`: the `everyrepo` command, plus the local Ask API (streams one JSON object per line:
-  stages, then the answer or an error; local origins only, per address rate limit)
+- `packages/cli`: the `everyrepo` command, plus the local API. Ask streams one JSON object per line
+  (stages, then the answer or an error). Requests are web Request and Response handlers
+  (`src/request-api.ts`): `GET /api/repos/<owner>/<name>`, `POST /api/requests` and `GET /api/queue`, with
+  entity tags for polling, rate limits kept in `app.sqlite` under daily salted hashes of addresses, and an
+  optional Turnstile check. Both allow local origins and those in `EVERYREPO_ALLOWED_ORIGINS`
 - `apps/web`: the Astro website, static pages built from the site JSON; styles are plain CSS with theme
   tokens in `src/styles/global.css` (dark by default, light on request). The home page snaps each section
   to the viewport and shows every written wiki (hero canvas, a reader preview with a tab per wiki, an Ask
   example and an import diagram taken from other wikis (`src/lib/showcase.ts`), features, repositories,
-  audiences, method, common questions and the footer wordmark); header menus link every written wiki. Each written wiki also gets a hub at `/<owner>/<repo>`, a reader page per wiki page at
+  audiences, method, common questions and the footer wordmark); header menus link every written wiki.
+  The repository box (`src/components/RepoOpener.astro`, logic in `src/lib/opener.ts`) suggests written
+  wikis, turns a pasted link into owner/name, previews any repository live from the API and opens, requests
+  or follows it; the header button opens the same box in a dialog (`RepoDialog.astro`). `/request/?repo=`
+  follows one build through four steps and polls while something changes; `/queue/` lists builds, the line,
+  requests in review and recent wikis. Each written wiki also gets a hub at `/<owner>/<repo>`, a reader page per wiki page at
   `/<owner>/<repo>/<slug>` (page tree, cited sources beside the text, import diagrams drawn from the stored
   flowcharts by `src/lib/diagram.ts`: cycle links drawn back, columns chosen for short links, median
   ordering with swaps to cut crossings, long links routed through lanes between boxes and bundled by

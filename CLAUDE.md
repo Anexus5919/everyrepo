@@ -32,8 +32,10 @@ TypeScript source directly and run with tsx. Tests use Vitest.
     summarize, plan, write, glossary); a used-up model allowance pauses the job and a rerun resumes it
   - `export <owner/repo> [--out <dir>]` writes the generated pages as Markdown files for review
   - `site [--out <dir>]` writes the JSON the website is built from (`site` in dataDir by default)
+  - `ask <owner/repo> <question...>` answers a question from the indexed code with checked citations
+  - `serve [--port <n>]` runs the Ask API on 127.0.0.1 (default port 8787) for the website
 - `pnpm --filter @everyrepo/web dev` runs the website; it reads the site JSON from `EVERYREPO_SITE_DATA`
-  or from `dataDir/site`
+  or from `dataDir/site`, and its Ask panel calls `PUBLIC_ASK_URL` (the local `serve` address by default)
 - `pnpm --filter @everyrepo/db db:generate` regenerates SQL migrations after schema changes.
 
 ## Layout
@@ -67,16 +69,23 @@ TypeScript source directly and run with tsx. Tests use Vitest.
   blocks, names missing from the cited sources and code not copied from them, then links citations
   to commit-pinned GitHub lines. Diagrams come from the import graph. Results are stored in the
   engine database and reused while inputs are unchanged; generated text passes through `plainText`
+- `packages/ask`: answers questions about a repository: best chunks of the top ranked files mixed with
+  hybrid chunk hits, packed under a size budget, one model call through the `ask` task, then the wiki
+  verifier drops uncited or ungrounded blocks and links citations to pinned lines
 - `packages/eval`: gold question sets and retrieval metrics
 - `packages/pipeline`: index stage handlers, cost estimate, snapshot report
-- `packages/cli`: the `everyrepo` command
+- `packages/cli`: the `everyrepo` command, plus the local Ask API (streams one JSON object per line:
+  stages, then the answer or an error; local origins only, per address rate limit)
 - `apps/web`: the Astro website, static pages built from the site JSON; styles are plain CSS with theme
   tokens in `src/styles/global.css` (dark by default, light on request). The home page snaps each section
   to the viewport and shows every written wiki (hero canvas, a reader preview with a tab per wiki, the
   footer wordmark). Each written wiki also gets a hub at `/<owner>/<repo>`, a reader page per wiki page at
   `/<owner>/<repo>/<slug>` (page tree, cited sources beside the text, import diagrams drawn from the stored
   flowcharts by `src/lib/diagram.ts`) and a glossary; each page is also emitted as
-  `/preview/<owner>__<repo>/<slug>.json` for the home preview. Motion plays on hover or focus
+  `/preview/<owner>__<repo>/<slug>.json` for the home preview. Hubs and reader pages open an Ask panel
+  (`src/components/Ask.astro`, answer rendering in `src/lib/ask-render.ts`). First visits get a five step
+  guide (`src/components/Guide.astro`); theme changes spread from the control that was used
+  (`src/lib/theme.ts`). Motion plays on hover or focus
 
 ## Rules
 

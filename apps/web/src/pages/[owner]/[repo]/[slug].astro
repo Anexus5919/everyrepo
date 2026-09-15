@@ -1,5 +1,6 @@
 ---
 import type { SitePage, SiteWiki } from "@everyrepo/core";
+import Ask from "../../../components/Ask.astro";
 import DiagramViewer from "../../../components/DiagramViewer.astro";
 import WikiTree from "../../../components/WikiTree.astro";
 import Base from "../../../layouts/Base.astro";
@@ -42,6 +43,10 @@ const previous = position > 0 ? sequence[position - 1] : undefined;
 const next = position >= 0 ? sequence[position + 1] : undefined;
 const minutes = Math.max(1, Math.round(wordCount(page.markdown ?? "") / 230));
 const reading = page.section ? [] : page.readingOrder.slice(0, 6);
+const suggestions = [
+  `How does ${page.title} work?`,
+  ...page.readingOrder.slice(0, 2).map((item) => `What does ${item.path.split("/").pop()} do?`),
+];
 ---
 
 <Base
@@ -135,6 +140,16 @@ const reading = page.section ? [] : page.readingOrder.slice(0, 6);
             )
           }
         </div>
+        <button class="ask-trigger" type="button" data-ask-open>
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"
+            ><path
+              d="M3 3.5h10a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H8l-3 2.5v-2.5H3a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1z"
+              stroke="currentColor"
+              stroke-width="1.3"
+              stroke-linejoin="round"></path></svg
+          >
+          Ask a question about this code
+        </button>
       </header>
 
       <div class="prose" set:html={html} />
@@ -215,6 +230,7 @@ const reading = page.section ? [] : page.readingOrder.slice(0, 6);
     </aside>
     <DiagramViewer />
   </div>
+  <Ask repo={wiki.repo} sha={wiki.sha} suggestions={suggestions} />
 </Base>
 
 <script>
@@ -609,6 +625,30 @@ const reading = page.section ? [] : page.readingOrder.slice(0, 6);
   }
 
   .meta a:hover {
+    color: var(--text);
+  }
+
+  .ask-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    width: fit-content;
+    height: 34px;
+    margin-top: 6px;
+    padding: 0 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: transparent;
+    font-size: var(--t-caption);
+    color: var(--text-2);
+    cursor: pointer;
+    transition:
+      border-color 140ms ease,
+      color 140ms ease;
+  }
+
+  .ask-trigger:hover {
+    border-color: var(--text-3);
     color: var(--text);
   }
 

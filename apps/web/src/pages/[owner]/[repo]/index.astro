@@ -1,5 +1,6 @@
 ---
 import type { SiteWiki } from "@everyrepo/core";
+import Ask from "../../../components/Ask.astro";
 import BookIcon from "../../../components/BookIcon.astro";
 import Base from "../../../layouts/Base.astro";
 import { formatCount, languageName, shortSha } from "../../../lib/format.ts";
@@ -51,6 +52,16 @@ const minutes = readingMinutes([wiki]);
 const readingTime = minutes >= 90 ? `${(minutes / 60).toFixed(1)} h` : `${minutes} min`;
 const stack = technologies(wiki).slice(0, 12);
 const terms = wiki.glossary.slice(0, 8);
+
+// Specific pages make better first questions than broad sections
+const askTopics = readablePages(wiki)
+  .filter((page) => page.slug !== "overview" && !page.section)
+  .sort((a, b) => Number(b.parentSlug !== null) - Number(a.parentSlug !== null))
+  .slice(0, 2);
+const suggestions = [
+  ...askTopics.map((page) => `How does ${page.title} work?`),
+  ...(startFiles[0] ? [`What does ${startFiles[0].path.split("/").pop()} do?`] : []),
+];
 ---
 
 <Base
@@ -79,6 +90,19 @@ const terms = wiki.glossary.slice(0, 8);
             View on GitHub
           </a>
         </div>
+        <form class="ask-bar" data-ask-launch>
+          <svg class="ask-bar-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"
+            ><path
+              d="M3 3.5h10a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H8l-3 2.5v-2.5H3a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1z"
+              stroke="currentColor"
+              stroke-width="1.3"
+              stroke-linejoin="round"></path><path d="M5 6.5h6M5 9h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"
+            ></path></svg
+          >
+          <label class="sr-only" for="hub-ask">Ask a question about {wiki.name}</label>
+          <input id="hub-ask" name="question" maxlength="300" autocomplete="off" placeholder={`Ask a question about ${wiki.name}`} />
+          <button class="btn btn-solid" type="submit">Ask</button>
+        </form>
       </div>
 
       {
@@ -214,6 +238,8 @@ const terms = wiki.glossary.slice(0, 8);
       </section>
     )
   }
+
+  <Ask repo={wiki.repo} sha={wiki.sha} suggestions={suggestions} />
 </Base>
 
 <style>
@@ -272,6 +298,45 @@ const terms = wiki.glossary.slice(0, 8);
     flex-wrap: wrap;
     gap: 10px;
     margin-top: 6px;
+  }
+
+  .ask-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    max-width: 560px;
+    height: 52px;
+    margin-top: 4px;
+    padding: 0 6px 0 16px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--panel);
+    color: var(--text-3);
+    transition: border-color 160ms ease;
+  }
+
+  .ask-bar:focus-within {
+    border-color: var(--text-3);
+  }
+
+  .ask-bar input {
+    flex-grow: 1;
+    min-width: 0;
+    height: 100%;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    font-size: var(--t-small);
+    color: var(--text);
+  }
+
+  .ask-bar input::placeholder {
+    color: var(--text-3);
+  }
+
+  .ask-bar:focus-within .ask-bar-icon {
+    color: var(--accent);
   }
 
   .start-card {

@@ -19,6 +19,20 @@
           >
         </p>
       </div>
+      <button class="modal-ask" type="button" data-diagram-ask>
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"
+          ><path
+            d="M3 3.5h10a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H8l-3 2.5v-2.5H3a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1z"
+            stroke="currentColor"
+            stroke-width="1.4"
+            stroke-linejoin="round"></path><path
+            d="M5 6.5h6M5 9h4"
+            stroke="currentColor"
+            stroke-width="1.4"
+            stroke-linecap="round"></path></svg
+        >
+        Explain with AI
+      </button>
       <div class="zoom" role="group" aria-label="Zoom">
         <button type="button" data-zoom="out" aria-label="Zoom out">
           <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"
@@ -181,11 +195,14 @@
 
     document.querySelectorAll<HTMLElement>("[data-diagram]").forEach((figure) => {
       figure.addEventListener("click", (event) => {
+        // The explain button hands the diagram to the Ask panel instead of opening it larger
+        if ((event.target as Element).closest("[data-diagram-ask]")) return;
         const node = (event.target as Element).closest<SVGGElement>(".node");
         open(figure, node?.dataset.node ?? null);
       });
       figure.addEventListener("keydown", (event) => {
         if (event.key !== "Enter" && event.key !== " ") return;
+        if ((event.target as Element).closest("[data-diagram-ask]")) return;
         const node = (event.target as Element).closest<SVGGElement>(".node");
         event.preventDefault();
         open(figure, node?.dataset.node ?? null);
@@ -345,6 +362,29 @@
 
   .legend-head {
     fill: var(--text-3);
+  }
+
+  .modal-ask {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    height: 38px;
+    padding: 0 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: transparent;
+    font-size: var(--t-caption);
+    color: var(--text-2);
+    cursor: pointer;
+  }
+
+  html.has-ask .modal-ask {
+    display: inline-flex;
+  }
+
+  .modal-ask:hover {
+    color: var(--text);
+    border-color: var(--text-3);
   }
 
   .zoom {

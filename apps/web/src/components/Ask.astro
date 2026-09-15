@@ -75,6 +75,7 @@ const name = repo.split("/")[1] ?? repo;
     renderAnswer,
     takeLines,
     type AskAnswer,
+    type AskDiagram,
     type AskStreamLine,
     type IssueCard,
   } from "../lib/ask-render.ts";
@@ -133,7 +134,12 @@ const name = repo.split("/")[1] ?? repo;
       folder: path.split("/").slice(0, -1).join("/"),
     });
 
-    const KIND_LABELS = { issue: "GitHub issue", page: "Wiki page", summary: "Repository overview" };
+    const KIND_LABELS = {
+      issue: "GitHub issue",
+      page: "Wiki page",
+      summary: "Repository overview",
+      diagram: "Diagram on the page",
+    };
     const chevron = `<svg class="chevron" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>`;
 
     const sourceRow = (source: AskAnswer["sources"][number]) => {
@@ -299,7 +305,9 @@ const name = repo.split("/")[1] ?? repo;
     const scrollToEnd = (element: HTMLElement) =>
       log.scrollTo({ top: element.offsetTop - 12, behavior: "smooth" });
 
-    async function ask(question: string, replace?: HTMLElement) {
+    const diagrams = new WeakMap<HTMLElement, AskDiagram>();
+
+    async function ask(question: string, replace?: HTMLElement, diagram?: AskDiagram) {
       const text = question.replace(/\s+/g, " ").trim();
       if (busy || text.length < 3) return;
       busy = true;
@@ -311,7 +319,12 @@ const name = repo.split("/")[1] ?? repo;
       body.innerHTML = stepsHtml();
       if (replace) replace.replaceWith(article);
       else log.append(article);
-      showStage(body, "understanding", "Understanding the question");
+      if (diagram) diagrams.set(article, diagram);
+      showStage(
+        body,
+        diagram ? "reading" : "understanding",
+        diagram ? "Reading the diagram" : "Understanding the question",
+      );
       scrollToEnd(article);
 
       const turn: Turn = { question: text };
@@ -325,7 +338,7 @@ const name = repo.split("/")[1] ?? repo;
         const response = await fetch(`${ASK_URL}/api/ask`, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ repo, question: text, page, history }),
+          body: JSON.stringify({ repo, question: text, page, history, diagram: diagram ?? null }),
         }).catch(() => {
           offline = true;
           throw new Error("Ask is offline right now.");
@@ -363,10 +376,10 @@ const name = repo.split("/")[1] ?? repo;
       }
     }
 
-    function open(question?: string) {
+    function open(question?: string, diagram?: AskDiagram) {
       if (!panel!.open) panel!.show();
       document.documentElement.classList.add("ask-open");
-      if (question) void ask(question);
+      if (question) void ask(question, undefined, diagram);
       else input.focus({ preventScroll: true });
     }
 
@@ -374,6 +387,30 @@ const name = repo.split("/")[1] ?? repo;
       panel!.close();
       document.documentElement.classList.remove("ask-open");
     }
+
+    // Diagrams offer their explain button only on pages that have this panel
+    document.documentElement.classList.add("has-ask");
+    document.addEventListener("click", (event) => {
+      const button = (event.target as Element).closest<HTMLElement>("[data-diagram-ask]");
+      if (!button) return;
+      event.preventDefault();
+      const svg =
+        button.closest("[data-diagram]")?.querySelector(".diagram-scroll svg") ??
+        button.closest("dialog")?.querySelector("[data-stage-inner] svg");
+      if (!svg) return;
+      const diagram: AskDiagram = {
+        nodes: [...svg.querySelectorAll<SVGGElement>(".node")].map((node) => ({
+          id: Number(node.dataset.node),
+          label: node.querySelector("title")?.textContent ?? "",
+        })),
+        edges: [...svg.querySelectorAll<SVGPathElement>(".edge")].map((edge) => ({
+          from: Number(edge.dataset.from),
+          to: Number(edge.dataset.to),
+        })),
+      };
+      button.closest("dialog")?.close();
+      open("Explain this diagram in simple words", diagram);
+    });
 
     // Question boxes elsewhere on the page are wired first, so nothing below can leave them submitting the page
     document.addEventListener("click", (event) => {
@@ -448,7 +485,11 @@ const name = repo.split("/")[1] ?? repo;
       const retry = target.closest<HTMLButtonElement>("[data-ask-retry]");
       if (retry) {
         const article = retry.closest<HTMLElement>(".turn")!;
-        void ask(article.querySelector(".turn-question")?.textContent ?? "", article);
+        void ask(
+          article.querySelector(".turn-question")?.textContent ?? "",
+          article,
+          diagrams.get(article),
+        );
       }
 
       // A number in the answer opens its lines below; with a modifier key it opens GitHub

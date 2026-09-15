@@ -2,7 +2,7 @@ import { Marked, type Tokens } from "marked";
 
 export interface AskSource {
   number: number;
-  kind: "code" | "issue" | "page" | "summary";
+  kind: "code" | "issue" | "page" | "summary" | "diagram";
   title: string;
   path: string;
   startLine: number;
@@ -23,7 +23,7 @@ export interface IssueCard {
 
 export interface AskAnswer {
   status: "answered" | "not-found" | "off-topic";
-  intent: "code" | "overview" | "contribute" | "general";
+  intent: "code" | "overview" | "contribute" | "general" | "diagram";
   question: string;
   markdown: string;
   note: string;
@@ -34,6 +34,11 @@ export interface AskAnswer {
   otherIssues: IssueCard[];
   model: string;
   cached: boolean;
+}
+
+export interface AskDiagram {
+  nodes: Array<{ id: number; label: string }>;
+  edges: Array<{ from: number; to: number }>;
 }
 
 export type AskStreamLine =

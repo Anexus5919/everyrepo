@@ -665,7 +665,7 @@ const suggestions = [
     border-color: var(--text-3);
   }
 
-  :global(html.ask-open) .ask-dock {
+  html.ask-open .ask-dock {
     opacity: 0;
     pointer-events: none;
   }
@@ -833,11 +833,17 @@ const suggestions = [
     margin: 0 auto;
   }
 
-  .reader .diagram-expand {
+  .reader .diagram-actions {
     position: absolute;
     top: 10px;
     right: 10px;
     z-index: 1;
+    display: flex;
+    gap: 6px;
+  }
+
+  .reader .diagram-expand,
+  .reader .diagram-ask {
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -851,6 +857,33 @@ const suggestions = [
     transition:
       color 140ms ease,
       border-color 140ms ease;
+  }
+
+  /* Pages without an Ask panel have nothing to explain with */
+  .reader .diagram-ask {
+    display: none;
+  }
+
+  html.has-ask .reader .diagram-ask {
+    display: inline-flex;
+  }
+
+  .reader .diagram-ask:hover,
+  .reader .diagram-ask:focus-visible {
+    color: var(--text);
+    border-color: var(--accent-line);
+  }
+
+  /* The lines in the bubble write themselves out, the way the explanation is about to */
+  .reader .diagram-ask:hover .ask-lines {
+    stroke-dasharray: 6;
+    animation: ask-lines 420ms var(--ease-out);
+  }
+
+  @keyframes ask-lines {
+    from {
+      stroke-dashoffset: 6;
+    }
   }
 
   .reader .diagram:hover .diagram-expand,

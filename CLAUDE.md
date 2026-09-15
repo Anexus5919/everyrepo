@@ -74,7 +74,8 @@ TypeScript source directly and run with tsx. Tests use Vitest.
   to stand alone and picks an intent: code (hybrid retrieval plus the current page), overview (repository
   summary, overview page and README), contribute (open GitHub issues labeled for newcomers or a named
   issue, the contributing guide and the code the issue touches) or general (declined without an answer
-  call). One answer call follows; the wiki verifier drops uncited or ungrounded blocks and links
+  call). A diagram sent from a page skips planning and is explained from its boxes, arrows and the
+  opening code of each box. One answer call follows; the wiki verifier drops uncited or ungrounded blocks and links
   citations to pinned lines, issues or wiki pages
 - `packages/eval`: gold question sets and retrieval metrics
 - `packages/pipeline`: index stage handlers, cost estimate, snapshot report
@@ -85,7 +86,9 @@ TypeScript source directly and run with tsx. Tests use Vitest.
   to the viewport and shows every written wiki (hero canvas, a reader preview with a tab per wiki, the
   footer wordmark). Each written wiki also gets a hub at `/<owner>/<repo>`, a reader page per wiki page at
   `/<owner>/<repo>/<slug>` (page tree, cited sources beside the text, import diagrams drawn from the stored
-  flowcharts by `src/lib/diagram.ts`) and a glossary; each page is also emitted as
+  flowcharts by `src/lib/diagram.ts`: cycle links drawn back, columns chosen for short links, median
+  ordering with swaps to cut crossings, long links routed through lanes between boxes and bundled by
+  target, link ends spread along each box; every diagram can be sent to the Ask panel to be explained) and a glossary; each page is also emitted as
   `/preview/<owner>__<repo>/<slug>.json` for the home preview. Hubs and reader pages open an Ask panel
   (`src/components/Ask.astro`, answer rendering in `src/lib/ask-render.ts`); reader pages keep a question box
   at the bottom of the article that opens it. First visits get a five step

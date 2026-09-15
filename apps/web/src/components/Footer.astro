@@ -2,7 +2,7 @@
 import BookIcon from "./BookIcon.astro";
 import Logo from "./Logo.astro";
 import Wordmark from "./Wordmark.astro";
-import { PALETTE_GROUPS, PALETTES } from "../lib/palettes.ts";
+import { DEFAULT_PALETTE, PALETTE_GROUPS, PALETTES } from "../lib/palettes.ts";
 import { loadRepos } from "../lib/site-data.ts";
 
 const repos = loadRepos();
@@ -23,6 +23,8 @@ const year = new Date().getFullYear();
           >
         </div>
       </div>
+
+      <hr class="rule" />
 
       <div class="grid">
         <div class="about">
@@ -72,6 +74,8 @@ const year = new Date().getFullYear();
         </div>
       </div>
 
+      <hr class="rule" />
+
       <div class="meta">
         <span>&copy; {year} EveryRepo</span>
         <span class="note">Pages are written from public code at the commit shown on each page.</span>
@@ -82,7 +86,9 @@ const year = new Date().getFullYear();
               PALETTE_GROUPS.map((group) => (
                 <optgroup label={group.label}>
                   {PALETTES.filter((palette) => palette.group === group.id).map((palette) => (
-                    <option value={palette.id}>{palette.name}</option>
+                    <option value={palette.id}>
+                      {palette.id === DEFAULT_PALETTE ? `${palette.name} (Default)` : palette.name}
+                    </option>
                   ))}
                 </optgroup>
               ))
@@ -206,8 +212,15 @@ const year = new Date().getFullYear();
     position: relative;
     z-index: 2;
     display: flex;
-    padding: 16px;
+    padding: clamp(8px, 1.5svh, 16px) 16px;
     background: var(--bg);
+  }
+
+  /* On desktop the footer fills the screen below the header, so the panel and the whole wordmark are in view */
+  @media (min-width: 1000px) {
+    .site-footer {
+      min-height: calc(100svh - var(--header));
+    }
   }
 
   .panel {
@@ -220,17 +233,26 @@ const year = new Date().getFullYear();
     overflow: hidden;
   }
 
-  /* Content lines up with the page frame; spacing grows with the screen height and the rows stay centered */
+  /* Content lines up with the page frame; the rows and the rules between them share the spare height evenly,
+     so a short screen tightens every space alike and a tall one opens them alike */
   .inner {
-    --rhythm: clamp(18px, 4svh, 56px);
+    --space: clamp(8px, 1.6svh, 20px);
     flex: 1 0 auto;
     display: flex;
     flex-direction: column;
-    justify-content: center;
-    gap: var(--rhythm);
+    justify-content: space-evenly;
+    gap: var(--space);
     width: min(100% - 2 * var(--gutter), var(--frame));
     margin-inline: auto;
-    padding: var(--rhythm) 24px clamp(16px, 3svh, 32px);
+    padding: var(--space) 24px;
+  }
+
+  .rule {
+    flex-shrink: 0;
+    height: 1px;
+    margin: 0;
+    border: 0;
+    background: var(--line-soft);
   }
 
   .cta {
@@ -238,8 +260,6 @@ const year = new Date().getFullYear();
     align-items: center;
     justify-content: space-between;
     gap: 32px;
-    padding-bottom: var(--rhythm);
-    border-bottom: 1px solid var(--line-soft);
   }
 
   .cta-title {
@@ -305,7 +325,7 @@ const year = new Date().getFullYear();
   .column {
     display: flex;
     flex-direction: column;
-    gap: 11px;
+    gap: clamp(6px, 1.2svh, 11px);
     font-size: var(--t-small);
   }
 
@@ -354,8 +374,6 @@ const year = new Date().getFullYear();
     display: flex;
     align-items: center;
     gap: 24px;
-    padding-top: 20px;
-    border-top: 1px solid var(--line-soft);
     font-size: var(--t-caption);
     color: var(--text-3);
   }
@@ -429,9 +447,33 @@ const year = new Date().getFullYear();
     padding: 0 32px;
   }
 
+  /* Short laptop screens get a smaller closing line and buttons, never a smaller wordmark */
   @media (min-width: 1000px) and (max-height: 820px) {
+    .cta-title {
+      font-size: 28px;
+    }
+
     .column {
-      gap: 9px;
+      line-height: 1.45;
+    }
+
+    .cta-actions .btn-lg {
+      height: 44px;
+    }
+  }
+
+  @media (min-width: 1000px) and (max-height: 700px) {
+    .column {
+      gap: 5px;
+      line-height: 1.35;
+    }
+
+    .about {
+      gap: 10px;
+    }
+
+    .about p {
+      line-height: 1.5;
     }
   }
 
@@ -452,6 +494,7 @@ const year = new Date().getFullYear();
     }
 
     .inner {
+      --space: 28px;
       padding: 36px 4px 24px;
     }
 

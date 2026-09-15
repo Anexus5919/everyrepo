@@ -12,7 +12,7 @@ export interface PaletteInfo {
   light: [string, string, string];
 }
 
-export const DEFAULT_PALETTE = "ember";
+export const DEFAULT_PALETTE = "tide";
 
 export const PALETTE_GROUPS: Array<{ id: PaletteGroup; label: string }> = [
   { id: "colour", label: "Colour" },
@@ -21,20 +21,20 @@ export const PALETTE_GROUPS: Array<{ id: PaletteGroup; label: string }> = [
 
 export const PALETTES: PaletteInfo[] = [
   {
-    id: "ember",
-    name: "Ember",
-    group: "colour",
-    description: "Warm orange on soft black",
-    dark: ["#0d0c0a", "#ee7a43", "#f6b16c"],
-    light: ["#f5f1e8", "#a6481f", "#b8662a"],
-  },
-  {
     id: "tide",
     name: "Tide",
     group: "colour",
     description: "Sea green and sky blue",
     dark: ["#0a0f12", "#2fd3a6", "#4cb6ff"],
     light: ["#eef4f3", "#0a7a5f", "#1f7fd1"],
+  },
+  {
+    id: "ember",
+    name: "Ember",
+    group: "colour",
+    description: "Warm orange on soft black",
+    dark: ["#0d0c0a", "#ee7a43", "#f6b16c"],
+    light: ["#f5f1e8", "#a6481f", "#b8662a"],
   },
   {
     id: "cobalt",
@@ -109,8 +109,8 @@ export function applyPalette(id: string): void {
   if (!PALETTES.some((palette) => palette.id === id)) return;
   const root = document.documentElement;
   const update = () => {
-    if (id === DEFAULT_PALETTE) delete root.dataset.palette;
-    else root.dataset.palette = id;
+    // Always named, since Ember's colours are the base tokens and Tide is the default
+    root.dataset.palette = id;
     try {
       localStorage.setItem("palette", id);
     } catch {

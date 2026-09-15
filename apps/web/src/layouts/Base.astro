@@ -12,7 +12,7 @@ import Footer from "../components/Footer.astro";
 import Guide from "../components/Guide.astro";
 import Header from "../components/Header.astro";
 import RepoDialog from "../components/RepoDialog.astro";
-import { PALETTES } from "../lib/palettes.ts";
+import { DEFAULT_PALETTE, PALETTES } from "../lib/palettes.ts";
 import { loadRepos } from "../lib/site-data.ts";
 
 interface Props {
@@ -36,7 +36,12 @@ const knownWikis = loadRepos().map((repo) => ({
 ---
 
 <!doctype html>
-<html lang="en" data-theme="dark" data-snap={snap ? "true" : undefined}>
+<html
+  lang="en"
+  data-theme="dark"
+  data-palette={DEFAULT_PALETTE}
+  data-snap={snap ? "true" : undefined}
+>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -60,9 +65,8 @@ const knownWikis = loadRepos().map((repo) => ({
         const saved = localStorage.getItem("palette");
         const palette = paletteIds.includes(named) ? named : saved;
         if (named && paletteIds.includes(named)) localStorage.setItem("palette", named);
-        if (paletteIds.includes(palette) && palette !== "ember") {
-          document.documentElement.dataset.palette = palette;
-        }
+        // A palette the reader chose stays on every visit; without a choice the default set on the page stays
+        if (paletteIds.includes(palette)) document.documentElement.dataset.palette = palette;
       } catch {}
     </script>
   </head>

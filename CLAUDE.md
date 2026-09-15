@@ -134,7 +134,7 @@ TypeScript source directly and run with tsx. Tests use Vitest.
   tokens in `src/styles/global.css` (dark by default, light on request). The home page snaps each section
   to the viewport and shows every written wiki (hero canvas, a reader preview with a tab per wiki, an Ask
   example and an import diagram taken from other wikis (`src/lib/showcase.ts`), features, repositories,
-  audiences, method, common questions and the footer wordmark); header menus link every written wiki.
+  audiences, method, common questions and the footer, which fills the screen below the header on desktop with its rows sharing the spare height and the wordmark centered at full size); header menus link every written wiki.
   The repository box (`src/components/RepoOpener.astro`, logic in `src/lib/opener.ts`, groups in
   `src/lib/suggestions.ts`) suggests written wikis, then GitHub repositories and owners as each letter is
   typed (picking an owner lists their repositories), turns a pasted link into owner/name, previews a
@@ -156,8 +156,9 @@ TypeScript source directly and run with tsx. Tests use Vitest.
   at the bottom of the article that opens it. First visits get a five step
   guide (`src/components/Guide.astro`); theme changes blur the whole page, then sweep the new
   colours in from the left (`src/lib/theme.ts`). Readers pick a colour palette separately from light and dark
-  (header menu and footer select; `src/lib/palettes.ts`, tokens in `src/styles/palettes.css`, Ember in
-  `global.css` is the default); every palette keeps text, accents and code at readable contrast in both themes. Motion plays on hover or focus
+  (header menu and footer select; `src/lib/palettes.ts`, tokens in `src/styles/palettes.css`, Ember's
+  colours are the base tokens in `global.css`). Tide is the default and is labelled so; the page names a palette
+  on `<html>` from the start and a reader's choice, kept in local storage, replaces it on every visit. Every palette keeps text, accents and code at readable contrast in both themes. Motion plays on hover or focus
 
 ## Rules
 

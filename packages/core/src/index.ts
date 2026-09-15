@@ -1,4 +1,14 @@
-export { formatRepoRef, parseRepoRef, repoDirName, type RepoRef } from "./repo-ref.ts";
+export {
+  formatRepoRef,
+  parseRepoRef,
+  readRepoInput,
+  repoDirName,
+  repoKey,
+  type RepoInput,
+  type RepoInputProblem,
+  type RepoRef,
+} from "./repo-ref.ts";
+export * from "./requests.ts";
 export {
   loadLocalConfig,
   type EmbeddingsConfig,

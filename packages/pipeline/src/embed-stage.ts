@@ -9,6 +9,8 @@ export interface EmbedInput {
   embedder: Embedder | undefined;
   log: (message: string) => void;
   heartbeat: () => void;
+  // Reports work done inside the stage for status pages
+  progress?: (done: number, total: number) => void;
 }
 
 export interface EmbedOutput {
@@ -102,6 +104,7 @@ export async function runEmbedStage(input: EmbedInput): Promise<EmbedOutput> {
         cache.putMany(embedder.model, entries);
         for (const [hash, blob] of entries) vectors.set(hash.toString("hex"), blob);
         embedded += batch.length;
+        input.progress?.(embedded, missing.length);
         if (Date.now() - lastLog > 15_000) {
           lastLog = Date.now();
           input.heartbeat();

@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./repo-ref": "./src/repo-ref.ts",
+    "./requests": "./src/requests.ts"
   },
   "dependencies": {
     "zod": "^4.6.4"

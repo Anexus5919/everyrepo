@@ -29,6 +29,8 @@ export interface WriteInput {
   router: LlmRouter;
   log: (message: string) => void;
   heartbeat: () => void;
+  // Reports work done inside the stage for status pages
+  progress?: (done: number, total: number) => void;
   maxSourceChars?: number;
   // Limits the run to these page slugs
   only?: readonly string[];
@@ -158,7 +160,8 @@ export async function writePages(input: WriteInput): Promise<WriteOutput> {
     const link = (source: Source) => githubLink(snapshot.repo, snapshot.sha, source);
     const knownNames = [snapshot.repo, snapshot.repo.split("/").pop() ?? snapshot.repo];
 
-    for (const page of pages) {
+    for (const [position, page] of pages.entries()) {
+      input.progress?.(position, pages.length);
       if (input.only && !input.only.includes(page.slug)) continue;
       const children = pages.filter((other) => other.parentSlug === page.slug);
       const items = readingOrder(sql, page, children, clusterSummaries, (path) =>
@@ -275,6 +278,7 @@ export async function writePages(input: WriteInput): Promise<WriteOutput> {
         `${ok ? "wrote" : "failed"} ${page.slug}: ${describe(verified.stats)}, ${verified.citations.length} citations`,
       );
     }
+    input.progress?.(pages.length, pages.length);
     return output;
   } finally {
     sql.close();

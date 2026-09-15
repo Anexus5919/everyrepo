@@ -1,11 +1,13 @@
 export {
   detectRepository,
+  estimateFromTree,
   hasGeneratedHeader,
   type DetectInput,
   type DetectedFile,
   type Detection,
   type FileEntry,
   type LanguageStat,
+  type TreeEstimate,
 } from "./detect.ts";
 export { detectDocsSources, type DocsSource, type DocsSourceKind } from "./docs.ts";
 export { classifyPath, generatedMatcherFromGitattributes, type ClassifiedPath } from "./kinds.ts";

@@ -1,10 +1,16 @@
-import { formatRepoRef, repoDirName, type LocalConfig, type RepoRef } from "@everyrepo/core";
+import {
+  formatRepoRef,
+  repoDirName,
+  WIKI_STAGE_KEYS,
+  type LocalConfig,
+  type RepoRef,
+} from "@everyrepo/core";
 import { engineDbPath, eq, repos, type AppDb } from "@everyrepo/db";
 import { ModelUnavailableError, type LlmRouter } from "@everyrepo/llm";
 import { StageDeferredError, type StageHandler } from "@everyrepo/queue";
 import { buildGlossary, planWiki, summarizeRepository, writePages } from "@everyrepo/wiki";
 
-export const WIKI_STAGES = ["summarize", "plan", "write", "glossary"] as const;
+export const WIKI_STAGES = WIKI_STAGE_KEYS;
 export type WikiStage = (typeof WIKI_STAGES)[number];
 
 export interface WikiOptions {
@@ -40,7 +46,7 @@ async function deferWhenUnavailable<T>(work: () => Promise<T>): Promise<T> {
 }
 
 export function createWikiHandlers(options: WikiOptions): Record<WikiStage, StageHandler> {
-  const summarize: StageHandler = async ({ heartbeat, log }) =>
+  const summarize: StageHandler = async ({ heartbeat, log, progress }) =>
     deferWhenUnavailable(() =>
       summarizeRepository({
         enginePath: enginePathFor(options),
@@ -48,6 +54,7 @@ export function createWikiHandlers(options: WikiOptions): Record<WikiStage, Stag
         router: options.router,
         log,
         heartbeat,
+        progress,
       }),
     );
   const plan: StageHandler = async ({ log }) =>
@@ -59,7 +66,7 @@ export function createWikiHandlers(options: WikiOptions): Record<WikiStage, Stag
         log,
       }),
     );
-  const write: StageHandler = async ({ heartbeat, log }) =>
+  const write: StageHandler = async ({ heartbeat, log, progress }) =>
     deferWhenUnavailable(() =>
       writePages({
         enginePath: enginePathFor(options),
@@ -67,6 +74,7 @@ export function createWikiHandlers(options: WikiOptions): Record<WikiStage, Stag
         ...(options.pages ? { only: options.pages } : {}),
         log,
         heartbeat,
+        progress,
       }),
     );
   const glossary: StageHandler = async ({ log }) =>

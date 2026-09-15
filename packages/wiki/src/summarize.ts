@@ -31,6 +31,8 @@ export interface SummarizeInput {
   router: LlmRouter;
   log: (message: string) => void;
   heartbeat: () => void;
+  // Reports work done inside the stage for status pages
+  progress?: (done: number, total: number) => void;
   // About 4 characters per token; keeps each request well inside free per-minute token limits
   maxContextChars?: number;
 }
@@ -114,7 +116,11 @@ export async function summarizeRepository(input: SummarizeInput): Promise<Summar
   }
 
   try {
-    const clusterSummaries = await summarizeClusters(sql, input, maxChars, output, generate);
+    // Every cluster, every package and the repository itself count as one unit of work
+    const total = listClusters(sql).length + listModulesWithClusters(sql).length + 1;
+    let finished = 0;
+    const step = () => input.progress?.(++finished, total);
+    const clusterSummaries = await summarizeClusters(sql, input, maxChars, output, generate, step);
     const moduleSummaries = await summarizeModules(
       sql,
       input,
@@ -122,6 +128,7 @@ export async function summarizeRepository(input: SummarizeInput): Promise<Summar
       output,
       clusterSummaries,
       generate,
+      step,
     );
 
     const modules = listModulesWithClusters(sql).map(({ module, clusters }) => ({
@@ -139,6 +146,7 @@ export async function summarizeRepository(input: SummarizeInput): Promise<Summar
       schema: repoSummarySchema,
       clean: (value: RepoSummary) => cleanRepoSummary(value, modulePaths),
     });
+    step();
     input.log(`repository: ${repoSummary.summary}`);
     return output;
   } finally {
@@ -158,6 +166,7 @@ async function summarizeClusters(
   maxChars: number,
   output: SummarizeOutput,
   generate: Generate,
+  step: () => void,
 ): Promise<Map<string, ClusterSummary>> {
   const clusters = listClusters(sql);
   output.clusters.total = clusters.length;
@@ -180,6 +189,7 @@ async function summarizeClusters(
       clean: (value: ClusterSummary) => cleanClusterSummary(value, context.files),
     });
     summaries.set(cluster.key, summary);
+    step();
     const done = output.clusters.written + output.clusters.reused;
     if (done % 10 === 0 || done === clusters.length) {
       input.log(`cluster summaries ${done}/${clusters.length}`);
@@ -195,6 +205,7 @@ async function summarizeModules(
   output: SummarizeOutput,
   clusterSummaries: ReadonlyMap<string, ClusterSummary>,
   generate: Generate,
+  step: () => void,
 ): Promise<Map<string, ClusterSummary>> {
   const modules = listModulesWithClusters(sql);
   output.modules.total = modules.length;
@@ -224,6 +235,7 @@ async function summarizeModules(
         output.modules.written += 1;
       }
       summaries.set(module.path, only);
+      step();
       continue;
     }
     const context = buildModuleContext(sql, module, keys, clusterSummaries, maxChars);
@@ -241,6 +253,7 @@ async function summarizeModules(
       clean: (value: ClusterSummary) => cleanClusterSummary(value, context.files),
     });
     summaries.set(module.path, summary);
+    step();
   }
   input.log(`module summaries ${modules.length} (${output.modules.written} written)`);
   return summaries;

@@ -32,11 +32,15 @@ export type ModuleKind = (typeof MODULE_KINDS)[number];
 export const REPO_STATUSES = ["requested", "queued", "indexing", "indexed", "failed"] as const;
 export type RepoStatus = (typeof REPO_STATUSES)[number];
 
-export const JOB_KINDS = ["full", "incremental", "wiki"] as const;
+export const JOB_KINDS = ["full", "incremental", "wiki", "publish"] as const;
 export type JobKind = (typeof JOB_KINDS)[number];
 
 export const JOB_STATUSES = ["queued", "running", "succeeded", "failed", "cancelled"] as const;
 export type JobStatus = (typeof JOB_STATUSES)[number];
+
+// Jobs started from the command line run there; jobs from site requests belong to the worker
+export const JOB_ORIGINS = ["cli", "request"] as const;
+export type JobOrigin = (typeof JOB_ORIGINS)[number];
 
 // Upper bounds of source tokens for each tier; anything larger is XL
 const TIER_LIMITS: ReadonlyArray<[SizeTier, number]> = [

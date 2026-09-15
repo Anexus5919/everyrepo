@@ -1,19 +1,30 @@
-import { formatRepoRef, readRepoInput, repoInputMessage } from "@everyrepo/core/repo-ref";
-import type { RepoView } from "@everyrepo/core/requests";
-import { ApiProblem, lookupRepo, requestRepo } from "./api.ts";
+import {
+  formatRepoRef,
+  readRepoInput,
+  readSearchInput,
+  repoInputMessage,
+  type SearchInput,
+} from "@everyrepo/core/repo-ref";
+import type { RepoSearch, RepoView } from "@everyrepo/core/requests";
+import { ApiProblem, lookupRepo, requestRepo, searchRepos } from "./api.ts";
 import { h, icon } from "./dom.ts";
 import { formatCount, languageName, sourceFileCount } from "./format.ts";
 import { primaryAction, sizeName, statusCopy, statusHref } from "./repo-status.ts";
 import { showOneRequestNotice } from "./notice.ts";
 import { getAccount, isSignInProblem, requestIntentPath, signInPage } from "./session.ts";
+import {
+  buildSuggestions,
+  compactCount,
+  covers,
+  nameNeedle,
+  narrow,
+  searchKey,
+  type KnownWiki,
+  type Suggestion,
+} from "./suggestions.ts";
 import { prepareTurnstile, turnstileToken } from "./turnstile.ts";
 
-export interface KnownWiki {
-  repo: string;
-  status: string;
-  summary: string | null;
-  pages: number;
-}
+export type { KnownWiki } from "./suggestions.ts";
 
 export function readKnownWikis(): KnownWiki[] {
   try {
@@ -24,7 +35,18 @@ export function readKnownWikis(): KnownWiki[] {
 }
 
 const LOOKUP_DELAY_MS = 350;
-const SUGGESTIONS = 6;
+// Short enough to feel live, long enough that fast typing sends one search rather than one per letter
+const SEARCH_DELAY_MS = 180;
+const CACHED_SEARCHES = 200;
+
+// Answers shared by every box on the page, so going back a letter shows results at once
+const searches = new Map<string, RepoSearch>();
+
+function rememberSearch(key: string, result: RepoSearch): void {
+  searches.delete(key);
+  searches.set(key, result);
+  while (searches.size > CACHED_SEARCHES) searches.delete(searches.keys().next().value!);
+}
 
 type Preview =
   | { kind: "none" }
@@ -120,13 +142,85 @@ function offlineNote(view: RepoView): HTMLElement | null {
   );
 }
 
+// Marks where the typed text appears in a name, the way search results show what matched
+function highlight(text: string, needle: string): Array<Node | string> {
+  const index = needle ? text.toLowerCase().indexOf(needle.toLowerCase()) : -1;
+  if (index === -1) return [text];
+  return [
+    text.slice(0, index),
+    h("mark", {}, text.slice(index, index + needle.length)),
+    text.slice(index + needle.length),
+  ];
+}
+
+function suggestionName(repo: string, needle: string): HTMLElement {
+  const [owner = "", name = ""] = repo.split("/");
+  return h(
+    "span",
+    { class: "repo-name" },
+    h("span", { class: "repo-owner" }, `${owner} / `),
+    ...highlight(name, needle),
+  );
+}
+
+function renderOption(
+  item: Suggestion,
+  needle: string,
+  props: Record<string, string | number>,
+): HTMLElement {
+  if (item.kind === "wiki") {
+    return h(
+      "div",
+      props,
+      h("span", { class: "option-icon" }, icon("repo")),
+      h("span", { class: "option-main" }, suggestionName(item.wiki.repo, needle)),
+      h("span", { class: "option-meta" }, `${item.wiki.pages} pages`),
+    );
+  }
+  if (item.kind === "owner") {
+    const organization = item.owner.kind === "organization";
+    return h(
+      "div",
+      props,
+      h("span", { class: "option-icon" }, icon(organization ? "org" : "user")),
+      h(
+        "span",
+        { class: "option-main" },
+        h("span", { class: "repo-name" }, ...highlight(item.owner.login, needle)),
+      ),
+      h("span", { class: "option-meta" }, organization ? "Organization" : "User", icon("arrow")),
+    );
+  }
+  const { repo, wiki } = item;
+  const badge = wiki ? (wiki.status === "ready" ? "Wiki ready" : "Being written") : null;
+  return h(
+    "div",
+    props,
+    h("span", { class: "option-icon" }, icon("repo")),
+    h(
+      "span",
+      { class: "option-main" },
+      suggestionName(repo.repo, needle),
+      repo.description ? h("span", { class: "option-description" }, repo.description) : null,
+    ),
+    h(
+      "span",
+      { class: "option-meta" },
+      badge ? h("span", { class: "option-badge" }, badge) : null,
+      repo.language ? h("span", { class: "option-language" }, repo.language) : null,
+      h("span", { class: "option-stars" }, icon("star"), compactCount(repo.stars)),
+    ),
+  );
+}
+
 export function mountOpener(form: HTMLFormElement, known: readonly KnownWiki[]): void {
   if (form.dataset.mounted) return;
   form.dataset.mounted = "true";
   const input = form.querySelector<HTMLInputElement>("[data-opener-input]")!;
   const field = form.querySelector<HTMLElement>("[data-opener-field]")!;
-  const list = form.querySelector<HTMLUListElement>("[data-opener-list]")!;
+  const list = form.querySelector<HTMLElement>("[data-opener-list]")!;
   const listWrap = form.querySelector<HTMLElement>("[data-opener-suggestions]")!;
+  const status = form.querySelector<HTMLElement>("[data-opener-status]")!;
   const preview = form.querySelector<HTMLElement>("[data-opener-preview]")!;
   const note = form.querySelector<HTMLElement>("[data-opener-note]")!;
   const submit = form.querySelector<HTMLButtonElement>("[data-opener-submit]")!;
@@ -135,21 +229,38 @@ export function mountOpener(form: HTMLFormElement, known: readonly KnownWiki[]):
   const check = form.querySelector<HTMLElement>("[data-opener-check]")!;
   const defaultLabel = label.textContent ?? "Open";
 
-  const ready = known.filter((wiki) => wiki.status === "ready");
   const byKey = new Map(known.map((wiki) => [wiki.repo.toLowerCase(), wiki]));
   let timer: ReturnType<typeof setTimeout> | undefined;
   let lookup: AbortController | undefined;
   let current: { key: string; view: RepoView } | undefined;
-  let shown: KnownWiki[] = [];
+  let items: Suggestion[] = [];
   let active = -1;
+  let listOpen = false;
   let busy = false;
   // Unknown until the API answers; requests need a signed-in account
   let signedIn: boolean | undefined;
+  let searchTimer: ReturnType<typeof setTimeout> | undefined;
+  let searchCall: AbortController | undefined;
+  // The search in flight, the last one that failed, and the latest answer kept on screen while typing on
+  let searching: string | undefined;
+  let failed: string | undefined;
+  let latest: { input: SearchInput; result: RepoSearch } | undefined;
+  // A typed repository whose preview waits to see whether the search offers closer matches
+  let awaitingSearch: string | undefined;
 
   const typedRef = () => {
     const parsed = readRepoInput(input.value);
     return parsed.ok ? formatRepoRef(parsed.ref) : undefined;
   };
+
+  const exactWiki = () => {
+    const typed = typedRef()?.toLowerCase();
+    return typed !== undefined && byKey.get(typed)?.status === "ready";
+  };
+
+  // Nothing is searched once the text names a written wiki exactly
+  const currentSearch = (): SearchInput | undefined =>
+    exactWiki() ? undefined : readSearchInput(input.value);
 
   function setNote(message: string, tone: "error" | "info" = "error") {
     note.textContent = message;
@@ -203,59 +314,102 @@ export function mountOpener(form: HTMLFormElement, known: readonly KnownWiki[]):
     field.classList.toggle("is-match", state.kind === "view" && state.view.state === "ready");
   }
 
-  function renderList(open: boolean) {
-    const text = input.value.trim().toLowerCase();
-    const typed = typedRef()?.toLowerCase();
-    shown =
-      !open || (typed !== undefined && byKey.get(typed)?.status === "ready")
-        ? []
-        : ready
-            .filter((wiki) => text === "" || wiki.repo.toLowerCase().includes(typed ?? text))
-            .slice(0, SUGGESTIONS);
-    if (active >= shown.length) active = shown.length - 1;
+  function statusMessage(search: SearchInput | undefined, result: RepoSearch | undefined): string {
+    if (!listOpen || !search) return "";
+    const key = searchKey(search);
+    if (searching === key) return "Searching GitHub";
+    if (result?.unavailable || failed === key) {
+      return "GitHub search is not answering right now. Type the full owner/name or paste a link.";
+    }
+    if (result && items.length === 0) {
+      return search.kind === "owner"
+        ? `No public repositories from ${search.owner} match.`
+        : "No public repositories or owners match.";
+    }
+    return "";
+  }
+
+  function renderList() {
+    const text = input.value;
+    const search = currentSearch();
+    const exact = search ? searches.get(searchKey(search)) : undefined;
+    // While the next letters are searched, the last answers that still match stay on screen
+    const shown =
+      exact ??
+      (search && latest && covers(latest.input, search)
+        ? narrow(latest.result, search)
+        : undefined);
+    const groups = listOpen && !exactWiki() ? buildSuggestions(text, search, known, shown) : [];
+    items = groups.flatMap((group) => group.items);
+    if (active >= items.length) active = items.length - 1;
+    const needle = nameNeedle(text, search);
+    let index = 0;
     list.replaceChildren(
-      ...shown.map((wiki, index) =>
+      ...groups.map((group, position) =>
         h(
-          "li",
+          "div",
           {
-            role: "option",
-            id: `${list.id}-${index}`,
-            class: "option",
-            "aria-selected": index === active ? "true" : "false",
-            "data-index": index,
+            role: "group",
+            class: "option-group",
+            "aria-labelledby": `${list.id}-group-${position}`,
           },
-          repoName(wiki.repo),
-          h("span", { class: "option-meta" }, `${wiki.pages} pages`),
+          h("div", { class: "suggestions-label", id: `${list.id}-group-${position}` }, group.label),
+          ...group.items.map((item) => {
+            const at = index++;
+            return renderOption(item, needle, {
+              role: "option",
+              id: `${list.id}-${at}`,
+              class: `option option-${item.kind}`,
+              "aria-selected": at === active ? "true" : "false",
+              "data-index": at,
+            });
+          }),
         ),
       ),
     );
-    listWrap.hidden = shown.length === 0;
-    input.setAttribute("aria-expanded", String(shown.length > 0));
+    const message = statusMessage(search, exact);
+    status.textContent = message;
+    status.hidden = message === "";
+    status.classList.toggle("is-loading", search !== undefined && searching === searchKey(search));
+    listWrap.hidden = items.length === 0 && message === "";
+    input.setAttribute("aria-expanded", String(items.length > 0));
     if (active >= 0) input.setAttribute("aria-activedescendant", `${list.id}-${active}`);
     else input.removeAttribute("aria-activedescendant");
   }
 
-  function schedule(immediate: boolean) {
-    clearTimeout(timer);
-    lookup?.abort();
-    const repo = typedRef();
-    if (!repo) {
-      current = undefined;
-      renderPreview({ kind: "none" });
-      updateLabel();
+  function scheduleSearch() {
+    clearTimeout(searchTimer);
+    const search = currentSearch();
+    const key = search ? searchKey(search) : undefined;
+    if (!search || !key || searches.has(key)) {
+      searchCall?.abort();
+      searching = undefined;
       return;
     }
-    const key = repo.toLowerCase();
-    const wiki = byKey.get(key);
-    if (wiki?.status === "ready") {
-      current = { key, view: knownView(wiki) };
-      renderPreview({ kind: "view", view: current.view, wiki });
-      updateLabel();
-      return;
-    }
-    if (current?.key === key) return;
-    current = undefined;
-    updateLabel();
+    if (searching === key) return;
+    searchTimer = setTimeout(async () => {
+      searchCall?.abort();
+      const controller = new AbortController();
+      searchCall = controller;
+      searching = key;
+      renderList();
+      try {
+        const result = await searchRepos(input.value.trim(), controller.signal);
+        if (controller.signal.aborted) return;
+        rememberSearch(key, result);
+        latest = { input: search, result };
+        failed = undefined;
+      } catch {
+        if (controller.signal.aborted) return;
+        failed = key;
+      }
+      searching = undefined;
+      renderList();
+      decideLookup();
+    }, SEARCH_DELAY_MS);
+  }
+
+  function runLookup(repo: string, key: string, immediate: boolean) {
     const run = async () => {
       const controller = new AbortController();
       lookup = controller;
@@ -281,15 +435,88 @@ export function mountOpener(form: HTMLFormElement, known: readonly KnownWiki[]):
     else timer = setTimeout(() => void run(), LOOKUP_DELAY_MS);
   }
 
+  // A typed repository is previewed once the search finds it exactly or finds nothing close;
+  // while the search offers closer matches, the preview waits until one is picked or the form is sent
+  function decideLookup() {
+    const waiting = awaitingSearch;
+    const repo = typedRef();
+    if (!waiting || !repo || repo.toLowerCase() !== waiting) return;
+    const search = currentSearch();
+    const key = search ? searchKey(search) : undefined;
+    const result = key ? searches.get(key) : undefined;
+    if (!result && failed !== key) return;
+    awaitingSearch = undefined;
+    if (result?.repos.some((item) => item.repo.toLowerCase() === waiting)) {
+      runLookup(repo, waiting, true);
+    } else if (!result || result.unavailable || result.repos.length === 0) {
+      runLookup(repo, waiting, false);
+    }
+  }
+
+  function schedule(immediate: boolean) {
+    clearTimeout(timer);
+    lookup?.abort();
+    awaitingSearch = undefined;
+    const repo = typedRef();
+    if (!repo) {
+      current = undefined;
+      renderPreview({ kind: "none" });
+      updateLabel();
+      return;
+    }
+    const key = repo.toLowerCase();
+    const wiki = byKey.get(key);
+    if (wiki?.status === "ready") {
+      current = { key, view: knownView(wiki) };
+      renderPreview({ kind: "view", view: current.view, wiki });
+      updateLabel();
+      return;
+    }
+    if (current?.key === key) return;
+    current = undefined;
+    updateLabel();
+    renderPreview({ kind: "none" });
+    if (!immediate && currentSearch()) {
+      awaitingSearch = key;
+      decideLookup();
+      return;
+    }
+    runLookup(repo, key, immediate);
+  }
+
   const go = (href: string) => {
     window.location.href = href;
   };
 
+  function choose(item: Suggestion) {
+    active = -1;
+    if (item.kind === "wiki") return go(`/${item.wiki.repo}`);
+    if (item.kind === "repo" && item.wiki?.status === "ready") return go(`/${item.wiki.repo}`);
+    setNote("");
+    clear.hidden = false;
+    if (item.kind === "owner") {
+      // Picking an owner lists their repositories, as typing the slash would
+      input.value = `${item.owner.login}/`;
+      input.setSelectionRange(input.value.length, input.value.length);
+      listOpen = true;
+      renderList();
+      scheduleSearch();
+      schedule(false);
+      return;
+    }
+    input.value = item.repo.repo;
+    listOpen = false;
+    renderList();
+    schedule(true);
+  }
+
   input.addEventListener("input", () => {
     setNote("");
     active = -1;
+    listOpen = true;
     clear.hidden = input.value === "";
-    renderList(true);
+    renderList();
+    scheduleSearch();
     schedule(false);
   });
 
@@ -304,7 +531,11 @@ export function mountOpener(form: HTMLFormElement, known: readonly KnownWiki[]):
           input.value = repo;
           setNote(`Read ${repo} from the link.`, "info");
         }
-        renderList(false);
+        clearTimeout(searchTimer);
+        searchCall?.abort();
+        searching = undefined;
+        listOpen = false;
+        renderList();
         schedule(true);
       } else if (parsed.problem !== "empty") {
         setNote(repoInputMessage(parsed.problem, parsed.owner));
@@ -315,39 +546,53 @@ export function mountOpener(form: HTMLFormElement, known: readonly KnownWiki[]):
 
   input.addEventListener("focus", () => {
     prepareTurnstile();
-    renderList(true);
+    listOpen = true;
+    renderList();
+    scheduleSearch();
   });
-  input.addEventListener("blur", () => setTimeout(() => renderList(false), 120));
+  input.addEventListener("blur", () =>
+    setTimeout(() => {
+      listOpen = false;
+      renderList();
+    }, 120),
+  );
 
   input.addEventListener("keydown", (event) => {
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-      if (listWrap.hidden) renderList(true);
-      if (shown.length === 0) return;
+      if (!listOpen) {
+        listOpen = true;
+        renderList();
+      }
+      if (items.length === 0) return;
       event.preventDefault();
       const step = event.key === "ArrowDown" ? 1 : -1;
-      active = (active + step + shown.length) % shown.length;
-      renderList(true);
+      active = (active + step + items.length) % items.length;
+      renderList();
       list
         .querySelector(`#${CSS.escape(`${list.id}-${active}`)}`)
         ?.scrollIntoView({ block: "nearest" });
     } else if (event.key === "Escape" && !listWrap.hidden) {
       event.preventDefault();
       active = -1;
-      renderList(false);
+      listOpen = false;
+      renderList();
     }
   });
 
-  list.addEventListener("mousedown", (event) => event.preventDefault());
+  listWrap.addEventListener("mousedown", (event) => event.preventDefault());
   list.addEventListener("click", (event) => {
     const option = (event.target as HTMLElement).closest<HTMLElement>("[data-index]");
-    const wiki = option ? shown[Number(option.dataset.index)] : undefined;
-    if (wiki) go(`/${wiki.repo}`);
+    const item = option ? items[Number(option.dataset.index)] : undefined;
+    if (item) choose(item);
   });
 
   clear.addEventListener("click", () => {
     input.value = "";
     clear.hidden = true;
     setNote("");
+    listOpen = true;
+    renderList();
+    scheduleSearch();
     schedule(true);
     input.focus();
   });
@@ -359,8 +604,8 @@ export function mountOpener(form: HTMLFormElement, known: readonly KnownWiki[]):
 
   async function open() {
     if (busy) return;
-    const chosen = active >= 0 ? shown[active] : undefined;
-    if (chosen) return go(`/${chosen.repo}`);
+    const chosen = active >= 0 && !listWrap.hidden ? items[active] : undefined;
+    if (chosen) return choose(chosen);
     const parsed = readRepoInput(input.value);
     if (!parsed.ok) {
       setNote(repoInputMessage(parsed.problem, parsed.owner));
@@ -375,11 +620,14 @@ export function mountOpener(form: HTMLFormElement, known: readonly KnownWiki[]):
     busy = true;
     submit.disabled = true;
     form.classList.add("is-busy");
+    listOpen = false;
+    renderList();
     try {
       let view = current?.key === key ? current.view : undefined;
       if (!view) {
         clearTimeout(timer);
         lookup?.abort();
+        awaitingSearch = undefined;
         label.textContent = "Checking";
         renderPreview({ kind: "checking", repo });
         view = await lookupRepo(repo);

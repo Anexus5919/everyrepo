@@ -1,4 +1,4 @@
-import type { ApiError, QueueView, RepoView } from "@everyrepo/core/requests";
+import type { ApiError, QueueView, RepoSearch, RepoView } from "@everyrepo/core/requests";
 
 // The local API from `everyrepo serve` unless the build names another address
 export const API_URL = (
@@ -65,6 +65,14 @@ const repoPath = (repo: string) =>
 
 export async function lookupRepo(repo: string, signal?: AbortSignal): Promise<RepoView> {
   const { body } = await call<RepoView>(repoPath(repo), signal ? { signal } : {});
+  return body!;
+}
+
+export async function searchRepos(text: string, signal?: AbortSignal): Promise<RepoSearch> {
+  const { body } = await call<RepoSearch>(
+    `/api/search?q=${encodeURIComponent(text)}`,
+    signal ? { signal } : {},
+  );
   return body!;
 }
 

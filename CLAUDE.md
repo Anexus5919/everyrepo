@@ -40,7 +40,8 @@ TypeScript source directly and run with tsx. Tests use Vitest.
     the website; Ask is switched off when embeddings or models are not configured, requests keep working, and
     signing in is off until `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` are set
   - `requests list|show|approve|decline|retry <owner/repo>` reviews repositories requested on the site;
-    `approve` also adds a repository nobody asked for
+    `approve` also adds a repository nobody asked for; `requests assign <owner/repo> <login>` links a request
+    made before sign-in existed to the account of the person who made it
   - `worker [--once] [--poll <seconds>] [--no-build]` builds requested repositories in turn: reads the code,
     writes the wiki, exports the site data, builds the website and marks the wiki published; it only claims
     jobs that came from requests, so command line jobs are left alone. It reports a heartbeat every 15 seconds
@@ -96,7 +97,8 @@ TypeScript source directly and run with tsx. Tests use Vitest.
   citations to pinned lines, issues or wiki pages
 - `packages/github`: GitHub REST client for repositories and file lists, with entity tag revalidation
   through a cache (`github_cache` in `app.sqlite`), one retry, and typed errors (not found, unavailable,
-  empty, rate limited, unreachable)
+  empty, rate limited, unreachable); repository and owner search skip the cache and never return private
+  repositories. `GITHUB_TOKEN` raises GitHub's search limit from 10 to 30 a minute
 - `packages/requests`: repository requests. A lookup sizes a repository from GitHub's file list with the
   detector's own file classes (`estimateFromTree`) and rejects private, missing, empty and code-free
   repositories without storing them. Rules approve tiers up to `requests.autoApproveMaxTier` within
@@ -107,7 +109,11 @@ TypeScript source directly and run with tsx. Tests use Vitest.
   into the state a status page shows. Ready times come from `simulateLine`, which plays the line forward for
   one worker against each model's rolling-day request limit and the embedding neuron budget (`capacity.ts`),
   with work taken from each engine database once read (`packages/cli/src/build-work.ts`) or sized from the
-  file list before that; builds not yet requested or approved get a ready time as if they were
+  file list before that; builds not yet requested or approved get a ready time as if they were.
+  `createRepoSearch` suggests owners and repositories while someone types (`readSearchInput` in core decides
+  what to search: an owner's repositories after a slash, otherwise names), orders names that start with the
+  text first and then by stars, keeps answers for ten minutes, shares identical searches in flight and stops
+  asking GitHub until a rate limit resets
 - `packages/accounts`: GitHub sign-in. The authorization code flow with PKCE and a one-time state bound to the
   browser by a cookie (`auth_state`), the GitHub profile and primary verified email (`user`), and sessions kept
   as hashes of random tokens with a 30 day sliding expiry (`session`)
@@ -115,7 +121,8 @@ TypeScript source directly and run with tsx. Tests use Vitest.
 - `packages/pipeline`: index stage handlers, cost estimate, snapshot report
 - `packages/cli`: the `everyrepo` command, plus the local API. Ask streams one JSON object per line
   (stages, then the answer or an error). Requests are web Request and Response handlers
-  (`src/request-api.ts`): `GET /api/repos/<owner>/<name>`, `POST /api/requests` and `GET /api/queue`, with
+  (`src/request-api.ts`): `GET /api/repos/<owner>/<name>`, `GET /api/search?q=`, `POST /api/requests` and
+  `GET /api/queue`, with
   entity tags for polling, rate limits per account and under daily salted hashes of addresses, and an optional
   Turnstile check. Accounts (`src/auth-api.ts`): `GET /api/auth/github` starts signing in and the callback sets
   an HttpOnly session cookie (`__Host-` prefixed over HTTPS) and returns to the page it started from;
@@ -128,9 +135,10 @@ TypeScript source directly and run with tsx. Tests use Vitest.
   to the viewport and shows every written wiki (hero canvas, a reader preview with a tab per wiki, an Ask
   example and an import diagram taken from other wikis (`src/lib/showcase.ts`), features, repositories,
   audiences, method, common questions and the footer wordmark); header menus link every written wiki.
-  The repository box (`src/components/RepoOpener.astro`, logic in `src/lib/opener.ts`) suggests written
-  wikis, turns a pasted link into owner/name, previews any repository live from the API and opens, requests
-  or follows it; the header button opens the same box in a dialog (`RepoDialog.astro`). `/request/?repo=`
+  The repository box (`src/components/RepoOpener.astro`, logic in `src/lib/opener.ts`, groups in
+  `src/lib/suggestions.ts`) suggests written wikis, then GitHub repositories and owners as each letter is
+  typed (picking an owner lists their repositories), turns a pasted link into owner/name, previews a
+  repository once it is picked or typed exactly, and opens, requests or follows it; the header button opens the same box in a dialog (`RepoDialog.astro`). `/request/?repo=`
   follows one build through four steps, shows the estimated ready day, date and time with what it is made
   of, says when the builder is offline, and polls while something changes; `/queue/` lists builds, the line,
   requests in review and recent wikis with their ready times. A second request from the same person opens a

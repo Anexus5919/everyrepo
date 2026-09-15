@@ -2,10 +2,11 @@ import { randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { pruneSessions } from "@everyrepo/accounts";
 import { pruneRateLimits } from "@everyrepo/db";
+import { createRepoSearch } from "@everyrepo/requests";
 import { Command } from "commander";
 import { createAskHandler } from "../ask-server.ts";
 import { openAskSession, type AskSession } from "../ask-session.ts";
-import { openContext, openRequests, timestamp } from "../context.ts";
+import { openContext, openGithub, openRequests, timestamp } from "../context.ts";
 import {
   allowedOriginsFromEnv,
   applyCors,
@@ -124,6 +125,7 @@ export function serveCommand(): Command {
       const turnstileSecret = process.env["TURNSTILE_SECRET_KEY"];
       const requests = createRequestApi({
         service: openRequests(context),
+        search: createRepoSearch({ github: openGithub(context) }),
         db: context.appDb,
         secret,
         turnstile: turnstileSecret ? { secret: turnstileSecret } : undefined,

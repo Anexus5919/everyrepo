@@ -14,6 +14,8 @@ const github: GithubClient = {
     throw new Error("not used");
   },
   file: async () => undefined,
+  searchRepositories: async () => [],
+  searchOwners: async () => [],
 };
 
 let db: AppDb;

@@ -54,7 +54,7 @@ const { id, variant = "hero", shortcut = false, label = "Open", value = "" } = A
         aria-expanded="false"
         aria-controls={`${id}-list`}
         aria-describedby={`${id}-note`}
-        placeholder="owner/repo or a GitHub link"
+        placeholder="Search GitHub repositories or paste a link"
         autocomplete="off"
         autocapitalize="off"
         spellcheck="false"
@@ -69,9 +69,9 @@ const { id, variant = "hero", shortcut = false, label = "Open", value = "" } = A
       </button>
       {shortcut && <kbd class="mono" aria-hidden="true">/</kbd>}
       <div class="suggestions" data-opener-suggestions hidden>
-        <span class="suggestions-label">Written wikis</span>
-        <ul class="options" id={`${id}-list`} role="listbox" aria-label="Written wikis" data-opener-list>
-        </ul>
+        <div class="options" id={`${id}-list`} role="listbox" aria-label="Suggestions" data-opener-list>
+        </div>
+        <p class="suggestions-status" data-opener-status aria-live="polite" hidden></p>
       </div>
     </div>
     <button class="btn btn-solid submit book-trigger" type="submit" data-opener-submit>
@@ -265,7 +265,10 @@ const { id, variant = "hero", shortcut = false, label = "Open", value = "" } = A
     z-index: 30;
     display: flex;
     flex-direction: column;
+    max-height: min(460px, 62vh);
     padding: 6px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
     border: 1px solid var(--line);
     border-radius: var(--radius);
     background: var(--bg-raise);
@@ -284,7 +287,13 @@ const { id, variant = "hero", shortcut = false, label = "Open", value = "" } = A
     }
   }
 
-  .suggestions-label {
+  .options :global(.option-group + .option-group) {
+    margin-top: 4px;
+    padding-top: 4px;
+    border-top: 1px solid var(--line-soft);
+  }
+
+  .options :global(.suggestions-label) {
     padding: 6px 10px 4px;
     font-size: 11px;
     letter-spacing: 0.12em;
@@ -292,22 +301,101 @@ const { id, variant = "hero", shortcut = false, label = "Open", value = "" } = A
     color: var(--text-3);
   }
 
-  .options {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-
   .options :global(.option) {
-    display: flex;
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr) auto;
     align-items: center;
-    justify-content: space-between;
     gap: 12px;
     padding: 9px 10px;
     border-radius: 6px;
     font-size: var(--t-small);
     color: var(--text);
     cursor: pointer;
+  }
+
+  .options :global(.option-icon) {
+    display: grid;
+    place-items: center;
+    color: var(--text-3);
+  }
+
+  .options :global(.option-main) {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .options :global(.option-main .repo-name),
+  .options :global(.option-description) {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .options :global(.option-description) {
+    font-size: var(--t-caption);
+    color: var(--text-3);
+  }
+
+  .options :global(mark) {
+    background: transparent;
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  .options :global(.option-meta) {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: var(--t-caption);
+    color: var(--text-3);
+    white-space: nowrap;
+  }
+
+  .options :global(.option-stars) {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .options :global(.option-badge) {
+    padding: 1px 8px;
+    border: 1px solid var(--accent-line);
+    border-radius: 999px;
+    font-size: 11px;
+    color: var(--accent-2);
+  }
+
+  .options :global(.option-owner .option-meta .icon) {
+    transition: transform 160ms var(--ease-out);
+  }
+
+  .options :global(.option-owner:hover .option-meta .icon),
+  .options :global(.option-owner[aria-selected="true"] .option-meta .icon) {
+    transform: translateX(3px);
+  }
+
+  .suggestions-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    padding: 8px 10px 6px;
+    font-size: var(--t-caption);
+    line-height: 1.5;
+    color: var(--text-3);
+  }
+
+  .suggestions-status.is-loading::before {
+    content: "";
+    flex-shrink: 0;
+    width: 10px;
+    height: 10px;
+    border: 1.5px solid var(--line);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 700ms linear infinite;
   }
 
   .options :global(.option:hover),
@@ -535,9 +623,14 @@ const { id, variant = "hero", shortcut = false, label = "Open", value = "" } = A
     kbd {
       display: none;
     }
+
+    .options :global(.option-language) {
+      display: none;
+    }
   }
 
   @media (prefers-reduced-motion: reduce) {
+    .suggestions-status.is-loading::before,
     .preview :global(.spinner),
     .preview :global(.tone-active .status-mark),
     .field.is-invalid {

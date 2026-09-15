@@ -1,4 +1,4 @@
-import type { QueueView, RepoRef, RepoView } from "@everyrepo/core";
+import type { QueueView, RepoRef, RepoView, SearchInput } from "@everyrepo/core";
 import { openAppDb } from "@everyrepo/db";
 import {
   OneRequestAtATimeError,
@@ -45,6 +45,7 @@ function fakeService(overrides: Partial<RequestService> = {}) {
     approve: async () => view("x/y"),
     decline: () => view("x/y"),
     retry: () => view("x/y"),
+    assign: () => view("x/y"),
     requests: () => [],
     requestsFor: (userId) =>
       userId === 1
@@ -60,8 +61,21 @@ const NOW = Date.parse("2026-09-16T08:00:00Z");
 
 function api(service: RequestService, extra: Partial<RequestApiOptions> = {}) {
   const logs: string[] = [];
+  const searched: SearchInput[] = [];
   const handle = createRequestApi({
     service,
+    search: {
+      search: async (input) => {
+        searched.push(input);
+        return {
+          owners: [],
+          repos: [
+            { repo: "acme/app", description: null, stars: 3, language: null, archived: false },
+          ],
+          unavailable: false,
+        };
+      },
+    },
     db: openAppDb(":memory:"),
     secret: "test-secret",
     now: () => NOW,
@@ -70,7 +84,7 @@ function api(service: RequestService, extra: Partial<RequestApiOptions> = {}) {
     allowedOrigins: ["http://127.0.0.1:4323"],
     ...extra,
   });
-  return { handle, logs };
+  return { handle, logs, searched };
 }
 
 const get = (path: string, headers: HeadersInit = {}) =>
@@ -83,6 +97,23 @@ const post = (body: unknown) =>
   });
 
 describe("request API", () => {
+  it("searches GitHub only for text worth searching", async () => {
+    const { handle, searched } = api(fakeService().service, { limits: { searchesPerMinute: 2 } });
+    const found = (await handle(get("/api/search?q=acme%2Fap"), "1.2.3.4"))!;
+    expect(await found.json()).toMatchObject({ repos: [{ repo: "acme/app" }], unavailable: false });
+    expect(searched).toEqual([{ kind: "owner", owner: "acme", name: "ap" }]);
+
+    // A single letter or a full address is not searched, and does not use up the limit
+    for (const q of ["a", "https%3A%2F%2Fgithub.com%2Facme%2Fapp", ""]) {
+      const reply = (await handle(get(`/api/search?q=${q}`), "1.2.3.4"))!;
+      expect(await reply.json()).toEqual({ owners: [], repos: [], unavailable: false });
+    }
+    expect(searched).toHaveLength(1);
+
+    await handle(get("/api/search?q=acme"), "1.2.3.4");
+    expect((await handle(get("/api/search?q=acmes"), "1.2.3.4"))!.status).toBe(429);
+  });
+
   it("looks a repository up and answers an unchanged poll with 304", async () => {
     const { handle } = api(fakeService().service);
     const first = (await handle(get("/api/repos/acme/app"), "1.2.3.4"))!;

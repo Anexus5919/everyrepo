@@ -21,6 +21,17 @@ export interface GithubRepository {
   pushedAt: string | null;
 }
 
+export interface GithubOwner {
+  login: string;
+  kind: "user" | "organization";
+}
+
+export interface GithubSearchOptions {
+  limit: number;
+  // Most starred first instead of GitHub's best match
+  sort?: "stars";
+}
+
 export interface GithubFileList {
   // Path and size of every file, as GitHub lists them for the default branch
   files: Array<{ path: string; bytes: number }>;
@@ -77,6 +88,9 @@ export interface GithubClient {
   fileList(ref: RepoRef, branch: string): Promise<GithubFileList>;
   // Raw file contents at a branch or commit, or undefined when the file does not exist
   file(ref: RepoRef, revision: string, path: string): Promise<string | undefined>;
+  // Public repositories matching a search query; a query GitHub cannot run, such as an unknown owner, finds none
+  searchRepositories(query: string, options: GithubSearchOptions): Promise<GithubRepository[]>;
+  searchOwners(query: string, options: GithubSearchOptions): Promise<GithubOwner[]>;
 }
 
 const API = "https://api.github.com";
@@ -179,10 +193,7 @@ export function createGithubClient(options: GithubClientOptions = {}): GithubCli
     const saved = cache.get(key);
     if (saved && now() - saved.fetchedAt < maxAgeMs) return saved.payload as T;
     const response = await send(`${API}${path}`, {
-      accept: "application/vnd.github+json",
-      "x-github-api-version": "2022-11-28",
-      "user-agent": "everyrepo",
-      ...(options.token ? { authorization: `Bearer ${options.token}` } : {}),
+      ...headers(),
       ...(saved?.etag ? { "if-none-match": saved.etag } : {}),
     });
     // An unchanged answer does not count against the rate limit, so saved data is revalidated this way
@@ -196,6 +207,28 @@ export function createGithubClient(options: GithubClientOptions = {}): GithubCli
       return payload;
     }
     return failure(response);
+  }
+
+  const headers = () => ({
+    accept: "application/vnd.github+json",
+    "x-github-api-version": "2022-11-28",
+    "user-agent": "everyrepo",
+    ...(options.token ? { authorization: `Bearer ${options.token}` } : {}),
+  });
+
+  // Search answers change with every letter typed, so they skip the saved answers and their entity tags
+  async function search<T>(
+    kind: "repositories" | "users",
+    query: string,
+    settings: GithubSearchOptions,
+  ): Promise<T[]> {
+    const params = new URLSearchParams({ q: query, per_page: String(settings.limit) });
+    if (settings.sort) params.set("sort", settings.sort);
+    const response = await send(`${API}/search/${kind}?${params.toString()}`, headers());
+    if (response.status === 422) return [];
+    if (!response.ok) return failure(response);
+    const body = (await response.json()) as { items?: T[] };
+    return body.items ?? [];
   }
 
   async function failure(response: Response): Promise<never> {
@@ -251,6 +284,18 @@ export function createGithubClient(options: GithubClientOptions = {}): GithubCli
       );
       if (response.status === 404) return undefined;
       return response.ok ? response.text() : failure(response);
+    },
+    async searchRepositories(query, searchOptions) {
+      const items = await search<ApiRepository>("repositories", query, searchOptions);
+      // A token can see private repositories, which must never be offered on the site
+      return items.filter((item) => !item.private).map(toRepository);
+    },
+    async searchOwners(query, searchOptions) {
+      const items = await search<{ login: string; type: string }>("users", query, searchOptions);
+      return items.map((item) => ({
+        login: item.login,
+        kind: item.type === "Organization" ? "organization" : "user",
+      }));
     },
   };
 }

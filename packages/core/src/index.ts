@@ -2,12 +2,14 @@ export {
   formatRepoRef,
   parseRepoRef,
   readRepoInput,
+  readSearchInput,
   repoDirName,
   repoInputMessage,
   repoKey,
   type RepoInput,
   type RepoInputProblem,
   type RepoRef,
+  type SearchInput,
 } from "./repo-ref.ts";
 export * from "./requests.ts";
 export {

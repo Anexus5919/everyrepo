@@ -31,6 +31,13 @@ export {
   type RequestPolicy,
 } from "./policy.ts";
 export {
+  createRepoSearch,
+  rankOwners,
+  rankRepositories,
+  type RepoSearcher,
+  type RepoSearchOptions,
+} from "./search.ts";
+export {
   createRequestService,
   OneRequestAtATimeError,
   RequestsUnavailableError,

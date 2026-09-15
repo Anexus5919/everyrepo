@@ -88,6 +88,8 @@ function fakeGithub(entries: Record<string, FakeRepo>) {
     async file() {
       return undefined;
     },
+    searchRepositories: async () => [],
+    searchOwners: async () => [],
   };
   return { calls, client };
 }
@@ -471,6 +473,22 @@ describe("one request at a time", () => {
       ["acme/one", "ready", expect.any(String)],
     ]);
     expect(requests.requestsFor(person("nobody").userId)).toEqual([]);
+  });
+
+  it("links a request made before accounts existed, keeping when it was first made", async () => {
+    const { requests } = service({ "acme/old": { files: sourceFiles(5_000) } });
+    at("2026-09-15T20:00:00Z");
+    await requests.submit(ref("acme/old"), person("grace"));
+    at("2026-09-16T09:00:00Z");
+    const ada = person("ada");
+
+    expect(requests.assign(ref("acme/old"), ada.userId).state).toBe("queued");
+    // Assigning twice changes nothing
+    requests.assign(ref("acme/old"), ada.userId);
+    expect(requests.requestsFor(ada.userId)).toMatchObject([
+      { requestedAt: "2026-09-15T20:00:00.000Z", view: { repo: "acme/old", requests: 1 } },
+    ]);
+    expect(() => requests.assign(ref("acme/none"), ada.userId)).toThrow("No request for acme/none");
   });
 });
 

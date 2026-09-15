@@ -1,14 +1,23 @@
-import { readRepoInput, repoInputMessage, type ApiError, type RepoRef } from "@everyrepo/core";
+import {
+  readRepoInput,
+  readSearchInput,
+  repoInputMessage,
+  type ApiError,
+  type RepoRef,
+  type RepoSearch,
+} from "@everyrepo/core";
 import { hitRateLimit, type AppDb } from "@everyrepo/db";
 import { isAllowedOrigin } from "./http.ts";
 import {
   OneRequestAtATimeError,
   RequestsUnavailableError,
+  type RepoSearcher,
   type RequestService,
 } from "@everyrepo/requests";
 
 export interface RequestLimits {
   lookupsPerMinute: number;
+  searchesPerMinute: number;
   requestsPerHour: number;
   requestsPerDay: number;
 }
@@ -20,6 +29,8 @@ export interface Turnstile {
 
 export interface RequestApiOptions {
   service: RequestService;
+  // Suggests owners and repositories from GitHub while someone types
+  search: RepoSearcher;
   db: AppDb;
   // Keys the daily hashes of visitor addresses; addresses themselves are never stored
   secret: string;
@@ -37,18 +48,22 @@ export const REQUEST_BODY_BYTES = 4_000;
 
 const DEFAULT_LIMITS: RequestLimits = {
   lookupsPerMinute: 40,
+  searchesPerMinute: 90,
   requestsPerHour: 10,
   requestsPerDay: 30,
 };
 const MINUTE_MS = 60_000;
 const HOUR_MS = 3_600_000;
 const DAY_MS = 86_400_000;
+const SEARCH_TEXT_LENGTH = 200;
+const NO_RESULTS: RepoSearch = { owners: [], repos: [], unavailable: false };
 const TURNSTILE_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 
 export function isRequestRoute(path: string): boolean {
   return (
     path === "/api/requests" ||
     path === "/api/queue" ||
+    path === "/api/search" ||
     path === "/api/account/requests" ||
     path.startsWith("/api/repos/")
   );
@@ -164,7 +179,8 @@ export function createRequestApi(options: RequestApiOptions) {
   }
 
   return async (request: Request, address: string): Promise<Response | undefined> => {
-    const path = new URL(request.url).pathname;
+    const url = new URL(request.url);
+    const path = url.pathname;
     if (!isRequestRoute(path)) return undefined;
     const visitor = await hashAddress(options.secret, address, now());
 
@@ -183,6 +199,20 @@ export function createRequestApi(options: RequestApiOptions) {
       if (blocked) return blocked;
       try {
         return await json(request, await options.service.lookup(read.ref));
+      } catch (caught) {
+        return unavailable(caught);
+      }
+    }
+
+    if (path === "/api/search") {
+      if (request.method !== "GET") return error(405, "method", "Use GET for this address.");
+      const text = (url.searchParams.get("q") ?? "").slice(0, SEARCH_TEXT_LENGTH);
+      const input = readSearchInput(text);
+      if (!input) return json(request, NO_RESULTS);
+      const blocked = limited(`search:${visitor}`, limits.searchesPerMinute, MINUTE_MS);
+      if (blocked) return blocked;
+      try {
+        return await json(request, await options.search.search(input));
       } catch (caught) {
         return unavailable(caught);
       }

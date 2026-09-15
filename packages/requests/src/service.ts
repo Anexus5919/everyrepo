@@ -116,6 +116,8 @@ export interface RequestService {
   approve(ref: RepoRef): Promise<RepoView>;
   decline(ref: RepoRef): RepoView;
   retry(ref: RepoRef): RepoView;
+  // Links a request made before its requester had an account, keeping the time it was first made
+  assign(ref: RepoRef, userId: number): RepoView;
   requests(): RepoView[];
   // Everything one account asked for, newest first
   requestsFor(userId: number): AccountRequest[];
@@ -673,6 +675,17 @@ export function createRequestService(options: RequestServiceOptions): RequestSer
         throw new Error(`${formatRepoRef(ref)} is not approved; approve it first`);
       }
       enqueueBuild(db, repo, buildPriority(record.request.estimate?.sizeTier));
+      return viewOf(repo);
+    },
+
+    assign(ref, userId) {
+      const repo = findRepo(db, ref);
+      const record = repo ? loadRecord(db, repo) : undefined;
+      if (!repo || !record?.request) throw new Error(`No request for ${formatRepoRef(ref)}`);
+      db.insert(userRequests)
+        .values({ userId, repoId: repo.id, requestedAt: record.request.firstAt })
+        .onConflictDoNothing()
+        .run();
       return viewOf(repo);
     },
 

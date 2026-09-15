@@ -117,6 +117,32 @@ export function readRepoInput(input: string): RepoInput {
   return { ok: false, problem: "invalid" };
 }
 
+// What the repository box searches GitHub for while someone types: an owner's repositories once a slash
+// follows the owner, otherwise owners and repositories whose names match the text
+export type SearchInput =
+  { kind: "owner"; owner: string; name: string } | { kind: "text"; text: string };
+
+const PARTIAL_NAME = /^[A-Za-z0-9._-]{0,100}$/;
+const SEARCH_TEXT = /^[A-Za-z0-9._-]{2,100}$/;
+
+export function readSearchInput(input: string): SearchInput | undefined {
+  const text = input.trim();
+  // A pasted address names its repository exactly, so it is looked up instead of searched
+  if (/^[a-z][a-z0-9+.-]*:\/\/|^[\w.-]+@|^(www\.)?github\.com/i.test(text)) {
+    const read = readRepoInput(text);
+    return !read.ok && read.problem === "owner-only" && read.owner
+      ? { kind: "owner", owner: read.owner, name: "" }
+      : undefined;
+  }
+  const slash = text.indexOf("/");
+  if (slash === -1) return SEARCH_TEXT.test(text) ? { kind: "text", text } : undefined;
+  const owner = text.slice(0, slash);
+  const name = text.slice(slash + 1);
+  if (!OWNER.test(owner) || !PARTIAL_NAME.test(name)) return undefined;
+  if (RESERVED_OWNERS.has(owner.toLowerCase())) return undefined;
+  return { kind: "owner", owner, name };
+}
+
 // What to tell someone whose text could not be read as a repository
 export function repoInputMessage(problem: RepoInputProblem, owner?: string): string {
   switch (problem) {

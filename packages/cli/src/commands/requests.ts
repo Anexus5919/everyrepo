@@ -1,4 +1,5 @@
 import { parseRepoRef, type RepoView } from "@everyrepo/core";
+import { sql, users } from "@everyrepo/db";
 import { Command } from "commander";
 import { openContext, openRequests, type CliContext } from "../context.ts";
 
@@ -77,6 +78,27 @@ export function requestsCommand(): Command {
     .argument("<repo>", "owner/name or GitHub URL")
     .action((repo: string) =>
       withService((service) => console.log(describe(service.retry(parseRepoRef(repo))))),
+    );
+
+  requests
+    .command("assign")
+    .description(
+      "Link a request made before sign-in existed to the account of the person who made it",
+    )
+    .argument("<repo>", "owner/name or GitHub URL")
+    .argument("<login>", "GitHub login of an account that has signed in on the site")
+    .action((repo: string, login: string) =>
+      withService((service, context) => {
+        const user = context.appDb
+          .select()
+          .from(users)
+          .where(sql`lower(${users.login}) = lower(${login})`)
+          .get();
+        if (!user)
+          throw new Error(`No account for ${login}; they need to sign in on the site first`);
+        console.log(describe(service.assign(parseRepoRef(repo), user.id)));
+        console.log(`Linked to ${user.login}`);
+      }),
     );
 
   return requests;

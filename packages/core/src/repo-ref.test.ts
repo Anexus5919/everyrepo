@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { formatRepoRef, parseRepoRef, readRepoInput, repoDirName, repoKey } from "./repo-ref.ts";
+import {
+  formatRepoRef,
+  parseRepoRef,
+  readRepoInput,
+  readSearchInput,
+  repoDirName,
+  repoKey,
+} from "./repo-ref.ts";
 
 const ref = (owner: string, name: string) => ({ ok: true, ref: { owner, name } });
 
@@ -103,5 +110,34 @@ describe("formatting", () => {
     expect(formatRepoRef(parsed)).toBe("toeverything/AFFiNE");
     expect(repoDirName(parsed)).toBe("toeverything__AFFiNE");
     expect(repoKey(parsed)).toBe("toeverything/affine");
+  });
+});
+
+describe("search input", () => {
+  it("searches names while typing, and an owner's repositories after a slash", () => {
+    expect(readSearchInput("reac")).toEqual({ kind: "text", text: "reac" });
+    expect(readSearchInput(" next.js ")).toEqual({ kind: "text", text: "next.js" });
+    expect(readSearchInput("vercel/")).toEqual({ kind: "owner", owner: "vercel", name: "" });
+    expect(readSearchInput("vercel/ne")).toEqual({ kind: "owner", owner: "vercel", name: "ne" });
+    expect(readSearchInput("https://github.com/sugarlabs")).toEqual({
+      kind: "owner",
+      owner: "sugarlabs",
+      name: "",
+    });
+  });
+
+  it("leaves pasted repository addresses, single letters and other text to the lookup", () => {
+    for (const text of [
+      "r",
+      "",
+      "https://github.com/vercel/next.js",
+      "git@github.com:vercel/next.js.git",
+      "vercel/next.js/tree/main",
+      "search/x",
+      "has space",
+      "-bad/name",
+    ]) {
+      expect(readSearchInput(text)).toBeUndefined();
+    }
   });
 });

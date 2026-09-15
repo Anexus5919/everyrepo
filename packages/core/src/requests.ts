@@ -164,6 +164,28 @@ export function buildPercent(stage: string, done: number | null, total: number |
   return Math.round(((before + BUILD_STAGES[index]!.weight * within) / all) * 100);
 }
 
+// A GitHub account offered while someone types in the repository box
+export interface SearchOwner {
+  login: string;
+  kind: "user" | "organization";
+}
+
+// A public repository offered while someone types in the repository box
+export interface SearchRepo {
+  repo: string;
+  description: string | null;
+  stars: number;
+  language: string | null;
+  archived: boolean;
+}
+
+export interface RepoSearch {
+  owners: SearchOwner[];
+  repos: SearchRepo[];
+  // True when GitHub search could not answer, so the results may be missing or incomplete
+  unavailable: boolean;
+}
+
 // One repository an account asked for, and when it asked
 export interface AccountRequest {
   requestedAt: string;

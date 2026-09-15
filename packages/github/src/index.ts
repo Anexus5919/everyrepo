@@ -7,5 +7,7 @@ export {
   type GithubClientOptions,
   type GithubErrorKind,
   type GithubFileList,
+  type GithubOwner,
+  type GithubSearchOptions,
   type GithubRepository,
 } from "./client.ts";

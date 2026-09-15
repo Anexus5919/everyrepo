@@ -158,4 +158,43 @@ describe("GitHub client", () => {
       "https://raw.githubusercontent.com/Acme/App/HEAD/docs/a%20b.md",
     ]);
   });
+
+  it("searches public repositories and owners, and finds nothing for a query GitHub refuses", async () => {
+    const { calls, doFetch } = fakeFetch([
+      () => json({ items: [apiRepo, { ...apiRepo, full_name: "acme/secret", private: true }] }),
+      () =>
+        json({
+          items: [
+            { login: "acme", type: "Organization" },
+            { login: "acmebot", type: "User" },
+          ],
+        }),
+      () => json({ message: "Validation Failed" }, { status: 422 }),
+      () =>
+        json(
+          { message: "API rate limit exceeded" },
+          {
+            status: 403,
+            headers: { "x-ratelimit-remaining": "0", "x-ratelimit-reset": "1800000000" },
+          },
+        ),
+    ]);
+    const client = createGithubClient({ fetch: doFetch, token: "t" });
+
+    const found = await client.searchRepositories("ap in:name user:acme", {
+      limit: 8,
+      sort: "stars",
+    });
+    expect(found.map((repo) => repo.fullName)).toEqual(["acme/app"]);
+    expect(new URL(calls[0]!.url).search).toBe("?q=ap+in%3Aname+user%3Aacme&per_page=8&sort=stars");
+    expect(calls[0]!.headers["if-none-match"]).toBeUndefined();
+
+    expect(await client.searchOwners("acm in:login", { limit: 3 })).toEqual([
+      { login: "acme", kind: "organization" },
+      { login: "acmebot", kind: "user" },
+    ]);
+    expect(await client.searchRepositories("user:missing", { limit: 8 })).toEqual([]);
+    const limited = await client.searchOwners("x", { limit: 3 }).catch((error: unknown) => error);
+    expect(limited).toMatchObject({ kind: "rate-limited", retryAt: new Date(1_800_000_000_000) });
+  });
 });

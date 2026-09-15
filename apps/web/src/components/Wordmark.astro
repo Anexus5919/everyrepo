@@ -23,6 +23,8 @@
   const TEXT = "EveryRepo";
   const FONT = '"Newsreader Variable", Georgia, serif';
   const STRANDS = 58;
+  // Share of the y and p descenders kept above the bottom edge
+  const DESCENDER_SHOWN = 0.5;
   const SAMPLES = 90;
   const STREAKS = 5;
 
@@ -85,7 +87,7 @@
       target.textBaseline = "alphabetic";
     }
 
-    // The word fills the width, or the height when space is short, and stands on the bottom edge
+    // The word fills the width, or the height when space is short, and sits low enough that only the tips of y and p reach the bottom edge
     function fit() {
       const rect = host.getBoundingClientRect();
       ratio = Math.min(window.devicePixelRatio || 1, 2);
@@ -99,10 +101,11 @@
       const metrics = ctx.measureText(TEXT);
       const wide = (metrics.actualBoundingBoxLeft + metrics.actualBoundingBoxRight) / 100;
       const tall = metrics.actualBoundingBoxAscent / 100;
-      size = Math.max(10, Math.min(width / wide, (height - 6) / tall));
+      const drop = (metrics.actualBoundingBoxDescent / 100) * DESCENDER_SHOWN;
+      size = Math.max(10, Math.min(width / wide, (height - 6) / (tall + drop)));
       left = metrics.actualBoundingBoxLeft * (size / 100);
-      baseline = height;
-      top = height - tall * size;
+      baseline = height - drop * size;
+      top = baseline - tall * size;
 
       maskContext.setTransform(ratio, 0, 0, ratio, 0, 0);
       maskContext.clearRect(0, 0, width, height);

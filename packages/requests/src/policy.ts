@@ -92,7 +92,11 @@ export function decideRequest(
   return { decision: "approved" };
 }
 
+// Repositories the owner adds on their own wait behind every build that someone asked for
+const OWNER_ADDED_OFFSET = 200;
+
 // Smaller repositories finish in far less time, so they go first and a large build cannot hold up many small ones
-export function buildPriority(tier: SizeTier | null | undefined): number {
-  return 80 + 20 * Math.max(0, SIZE_TIERS.indexOf(tier ?? "M"));
+export function buildPriority(tier: SizeTier | null | undefined, asked = true): number {
+  const bySize = 80 + 20 * Math.max(0, SIZE_TIERS.indexOf(tier ?? "M"));
+  return asked ? bySize : bySize + OWNER_ADDED_OFFSET;
 }

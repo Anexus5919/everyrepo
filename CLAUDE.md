@@ -34,7 +34,8 @@ TypeScript source directly and run with tsx. Tests use Vitest.
     summarize, plan, write, glossary); a used-up model allowance pauses the job and a rerun resumes it
   - `export <owner/repo> [--out <dir>]` writes the generated pages as Markdown files for review
   - `site [--out <dir>]` writes the JSON the website is built from (`site` in dataDir by default) and
-    marks the wikis it contains as published
+    marks the wikis it contains as published; a repository without written pages is listed only while a build for it
+    is open
   - `ask <owner/repo> <question...> [--page <slug>]` answers a question with checked citations
   - `serve [--port <n>]` runs the Ask, account and repository request API on 127.0.0.1 (default port 8787) for
     the website; Ask is switched off when embeddings or models are not configured, requests keep working, and
@@ -105,7 +106,9 @@ TypeScript source directly and run with tsx. Tests use Vitest.
   `autoApprovePerDay` and `maxWaiting`; other requests wait for owner review. Every request belongs to a
   signed-in account (`user_request` keeps each account's history), and each account has one request in
   progress at a time until it is ready, failed or declined. Approved builds queue a read job, then
-  a wiki job, then a publish job, smaller tiers first; `describeRecord` turns the registry, request and jobs
+  a wiki job, then a publish job, smaller tiers first; repositories the owner adds with `requests approve` that nobody
+  asked for wait behind every requested build, do not count toward `maxWaiting`, and move up once someone asks for
+  them; `describeRecord` turns the registry, request and jobs
   into the state a status page shows. Ready times come from `simulateLine`, which plays the line forward for
   one worker against each model's rolling-day request limit and the embedding neuron budget (`capacity.ts`),
   with work taken from each engine database once read (`packages/cli/src/build-work.ts`) or sized from the

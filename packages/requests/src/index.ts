@@ -1,5 +1,5 @@
 export { builderStatus, removeWorker, touchWorker, WORKER_STALE_MS } from "./builders.ts";
-export { enqueueBuild, followUp, markPublished } from "./builds.ts";
+export { enqueueBuild, followUp, markPublished, promoteBuild } from "./builds.ts";
 export {
   CapacityLedger,
   modelsFor,

@@ -17,6 +17,7 @@ import {
   ensureRepo,
   eq,
   findRepo,
+  gt,
   gte,
   inArray,
   indexJobs,
@@ -34,7 +35,7 @@ import {
 import { GithubError, type GithubClient } from "@everyrepo/github";
 import type { Job } from "@everyrepo/queue";
 import { builderStatus } from "./builders.ts";
-import { enqueueBuild } from "./builds.ts";
+import { enqueueBuild, promoteBuild } from "./builds.ts";
 import { CapacityLedger, type CapacityConfig } from "./capacity.ts";
 import {
   PUBLISH_MS,
@@ -360,7 +361,22 @@ export function createRequestService(options: RequestServiceOptions): RequestSer
         ),
       )
       .get()!.count;
-    const waiting = queuePositions(db, now()).size;
+    // Only builds someone asked for fill the line; repositories the owner added never hold up a request
+    const asked = new Set(
+      db
+        .select({ repoId: repoRequests.repoId })
+        .from(repoRequests)
+        .where(gt(repoRequests.count, 0))
+        .all()
+        .map((row) => row.repoId),
+    );
+    const at = now();
+    const waiting = db
+      .select()
+      .from(indexJobs)
+      .where(and(eq(indexJobs.status, "queued"), eq(indexJobs.origin, "request")))
+      .all()
+      .filter((job) => asked.has(job.repoId) && !isPaused(job, at)).length;
     return { approvedToday, waiting };
   }
 
@@ -465,6 +481,7 @@ export function createRequestService(options: RequestServiceOptions): RequestSer
       enqueueBuild(db, repo, buildPriority(record.request?.estimate?.sizeTier));
     }
     const counted = recordRequester(repo.id, requester.userId);
+    promoteBuild(db, repo.id, buildPriority(record.request?.estimate?.sizeTier ?? repo.sizeTier));
     return { view: viewOf(repo), counted };
   }
 
@@ -645,7 +662,7 @@ export function createRequestService(options: RequestServiceOptions): RequestSer
         .set({ decision: "approved", reason: null, decidedBy: "owner", decidedAt: now() })
         .where(eq(repoRequests.repoId, repo.id))
         .run();
-      enqueueBuild(db, repo, buildPriority(request.estimate?.sizeTier));
+      enqueueBuild(db, repo, buildPriority(request.estimate?.sizeTier, request.count > 0));
       return viewOf(repo);
     },
 
@@ -674,7 +691,11 @@ export function createRequestService(options: RequestServiceOptions): RequestSer
       if (record.request.decision !== "approved") {
         throw new Error(`${formatRepoRef(ref)} is not approved; approve it first`);
       }
-      enqueueBuild(db, repo, buildPriority(record.request.estimate?.sizeTier));
+      enqueueBuild(
+        db,
+        repo,
+        buildPriority(record.request.estimate?.sizeTier, record.request.count > 0),
+      );
       return viewOf(repo);
     },
 
@@ -720,7 +741,8 @@ export function createRequestService(options: RequestServiceOptions): RequestSer
         const record = loadRecord(db, repo);
         if (repo.publishedAt || record.openJob) continue;
         if (record.lastJob?.status === "failed" || record.lastJob?.status === "cancelled") continue;
-        if (enqueueBuild(db, repo, buildPriority(request.estimate?.sizeTier))) started += 1;
+        const priority = buildPriority(request.estimate?.sizeTier, request.count > 0);
+        if (enqueueBuild(db, repo, priority)) started += 1;
       }
       return started;
     },

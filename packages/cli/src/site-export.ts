@@ -10,6 +10,7 @@ import {
   type SiteWiki,
 } from "@everyrepo/core";
 import { engineDbPath, eq, openEngineDb, repoRequests, repos, type AppDb } from "@everyrepo/db";
+import { findOpenJob } from "@everyrepo/queue";
 
 const EXCERPT_LINES = 80;
 
@@ -74,6 +75,8 @@ export async function exportSite(db: AppDb, dataDir: string, out: string): Promi
       row.lastIndexedAt?.getTime() ?? null,
     );
     const { overview, architecture, technologies, wikiPages, glossary, ...repo } = wiki;
+    // A repository without written pages is shown as being written only while a build for it is open
+    if (repo.status === "queued" && !findOpenJob(db, row.id)) continue;
     listed.push(repo);
     if (repo.status !== "ready" || !repo.sha) continue;
     await writeFile(

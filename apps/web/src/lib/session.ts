@@ -6,6 +6,8 @@ export interface Account {
   signInAvailable: boolean;
   // False when the API could not be reached, so the page does not claim someone is signed out
   reachable: boolean;
+  // Whether this account may open the admin dashboard; the API checks again on every call
+  admin: boolean;
 }
 
 const CACHE_KEY = "everyrepo.account";
@@ -33,16 +35,19 @@ function remember(user: AccountUser | null): void {
 
 // Asked once per page view; every part of the page shares the answer
 export function getAccount(): Promise<Account> {
-  pending ??= call<{ user: AccountUser | null; signInAvailable: boolean }>("/api/auth/me")
+  pending ??= call<{ user: AccountUser | null; signInAvailable: boolean; admin?: boolean }>(
+    "/api/auth/me",
+  )
     .then(({ body }) => {
       remember(body?.user ?? null);
       return {
         user: body?.user ?? null,
         signInAvailable: body?.signInAvailable ?? false,
         reachable: true,
+        admin: body?.admin === true,
       };
     })
-    .catch(() => ({ user: cachedUser(), signInAvailable: false, reachable: false }));
+    .catch(() => ({ user: cachedUser(), signInAvailable: false, reachable: false, admin: false }));
   return pending;
 }
 
@@ -71,13 +76,13 @@ export function requestIntentPath(repo: string): string {
 
 export async function signOut(): Promise<void> {
   await call("/api/auth/signout", { method: "POST" });
-  pending = Promise.resolve({ user: null, signInAvailable: true, reachable: true });
+  pending = Promise.resolve({ user: null, signInAvailable: true, reachable: true, admin: false });
   remember(null);
 }
 
 export async function deleteAccount(): Promise<void> {
   await call("/api/account", { method: "DELETE" });
-  pending = Promise.resolve({ user: null, signInAvailable: true, reachable: true });
+  pending = Promise.resolve({ user: null, signInAvailable: true, reachable: true, admin: false });
   remember(null);
 }
 
@@ -90,7 +95,7 @@ export async function accountRequests(): Promise<AccountRequest[]> {
 export function isSignInProblem(error: unknown): error is ApiProblem {
   const signIn = error instanceof ApiProblem && error.status === 401 && error.code === "sign-in";
   if (signIn) {
-    pending = Promise.resolve({ user: null, signInAvailable: true, reachable: true });
+    pending = Promise.resolve({ user: null, signInAvailable: true, reachable: true, admin: false });
     remember(null);
   }
   return signIn;

@@ -38,8 +38,9 @@ TypeScript source directly and run with tsx. Tests use Vitest.
     is open
   - `ask <owner/repo> <question...> [--page <slug>]` answers a question with checked citations
   - `serve [--port <n>]` runs the Ask, account and repository request API on 127.0.0.1 (default port 8787) for
-    the website; Ask is switched off when embeddings or models are not configured, requests keep working, and
-    signing in is off until `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` are set
+    the website; Ask is switched off when embeddings or models are not configured, requests keep working,
+    signing in is off until `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` are set, and the admin dashboard stays
+    closed until `EVERYREPO_ADMIN_GITHUB_IDS` names at least one GitHub account id
   - `requests rebuild <owner/repo...>` writes published wikis again behind every request and every new wiki; the
     site keeps showing the published version until the new one is published
   - `requests list|show|approve|decline|retry <owner/repo>` reviews repositories requested on the site;
@@ -126,6 +127,14 @@ TypeScript source directly and run with tsx. Tests use Vitest.
   what to search: an owner's repositories after a slash, otherwise names), orders names that start with the
   text first and then by stars, keeps answers for ten minutes, shares identical searches in flight and stops
   asking GitHub until a rate limit resets
+- Admin dashboard (`/admin/` on the site, `src/lib/admin-page.ts`; API in `packages/cli/src/admin-api.ts` with
+  data from `src/admin-data.ts`; queue controls in `packages/requests/src/admin.ts`). Only accounts whose GitHub id is
+  in `EVERYREPO_ADMIN_GITHUB_IDS` get in; everyone else is told the address does not exist, checked on every call.
+  It needs a sign-in from the last 12 hours, and changes must come from the site origin with the
+  `x-everyrepo-admin` header. Every change is recorded in `admin_action`. It shows model, embedding and GitHub
+  allowances with rests, the build line (move to top, up, down, bottom, cancel), requests (approve, decline, retry),
+  adding repositories, wikis with page status (read a page, rewrite chosen pages or the whole wiki), accounts and
+  recent activity, and can pause the builder (`setting` table), which then finishes its job and claims nothing more
 - `packages/accounts`: GitHub sign-in. The authorization code flow with PKCE and a one-time state bound to the
   browser by a cookie (`auth_state`), the GitHub profile and primary verified email (`user`), and sessions kept
   as hashes of random tokens with a 30 day sliding expiry (`session`)

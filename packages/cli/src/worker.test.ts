@@ -2,7 +2,12 @@ import { parseRepoRef } from "@everyrepo/core";
 import { ensureRepo, eq, indexJobs, openAppDb, repos, type AppDb } from "@everyrepo/db";
 import type { GithubClient } from "@everyrepo/github";
 import { enqueueJob, StageDeferredError, type StageHandler } from "@everyrepo/queue";
-import { builderStatus, createRequestService, markPublished } from "@everyrepo/requests";
+import {
+  builderStatus,
+  createRequestService,
+  markPublished,
+  setBuilderPaused,
+} from "@everyrepo/requests";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createWorker, type RuntimeFactory } from "./worker.ts";
 
@@ -95,6 +100,34 @@ describe("worker", () => {
       "publish",
     ]);
     expect(logs[0]).toBe("queued 1 approved builds that had no job");
+  });
+
+  it("starts nothing while the builder is paused from the admin dashboard", async () => {
+    approvedRepo("acme/app");
+    const opened: string[] = [];
+    const logs: string[] = [];
+    const worker = createWorker({
+      db,
+      service: createRequestService({ db, github }),
+      runtimeFor: async (job) => {
+        opened.push(job.kind);
+        return { handlers: {}, close: () => {} };
+      },
+      workerId: "test",
+      log: (message) => logs.push(message),
+    });
+    setBuilderPaused(db, true);
+    expect(await worker.step()).toBeUndefined();
+    expect(await worker.step()).toBeUndefined();
+    expect(opened).toEqual([]);
+    expect(logs).toEqual([
+      "paused from the admin dashboard; no new job starts until it is resumed",
+    ]);
+
+    setBuilderPaused(db, false);
+    await worker.step();
+    expect(opened).toEqual(["full"]);
+    expect(logs).toContain("resumed from the admin dashboard");
   });
 
   it("reports in while it runs and goes offline when it stops", async () => {

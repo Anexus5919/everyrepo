@@ -23,8 +23,17 @@ interface Props {
   wide?: boolean;
   // Pages reached in the middle of a task, such as signing in, do not open the first visit guide
   guide?: boolean;
+  // Pages that search engines should leave out, such as the admin dashboard
+  noindex?: boolean;
 }
-const { title, description, snap = false, wide = false, guide = true } = Astro.props;
+const {
+  title,
+  description,
+  snap = false,
+  wide = false,
+  guide = true,
+  noindex = false,
+} = Astro.props;
 const paletteIds = PALETTES.map((palette) => palette.id);
 // The repository box suggests these and opens written wikis without asking the API
 const knownWikis = loadRepos().map((repo) => ({
@@ -47,6 +56,7 @@ const knownWikis = loadRepos().map((repo) => ({
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
     <meta name="description" content={description} />
+    {noindex && <meta name="robots" content="noindex, nofollow" />}
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <script is:inline>
       try {

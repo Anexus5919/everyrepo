@@ -42,7 +42,9 @@ export function promoteBuild(db: AppDb, repoId: number, priority: number): void 
     .run();
 }
 
-// After a requested job succeeds, the build carries on with the step that follows it
+// After a requested job succeeds, the build carries on with the step that follows it. Each step sits one place ahead
+// of the step before it, so a build that has started is written and published before a build of the same kind starts,
+// and a finished wiki goes live without waiting for other wikis to be written
 export function followUp(db: AppDb, finished: Job): Job | undefined {
   if (finished.status !== "succeeded" || finished.origin !== "request") return undefined;
   if (findOpenJob(db, finished.repoId)) return undefined;
@@ -57,7 +59,7 @@ export function followUp(db: AppDb, finished: Job): Job | undefined {
     repoId: finished.repoId,
     ...next,
     origin: "request",
-    priority: finished.priority,
+    priority: finished.priority - 1,
   });
 }
 

@@ -106,7 +106,8 @@ TypeScript source directly and run with tsx. Tests use Vitest.
   `autoApprovePerDay` and `maxWaiting`; other requests wait for owner review. Every request belongs to a
   signed-in account (`user_request` keeps each account's history), and each account has one request in
   progress at a time until it is ready, failed or declined. Approved builds queue a read job, then
-  a wiki job, then a publish job, smaller tiers first; repositories the owner adds with `requests approve` that nobody
+  a wiki job, then a publish job, smaller tiers first, and each step sits one place ahead of the one before it so
+  a started build is written and published before the next one of its kind starts; repositories the owner adds with `requests approve` that nobody
   asked for wait behind every requested build, do not count toward `maxWaiting`, and move up once someone asks for
   them; `describeRecord` turns the registry, request and jobs
   into the state a status page shows. Ready times come from `simulateLine`, which plays the line forward for

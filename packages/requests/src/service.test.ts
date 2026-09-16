@@ -412,10 +412,10 @@ describe("following a build", () => {
     const full = claimNextJob(db, "w", { origin: "request", now: clock })!;
     const read = await runJob(db, full, pass(full.stages));
     const wiki = followUp(db, read)!;
-    expect(wiki).toMatchObject({ kind: "wiki", origin: "request", priority: 80 });
+    expect(wiki).toMatchObject({ kind: "wiki", origin: "request", priority: 79 });
     const written = await runJob(db, claimJob(db, wiki.id, "w")!, pass(wiki.stages));
     const publish = followUp(db, written)!;
-    expect(publish).toMatchObject({ kind: "publish", stages: ["publish"] });
+    expect(publish).toMatchObject({ kind: "publish", stages: ["publish"], priority: 78 });
     const published = await runJob(db, claimJob(db, publish.id, "w")!, pass(["publish"]));
     markPublished(db, published.repoId, "abc", clock);
     expect(followUp(db, published)).toBeUndefined();

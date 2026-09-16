@@ -11,6 +11,7 @@ import {
   type SizeEstimate,
 } from "@everyrepo/core";
 import {
+  activeRests,
   and,
   asc,
   desc,
@@ -185,7 +186,9 @@ export function createRequestService(options: RequestServiceOptions): RequestSer
     const at = now();
     const positions = queuePositions(db, at);
     const builder = builderStatus(db, at);
-    const ledger = options.capacity ? new CapacityLedger(options.capacity, usage()) : undefined;
+    const ledger = options.capacity
+      ? new CapacityLedger(options.capacity, usage(), activeRests(db, at))
+      : undefined;
     if (!ledger) return { now: at, positions, builder, ledger, line: [], estimates: new Map() };
 
     // The running build first, then the rest in the order the worker claims them

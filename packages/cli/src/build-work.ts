@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { parseRepoRef, repoDirName, type LocalConfig, type SizeTier } from "@everyrepo/core";
 import {
+  activeRests,
   engineDbPath,
   openEngineReadonly,
   usageBuckets,
@@ -119,7 +120,8 @@ export function createAllowanceClock(db: AppDb, config: LocalConfig): AllowanceC
     modelsAt(task) {
       if (!capacity) return undefined;
       const now = Date.now();
-      return later(taskCapacityAt(new CapacityLedger(capacity, usageBuckets(db)), task, now), now);
+      const ledger = new CapacityLedger(capacity, usageBuckets(db), activeRests(db));
+      return later(taskCapacityAt(ledger, task, now), now);
     },
     embeddingsAt() {
       if (!capacity?.embeddings) return undefined;

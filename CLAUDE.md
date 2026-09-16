@@ -82,7 +82,11 @@ TypeScript source directly and run with tsx. Tests use Vitest.
   plus file ranking with a centrality prior and import expansion
 - `packages/llm`: chat models behind one OpenAI-compatible client (Gemini, Groq, Workers AI), per
   task fallback order from the `llm` config, per-minute pacing, daily request limits, a response
-  cache and JSON answers validated with zod
+  cache and JSON answers validated with zod. A refusal the provider marks as a daily quota (Gemini lists
+  `PerDay` quota ids) ends retries at once; the model then rests until the provider's reset (midnight Pacific for
+  Gemini, midnight UTC for Workers AI) or the wait the refusal names, and a model still refused after every retry
+  rests five minutes. Rests live in `model_rest` in `app.sqlite`, so every run skips a resting model and paused
+  jobs and ready times count a resting model as having nothing left
 - `packages/wiki`: cluster, package and repository summaries, the page planner with plan repair, and
   the page writer. Every paragraph must cite numbered source chunks; the verifier drops uncited
   blocks, names missing from the cited sources and code not copied from them, then links citations

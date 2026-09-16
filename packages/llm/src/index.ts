@@ -2,6 +2,7 @@ export { createRouterFromConfig, type RouterDependencies } from "./from-config.t
 export { estimateTokens, withLimits, type UsageLedger } from "./limiter.ts";
 export {
   createOpenAiCompatibleModel,
+  nextMidnightIn,
   retryAfterMs,
   type OpenAiCompatibleOptions,
 } from "./openai-compatible.ts";

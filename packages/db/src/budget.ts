@@ -1,5 +1,5 @@
-import { and, eq, gte, sql, sum } from "drizzle-orm";
-import { usageCounters } from "./app-schema.ts";
+import { and, eq, gt, gte, sql, sum } from "drizzle-orm";
+import { modelRests, usageCounters } from "./app-schema.ts";
 import type { AppDb } from "./open.ts";
 
 export interface UsageRecord {
@@ -49,6 +49,54 @@ export function requestsLastDay(
     )
     .get();
   return Number(row?.requests ?? 0);
+}
+
+export interface ModelRest {
+  provider: string;
+  model: string;
+  until: Date;
+}
+
+// A later refusal never shortens a rest that is still running
+export function restModel(db: AppDb, rest: ModelRest & { reason: string }, now = new Date()): void {
+  const current = restingUntil(db, rest.provider, rest.model, now);
+  if (current && current >= rest.until) return;
+  db.insert(modelRests)
+    .values({ ...rest, updatedAt: now })
+    .onConflictDoUpdate({
+      target: [modelRests.provider, modelRests.model],
+      set: { until: rest.until, reason: rest.reason, updatedAt: now },
+    })
+    .run();
+}
+
+export function restingUntil(
+  db: AppDb,
+  provider: string,
+  model: string,
+  now = new Date(),
+): Date | undefined {
+  const row = db
+    .select({ until: modelRests.until })
+    .from(modelRests)
+    .where(
+      and(
+        eq(modelRests.provider, provider),
+        eq(modelRests.model, model),
+        gt(modelRests.until, now),
+      ),
+    )
+    .get();
+  return row?.until;
+}
+
+// Rests still running, which allowance times and estimates treat as no requests left
+export function activeRests(db: AppDb, now = new Date()): ModelRest[] {
+  return db
+    .select({ provider: modelRests.provider, model: modelRests.model, until: modelRests.until })
+    .from(modelRests)
+    .where(gt(modelRests.until, now))
+    .all();
 }
 
 export interface UsageBucket {

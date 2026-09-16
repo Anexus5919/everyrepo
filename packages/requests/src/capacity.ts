@@ -1,4 +1,4 @@
-import type { UsageBucket } from "@everyrepo/db";
+import type { ModelRest, UsageBucket } from "@everyrepo/db";
 
 export interface ModelAllowance {
   id: string;
@@ -61,11 +61,16 @@ function nextRelease(series: Series, time: number): number | undefined {
 export class CapacityLedger {
   private readonly requests = new Map<string, Series>();
   private readonly neurons: Series = new Map();
+  // Models a provider refused, with the time each can take calls again
+  private readonly rests = new Map<string, number>();
 
   constructor(
     readonly config: CapacityConfig,
     buckets: readonly UsageBucket[] = [],
+    rests: readonly ModelRest[] = [],
   ) {
+    for (const rest of rests)
+      this.rests.set(`${rest.provider}/${rest.model}`, rest.until.getTime());
     for (const bucket of buckets) {
       const hour = bucketTime(bucket.hour);
       if (bucket.requests > 0)
@@ -89,11 +94,18 @@ export class CapacityLedger {
   clone(): CapacityLedger {
     const copy = new CapacityLedger(this.config);
     for (const [key, series] of this.requests) copy.requests.set(key, new Map(series));
+    for (const [key, until] of this.rests) copy.rests.set(key, until);
     for (const [hour, amount] of this.neurons) copy.neurons.set(hour, amount);
     return copy;
   }
 
+  private restUntil(model: ModelAllowance): number | undefined {
+    return this.rests.get(`${model.provider}/${model.model}`);
+  }
+
   requestsLeft(model: ModelAllowance, time: number): number {
+    const rest = this.restUntil(model);
+    if (rest !== undefined && time < rest) return 0;
     const used = usedAt(this.series(model.provider, model.model), time);
     return Math.max(0, model.requestsPerDay - used);
   }
@@ -102,7 +114,10 @@ export class CapacityLedger {
     add(this.series(model.provider, model.model), hourStart(time), count);
   }
 
+  // A resting model frees up when its rest ends, whatever its own count says before then
   nextRequestRelease(model: ModelAllowance, time: number): number | undefined {
+    const rest = this.restUntil(model);
+    if (rest !== undefined && time < rest) return rest;
     return nextRelease(this.series(model.provider, model.model), time);
   }
 

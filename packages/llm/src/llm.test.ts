@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { estimateTokens, withLimits, type UsageLedger } from "./limiter.ts";
-import { createOpenAiCompatibleModel, retryAfterMs } from "./openai-compatible.ts";
+import { createOpenAiCompatibleModel, nextMidnightIn, retryAfterMs } from "./openai-compatible.ts";
 import { LlmRouter, parseJson, type ResponseCache } from "./router.ts";
 import { ModelUnavailableError, type ChatModel, type ChatResult } from "./types.ts";
 
@@ -28,7 +28,9 @@ const ok = (text: string) =>
     usage: { prompt_tokens: 5, completion_tokens: 2 },
   });
 
-function model(fetchImpl: typeof fetch) {
+const NOW = Date.parse("2026-09-16T09:00:00Z");
+
+function model(fetchImpl: typeof fetch, extra: { dailyResetAt?: (now: number) => number } = {}) {
   return createOpenAiCompatibleModel({
     id: "test",
     provider: "gemini",
@@ -38,8 +40,30 @@ function model(fetchImpl: typeof fetch) {
     limits,
     fetch: fetchImpl,
     retryDelayMs: 1,
+    now: () => NOW,
+    ...extra,
   });
 }
+
+// A used-up free daily quota as the provider reports it, with a short retry hint that does not apply
+const dailyQuota = () =>
+  reply(429, [
+    {
+      error: {
+        message: "You exceeded your current quota.\nPlease retry in 28.19s.",
+        details: [
+          { violations: [{ quotaId: "GenerateRequestsPerDayPerProjectPerModel-FreeTier" }] },
+          { retryDelay: "28s" },
+        ],
+      },
+    },
+  ]);
+
+const unavailable = (promise: Promise<unknown>) =>
+  promise.then(
+    () => undefined,
+    (error: unknown) => error as ModelUnavailableError,
+  );
 
 describe("OpenAI-compatible model", () => {
   it("returns text and usage and asks for JSON when requested", async () => {
@@ -84,7 +108,59 @@ describe("OpenAI-compatible model", () => {
   it("reads retry hints from headers and messages", () => {
     expect(retryAfterMs(new Response(null, { headers: { "retry-after": "3" } }), "")).toBe(3000);
     expect(retryAfterMs(new Response(null), "Please retry in 17.5s.")).toBe(17_500);
+    expect(retryAfterMs(new Response(null), "Please try again in 7m26.5s.")).toBe(446_500);
+    expect(retryAfterMs(new Response(null), "try again in 2h3m")).toBe(7_380_000);
     expect(retryAfterMs(new Response(null), "slow down")).toBeUndefined();
+  });
+
+  it("gives up at once on a used-up daily quota and says when it starts over", async () => {
+    const reset = Date.parse("2026-09-17T07:00:00Z");
+    const { fetchImpl, bodies } = scripted([dailyQuota()]);
+    const error = await unavailable(
+      model(fetchImpl, { dailyResetAt: () => reset }).complete({
+        messages: [{ role: "user", content: "a" }],
+      }),
+    );
+    expect(bodies).toHaveLength(1);
+    expect(error).toBeInstanceOf(ModelUnavailableError);
+    expect(error?.until).toEqual(new Date(reset));
+    expect(error?.message).toBe(
+      "test: daily quota used up at the provider (You exceeded your current quota.)",
+    );
+
+    // A provider that names the wait in its message rests for that long
+    const groq = scripted([
+      reply(429, {
+        error: { message: "Limit on requests per day (RPD). Please try again in 7m26.5s." },
+      }),
+    ]);
+    const named = await unavailable(
+      model(groq.fetchImpl).complete({ messages: [{ role: "user", content: "b" }] }),
+    );
+    expect(named?.until).toEqual(new Date(NOW + 446_500));
+  });
+
+  it("rests a model the provider keeps refusing after every retry", async () => {
+    const refusal = () => reply(429, { error: { message: "Please retry in 1ms." } });
+    const { fetchImpl } = scripted([refusal(), refusal(), refusal(), refusal()]);
+    const error = await unavailable(
+      model(fetchImpl).complete({ messages: [{ role: "user", content: "a" }] }),
+    );
+    expect(error?.message).toBe("test: still rate limited after 4 tries");
+    expect(error?.until).toEqual(new Date(NOW + 5 * 60_000));
+  });
+
+  it("finds the next midnight where a provider's daily quotas start over", () => {
+    const now = Date.parse("2026-09-16T09:00:00Z");
+    expect(new Date(nextMidnightIn("America/Los_Angeles", now)).toISOString()).toBe(
+      "2026-09-17T07:00:00.000Z",
+    );
+    expect(new Date(nextMidnightIn("UTC", now)).toISOString()).toBe("2026-09-17T00:00:00.000Z");
+    expect(
+      new Date(
+        nextMidnightIn("America/Los_Angeles", Date.parse("2026-12-01T20:00:00Z")),
+      ).toISOString(),
+    ).toBe("2026-12-02T08:00:00.000Z");
   });
 });
 
@@ -125,6 +201,8 @@ describe("limits", () => {
         recorded.push(result);
         dayCount += 1;
       },
+      restingUntil: () => undefined,
+      rest: () => {},
     };
     const limited = withLimits(
       fakeModel("a", ["1", "2", "3"]),
@@ -145,6 +223,36 @@ describe("limits", () => {
     expect(
       estimateTokens({ messages: [{ role: "user", content: "x".repeat(70) }], maxTokens: 5 }),
     ).toBe(25);
+  });
+
+  it("remembers a refusal and skips the model without calling it until the rest ends", async () => {
+    let clock = 1_000;
+    const rests = new Map<string, Date>();
+    const ledger: UsageLedger = {
+      requestsLastDay: () => 0,
+      record: () => {},
+      restingUntil: (provider, model) => rests.get(`${provider}/${model}`),
+      rest: (provider, model, until) => rests.set(`${provider}/${model}`, until),
+    };
+    const refused = new ModelUnavailableError("out for the day", undefined, new Date(61_000));
+    const inner = fakeModel("a", [refused, "back"]);
+    const limited = withLimits(
+      inner,
+      ledger,
+      () => clock,
+      async () => {},
+    );
+    const request = { messages: [{ role: "user" as const, content: "x" }] };
+
+    await expect(limited.complete(request)).rejects.toBe(refused);
+    expect(rests.get("groq/a")).toEqual(new Date(61_000));
+    const skipped = await unavailable(limited.complete(request));
+    expect(skipped?.until).toEqual(new Date(61_000));
+    expect(inner.calls).toBe(1);
+
+    clock = 61_000;
+    expect((await limited.complete(request)).text).toBe("back");
+    expect(inner.calls).toBe(2);
   });
 });
 

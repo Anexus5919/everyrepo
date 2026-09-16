@@ -20,11 +20,15 @@ export {
 } from "drizzle-orm";
 export * from "./app-schema.ts";
 export {
+  activeRests,
   hourBucket,
   neuronsUsedLastDay,
   recordUsage,
   requestsLastDay,
+  restingUntil,
+  restModel,
   usageBuckets,
+  type ModelRest,
   type UsageBucket,
   type UsageRecord,
 } from "./budget.ts";

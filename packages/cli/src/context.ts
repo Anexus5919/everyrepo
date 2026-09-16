@@ -8,6 +8,8 @@ import {
   openAppDb,
   recordUsage,
   requestsLastDay,
+  restingUntil,
+  restModel,
   type AppDb,
 } from "@everyrepo/db";
 import {
@@ -81,6 +83,9 @@ export function openLlm(context: CliContext): OpenLlm {
     cache,
     ledger: {
       requestsLastDay: (provider, model) => requestsLastDay(context.appDb, provider, model),
+      restingUntil: (provider, model) => restingUntil(context.appDb, provider, model),
+      rest: (provider, model, until, reason) =>
+        restModel(context.appDb, { provider, model, until, reason }),
       record: (result) =>
         recordUsage(context.appDb, {
           provider: result.provider,

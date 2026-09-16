@@ -57,6 +57,13 @@
       "when": 1789506543545,
       "tag": "0007_accounts",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1789550261997,
+      "tag": "0008_model_rests",
+      "breakpoints": true
     }
   ]
 }

@@ -299,6 +299,64 @@ describe("requesting a repository", () => {
   });
 });
 
+describe("rewriting a published wiki", () => {
+  it("queues the wiki behind every request and never twice", async () => {
+    const { requests } = service({});
+    const row = ensureRepo(db, ref("acme/lib"));
+    expect(() => requests.rebuild(ref("acme/lib"))).toThrow(
+      "acme/lib has no published wiki to rebuild",
+    );
+
+    db.update(repos)
+      .set({ lastIndexedSha: "abc", sizeTier: "S", publishedSha: "abc", publishedAt: clock })
+      .where(eq(repos.id, row.id))
+      .run();
+    expect(requests.rebuild(ref("acme/lib")).state).toBe("ready");
+    requests.rebuild(ref("acme/lib"));
+    expect(jobsFor("acme/lib")).toMatchObject([
+      { kind: "wiki", origin: "request", priority: 380, status: "queued" },
+    ]);
+  });
+});
+
+describe("repositories the owner adds", () => {
+  it("wait behind every build someone asked for and never fill the line for them", async () => {
+    const { requests } = service(
+      {
+        "owner/one": { files: sourceFiles(1_000) },
+        "owner/two": { files: sourceFiles(1_000) },
+        "people/app": { files: sourceFiles(60_000, 200) },
+      },
+      { autoApproveMaxTier: "M", autoApprovePerDay: 5, maxWaiting: 1 },
+    );
+    await requests.approve(ref("owner/one"));
+    await requests.approve(ref("owner/two"));
+    expect(jobsFor("owner/one")[0]).toMatchObject({ priority: 280 });
+
+    // The line holds only one build, yet a person's request is still approved and goes first
+    const asked = await requests.submit(ref("people/app"), person("ada"));
+    expect(asked.view).toMatchObject({ state: "queued", queue: { position: 1, total: 3 } });
+    expect((await requests.lookup(ref("owner/two"))).queue).toMatchObject({ position: 3 });
+  });
+
+  it("move up to a person's place in line once that person asks for them", async () => {
+    const { requests } = service({
+      "people/first": { files: sourceFiles(1_000) },
+      "owner/added": { files: sourceFiles(1_000) },
+    });
+    await requests.approve(ref("owner/added"));
+    await requests.submit(ref("people/first"), person("ada"));
+    expect((await requests.lookup(ref("owner/added"))).queue).toMatchObject({ position: 2 });
+
+    at("2026-09-16T08:05:00Z");
+    const joined = await requests.submit(ref("owner/added"), person("grace"));
+    expect(joined).toMatchObject({ counted: true, view: { requests: 1 } });
+    expect(jobsFor("owner/added")[0]).toMatchObject({ priority: 81 });
+    // It now waits only behind the small request made before it
+    expect((await requests.lookup(ref("owner/added"))).queue).toMatchObject({ position: 2 });
+  });
+});
+
 describe("following a build", () => {
   it("shows the stage, counts and overall share while a job runs", async () => {
     const { requests } = service({ "acme/app": { files: sourceFiles(1_000) } });
@@ -374,10 +432,10 @@ describe("following a build", () => {
     const full = claimNextJob(db, "w", { origin: "request", now: clock })!;
     const read = await runJob(db, full, pass(full.stages));
     const wiki = followUp(db, read)!;
-    expect(wiki).toMatchObject({ kind: "wiki", origin: "request", priority: 80 });
+    expect(wiki).toMatchObject({ kind: "wiki", origin: "request", priority: 79 });
     const written = await runJob(db, claimJob(db, wiki.id, "w")!, pass(wiki.stages));
     const publish = followUp(db, written)!;
-    expect(publish).toMatchObject({ kind: "publish", stages: ["publish"] });
+    expect(publish).toMatchObject({ kind: "publish", stages: ["publish"], priority: 78 });
     const published = await runJob(db, claimJob(db, publish.id, "w")!, pass(["publish"]));
     markPublished(db, published.repoId, "abc", clock);
     expect(followUp(db, published)).toBeUndefined();

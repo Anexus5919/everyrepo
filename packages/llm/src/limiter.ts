@@ -9,6 +9,9 @@ export interface UsageLedger {
   // Requests to this model over the past 24 hours, including earlier runs
   requestsLastDay(provider: string, model: string): number;
   record(result: ChatResult): void;
+  // Until when a provider refused this model, shared across runs so no run asks a refused model again
+  restingUntil(provider: string, model: string): Date | undefined;
+  rest(provider: string, model: string, until: Date, reason: string): void;
 }
 
 const MINUTE_MS = 60_000;
@@ -53,6 +56,14 @@ export function withLimits(
   return {
     ...model,
     async complete(request) {
+      const resting = ledger.restingUntil(model.provider, model.model);
+      if (resting && resting.getTime() > now()) {
+        throw new ModelUnavailableError(
+          `${model.id}: resting until ${resting.toISOString()} after the provider refused it`,
+          undefined,
+          resting,
+        );
+      }
       if (ledger.requestsLastDay(model.provider, model.model) >= model.limits.requestsPerDay) {
         throw new ModelUnavailableError(`${model.id}: daily request limit reached`);
       }
@@ -61,7 +72,15 @@ export function withLimits(
       const turn = queue.then(() => waitForRoom(tokens));
       queue = turn.catch(() => {});
       await turn;
-      const result = await model.complete(request);
+      let result: ChatResult;
+      try {
+        result = await model.complete(request);
+      } catch (error) {
+        if (error instanceof ModelUnavailableError && error.until) {
+          ledger.rest(model.provider, model.model, error.until, error.message);
+        }
+        throw error;
+      }
       ledger.record(result);
       return result;
     },

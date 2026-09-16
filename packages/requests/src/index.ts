@@ -1,5 +1,5 @@
 export { builderStatus, removeWorker, touchWorker, WORKER_STALE_MS } from "./builders.ts";
-export { enqueueBuild, followUp, markPublished } from "./builds.ts";
+export { enqueueBuild, enqueueRewrite, followUp, markPublished, promoteBuild } from "./builds.ts";
 export {
   CapacityLedger,
   modelsFor,
@@ -23,6 +23,7 @@ export { reasonMessage } from "./messages.ts";
 export {
   buildPriority,
   decideRequest,
+  rewritePriority,
   DEFAULT_REQUEST_POLICY,
   inspectRepository,
   type Decision,

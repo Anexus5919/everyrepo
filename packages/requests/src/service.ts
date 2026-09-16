@@ -11,12 +11,14 @@ import {
   type SizeEstimate,
 } from "@everyrepo/core";
 import {
+  activeRests,
   and,
   asc,
   desc,
   ensureRepo,
   eq,
   findRepo,
+  gt,
   gte,
   inArray,
   indexJobs,
@@ -34,7 +36,7 @@ import {
 import { GithubError, type GithubClient } from "@everyrepo/github";
 import type { Job } from "@everyrepo/queue";
 import { builderStatus } from "./builders.ts";
-import { enqueueBuild } from "./builds.ts";
+import { enqueueBuild, enqueueRewrite, promoteBuild } from "./builds.ts";
 import { CapacityLedger, type CapacityConfig } from "./capacity.ts";
 import {
   PUBLISH_MS,
@@ -47,6 +49,7 @@ import { reasonMessage } from "./messages.ts";
 import {
   buildPriority,
   decideRequest,
+  rewritePriority,
   DEFAULT_REQUEST_POLICY,
   inspectRepository,
   type Inspection,
@@ -118,6 +121,8 @@ export interface RequestService {
   retry(ref: RepoRef): RepoView;
   // Links a request made before its requester had an account, keeping the time it was first made
   assign(ref: RepoRef, userId: number): RepoView;
+  // Writes a published wiki again behind every request; the site keeps the published version until then
+  rebuild(ref: RepoRef): RepoView;
   requests(): RepoView[];
   // Everything one account asked for, newest first
   requestsFor(userId: number): AccountRequest[];
@@ -184,7 +189,9 @@ export function createRequestService(options: RequestServiceOptions): RequestSer
     const at = now();
     const positions = queuePositions(db, at);
     const builder = builderStatus(db, at);
-    const ledger = options.capacity ? new CapacityLedger(options.capacity, usage()) : undefined;
+    const ledger = options.capacity
+      ? new CapacityLedger(options.capacity, usage(), activeRests(db, at))
+      : undefined;
     if (!ledger) return { now: at, positions, builder, ledger, line: [], estimates: new Map() };
 
     // The running build first, then the rest in the order the worker claims them
@@ -360,7 +367,22 @@ export function createRequestService(options: RequestServiceOptions): RequestSer
         ),
       )
       .get()!.count;
-    const waiting = queuePositions(db, now()).size;
+    // Only builds someone asked for fill the line; repositories the owner added never hold up a request
+    const asked = new Set(
+      db
+        .select({ repoId: repoRequests.repoId })
+        .from(repoRequests)
+        .where(gt(repoRequests.count, 0))
+        .all()
+        .map((row) => row.repoId),
+    );
+    const at = now();
+    const waiting = db
+      .select()
+      .from(indexJobs)
+      .where(and(eq(indexJobs.status, "queued"), eq(indexJobs.origin, "request")))
+      .all()
+      .filter((job) => asked.has(job.repoId) && !isPaused(job, at)).length;
     return { approvedToday, waiting };
   }
 
@@ -465,6 +487,7 @@ export function createRequestService(options: RequestServiceOptions): RequestSer
       enqueueBuild(db, repo, buildPriority(record.request?.estimate?.sizeTier));
     }
     const counted = recordRequester(repo.id, requester.userId);
+    promoteBuild(db, repo.id, buildPriority(record.request?.estimate?.sizeTier ?? repo.sizeTier));
     return { view: viewOf(repo), counted };
   }
 
@@ -645,7 +668,7 @@ export function createRequestService(options: RequestServiceOptions): RequestSer
         .set({ decision: "approved", reason: null, decidedBy: "owner", decidedAt: now() })
         .where(eq(repoRequests.repoId, repo.id))
         .run();
-      enqueueBuild(db, repo, buildPriority(request.estimate?.sizeTier));
+      enqueueBuild(db, repo, buildPriority(request.estimate?.sizeTier, request.count > 0));
       return viewOf(repo);
     },
 
@@ -674,7 +697,20 @@ export function createRequestService(options: RequestServiceOptions): RequestSer
       if (record.request.decision !== "approved") {
         throw new Error(`${formatRepoRef(ref)} is not approved; approve it first`);
       }
-      enqueueBuild(db, repo, buildPriority(record.request.estimate?.sizeTier));
+      enqueueBuild(
+        db,
+        repo,
+        buildPriority(record.request.estimate?.sizeTier, record.request.count > 0),
+      );
+      return viewOf(repo);
+    },
+
+    rebuild(ref) {
+      const repo = findRepo(db, ref);
+      if (!repo?.publishedAt)
+        throw new Error(`${formatRepoRef(ref)} has no published wiki to rebuild`);
+      const tier = loadRecord(db, repo).request?.estimate?.sizeTier ?? repo.sizeTier;
+      enqueueRewrite(db, repo, rewritePriority(tier));
       return viewOf(repo);
     },
 
@@ -720,7 +756,8 @@ export function createRequestService(options: RequestServiceOptions): RequestSer
         const record = loadRecord(db, repo);
         if (repo.publishedAt || record.openJob) continue;
         if (record.lastJob?.status === "failed" || record.lastJob?.status === "cancelled") continue;
-        if (enqueueBuild(db, repo, buildPriority(request.estimate?.sizeTier))) started += 1;
+        const priority = buildPriority(request.estimate?.sizeTier, request.count > 0);
+        if (enqueueBuild(db, repo, priority)) started += 1;
       }
       return started;
     },

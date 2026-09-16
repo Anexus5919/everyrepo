@@ -85,6 +85,18 @@ describe("capacity", () => {
     ]);
     expect(iso(neuronCapacityAt(neurons, now))).toBe("2026-09-17T05:00:00.000Z");
   });
+
+  it("treats a model the provider refused as having nothing left until its rest ends", () => {
+    const now = at("2026-09-16T09:00:00Z");
+    const ledger = new CapacityLedger(config, usedUp, [
+      { provider: "gemini", model: "flash", until: new Date("2026-09-17T07:00:00Z") },
+    ]);
+    const flash = config.models[1]!;
+    expect(ledger.requestsLeft(flash, now)).toBe(0);
+    expect(ledger.clone().requestsLeft(flash, at("2026-09-17T07:00:00Z"))).toBe(5);
+    // Planning falls back to lite, which frees at 02:00, before flash's rest ends at 07:00
+    expect(iso(taskCapacityAt(ledger, "plan", now))).toBe("2026-09-17T02:00:00.000Z");
+  });
 });
 
 describe("line simulation", () => {

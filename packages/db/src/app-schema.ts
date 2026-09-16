@@ -117,6 +117,19 @@ export const usageCounters = sqliteTable(
   (table) => [primaryKey({ columns: [table.hour, table.provider, table.model] })],
 );
 
+// Models a provider refused until a given time, such as a free daily quota it counts differently from us
+export const modelRests = sqliteTable(
+  "model_rest",
+  {
+    provider: text("provider").notNull(),
+    model: text("model").notNull(),
+    until: timestamp("until").notNull(),
+    reason: text("reason").notNull(),
+    updatedAt: timestamp("updated_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.provider, table.model] })],
+);
+
 // One row per repository someone asked for on the site, with the decision about building it
 export const repoRequests = sqliteTable(
   "repo_request",

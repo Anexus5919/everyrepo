@@ -97,8 +97,9 @@ async function runtimeFor(
           progress(1, steps);
           if (build) await buildWebsite(out, log);
           const at = new Date();
+          // A rewritten wiki of the same commit is published again too, so it shows as recently published
           for (const wiki of result.ready) {
-            if (wiki.publishedSha !== wiki.sha) {
+            if (wiki.publishedSha !== wiki.sha || wiki.repoId === repo.id) {
               markPublished(context.appDb, wiki.repoId, wiki.sha, at);
             }
           }

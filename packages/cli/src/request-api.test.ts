@@ -46,6 +46,7 @@ function fakeService(overrides: Partial<RequestService> = {}) {
     decline: () => view("x/y"),
     retry: () => view("x/y"),
     assign: () => view("x/y"),
+    rebuild: () => view("x/y"),
     requests: () => [],
     requestsFor: (userId) =>
       userId === 1

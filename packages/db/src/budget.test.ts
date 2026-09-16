@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { hourBucket, neuronsUsedLastDay, recordUsage } from "./budget.ts";
+import {
+  activeRests,
+  hourBucket,
+  neuronsUsedLastDay,
+  recordUsage,
+  restingUntil,
+  restModel,
+} from "./budget.ts";
 import { openAppDb } from "./open.ts";
 
 describe("usage ledger", () => {
@@ -24,5 +31,24 @@ describe("usage ledger", () => {
       .prepare("SELECT requests, tokens FROM usage_counter WHERE hour = '2026-09-13T23'")
       .get();
     expect(row).toEqual({ requests: 2, tokens: 200 });
+  });
+});
+
+describe("model rests", () => {
+  it("keeps the longest running rest and forgets rests that are over", () => {
+    const db = openAppDb(":memory:");
+    const at = (iso: string) => new Date(iso);
+    const flash = { provider: "gemini", model: "flash" };
+    const now = at("2026-09-16T09:00:00Z");
+    restModel(db, { ...flash, until: at("2026-09-17T07:00:00Z"), reason: "daily quota" }, now);
+    restModel(db, { ...flash, until: at("2026-09-16T09:05:00Z"), reason: "per minute" }, now);
+    expect(restingUntil(db, "gemini", "flash", now)).toEqual(at("2026-09-17T07:00:00Z"));
+    expect(activeRests(db, now)).toEqual([{ ...flash, until: at("2026-09-17T07:00:00Z") }]);
+
+    // Once a rest is over, a shorter one replaces it
+    const later = at("2026-09-17T08:00:00Z");
+    expect(restingUntil(db, "gemini", "flash", later)).toBeUndefined();
+    restModel(db, { ...flash, until: at("2026-09-17T08:05:00Z"), reason: "per minute" }, later);
+    expect(restingUntil(db, "gemini", "flash", later)).toEqual(at("2026-09-17T08:05:00Z"));
   });
 });

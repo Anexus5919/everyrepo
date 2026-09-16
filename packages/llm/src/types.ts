@@ -43,6 +43,8 @@ export class ModelUnavailableError extends Error {
     message: string,
     // The task no configured model could take, when a router gave up on all of them
     readonly task?: string,
+    // When the provider said the model can take calls again, so later calls skip it until then
+    readonly until?: Date,
   ) {
     super(message);
   }

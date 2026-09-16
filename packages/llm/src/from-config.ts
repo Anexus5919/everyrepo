@@ -1,18 +1,21 @@
 import type { LlmConfig } from "@everyrepo/core";
 import { withLimits, type UsageLedger } from "./limiter.ts";
-import { createOpenAiCompatibleModel } from "./openai-compatible.ts";
+import { createOpenAiCompatibleModel, nextMidnightIn } from "./openai-compatible.ts";
 import { LlmRouter, type ResponseCache } from "./router.ts";
 import type { ChatModel } from "./types.ts";
 
 interface ProviderEndpoint {
   baseUrl: (env: NodeJS.ProcessEnv) => string;
   keyVariable: string;
+  // Where the provider's daily quotas start over at midnight, when its refusals do not say when
+  dailyResetTimeZone?: string;
 }
 
 const PROVIDERS: Record<LlmConfig["models"][string]["provider"], ProviderEndpoint> = {
   gemini: {
     baseUrl: () => "https://generativelanguage.googleapis.com/v1beta/openai",
     keyVariable: "GEMINI_API_KEY",
+    dailyResetTimeZone: "America/Los_Angeles",
   },
   groq: {
     baseUrl: () => "https://api.groq.com/openai/v1",
@@ -22,6 +25,7 @@ const PROVIDERS: Record<LlmConfig["models"][string]["provider"], ProviderEndpoin
     baseUrl: (env) =>
       `https://api.cloudflare.com/client/v4/accounts/${env["CLOUDFLARE_ACCOUNT_ID"] ?? ""}/ai/v1`,
     keyVariable: "CLOUDFLARE_API_TOKEN",
+    dailyResetTimeZone: "UTC",
   },
 };
 
@@ -56,6 +60,9 @@ export function createRouterFromConfig(config: LlmConfig, deps: RouterDependenci
           requestsPerDay: settings.requestsPerDay,
         },
         ...(deps.fetch ? { fetch: deps.fetch } : {}),
+        ...(endpoint.dailyResetTimeZone
+          ? { dailyResetAt: (now: number) => nextMidnightIn(endpoint.dailyResetTimeZone!, now) }
+          : {}),
       }),
       deps.ledger,
     );

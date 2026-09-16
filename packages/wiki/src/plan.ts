@@ -10,8 +10,8 @@ import { plainText } from "./text.ts";
 
 type Sql = EngineDb["$client"];
 
-export const PLAN_PROMPT_VERSION = "plan-2";
-const PLAN_CHECK_VERSION = "check-2";
+export const PLAN_PROMPT_VERSION = "plan-3";
+const PLAN_CHECK_VERSION = "check-3";
 
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const MAX_PAGE_FILES = 10;
@@ -51,6 +51,76 @@ const PAGE_RANGE: Record<string, [number, number]> = {
   L: [18, 40],
   XL: [25, 50],
 };
+
+// A small repository with much to cite, such as a library with reference docs, needs more than the fewest pages
+export function pageRange(sizeTier: string, citableFiles: number): [number, number] {
+  const [low, high] = PAGE_RANGE[sizeTier] ?? PAGE_RANGE["M"]!;
+  return [Math.min(high, low + Math.min(4, Math.floor(citableFiles / 20))), high];
+}
+
+const CITABLE_SOURCE_FILES = 40;
+const CITABLE_DOC_FILES = 30;
+const NAMES_PER_FILE = 6;
+
+export interface CitableFile {
+  path: string;
+  kind: string;
+  // Exported names for code, or the title for documentation
+  about: string;
+}
+
+// Files with indexed excerpts, which are the only files a page can cite: the most central code first, then documentation
+export function listCitableFiles(sql: Sql): CitableFile[] {
+  const code = sql
+    .prepare(
+      `SELECT f.id, f.path, f.kind FROM file f
+       WHERE f.kind IN ('src', 'types') AND EXISTS (SELECT 1 FROM chunk c WHERE c.file_id = f.id)
+       ORDER BY f.pagerank DESC NULLS LAST, f.path LIMIT ${CITABLE_SOURCE_FILES}`,
+    )
+    .all() as Array<{ id: number; path: string; kind: string }>;
+  const names = sql.prepare(
+    `SELECT name FROM symbol WHERE file_id = ? AND kind NOT IN ('method', 'property', 'field')
+     ORDER BY exported DESC, start_line LIMIT ${NAMES_PER_FILE}`,
+  );
+  const docs = sql
+    .prepare(
+      `SELECT f.id, f.path, f.kind FROM file f
+       WHERE f.kind = 'docs' AND f.path NOT LIKE '.github/%'
+         AND EXISTS (SELECT 1 FROM chunk c WHERE c.file_id = f.id)
+       ORDER BY CASE WHEN lower(f.path) LIKE 'readme%' THEN 0 ELSE 1 END, length(f.path) - length(replace(f.path, '/', '')), f.path
+       LIMIT ${CITABLE_DOC_FILES}`,
+    )
+    .all() as Array<{ id: number; path: string; kind: string }>;
+  const opening = sql.prepare(
+    "SELECT content FROM chunk WHERE file_id = ? ORDER BY start_line LIMIT 2",
+  );
+  return [
+    ...code.map((file) => ({
+      path: file.path,
+      kind: file.kind,
+      about: [
+        ...new Set((names.all(file.id) as Array<{ name: string }>).map((row) => row.name)),
+      ].join(", "),
+    })),
+    ...docs.map((file) => {
+      const text = (opening.all(file.id) as Array<{ content: string }>)
+        .map((row) => row.content)
+        .join("\n");
+      const title = /^title:\s*(.+)$/m.exec(text)?.[1] ?? /^#{1,3}\s+(.+)$/m.exec(text)?.[1] ?? "";
+      return { path: file.path, kind: file.kind, about: title.trim().slice(0, 80) };
+    }),
+  ];
+}
+
+export function citablePaths(sql: Sql): Set<string> {
+  return new Set(
+    (
+      sql
+        .prepare("SELECT DISTINCT f.path FROM file f JOIN chunk c ON c.file_id = f.id")
+        .all() as Array<{ path: string }>
+    ).map((row) => row.path),
+  );
+}
 
 export interface RepoTopics {
   sizeTier: string;
@@ -107,6 +177,7 @@ export function buildPlanContext(
   clusterSummaries: ReadonlyMap<string, ClusterSummary>,
   moduleSummaries: ReadonlyMap<string, ClusterSummary>,
   topics: RepoTopics,
+  citable: readonly CitableFile[] = [],
 ): string {
   const clusters = listClusters(sql);
   const lines: string[] = [];
@@ -129,7 +200,7 @@ export function buildPlanContext(
       );
     }
   }
-  const [low, high] = PAGE_RANGE[topics.sizeTier] ?? PAGE_RANGE["M"]!;
+  const [low, high] = pageRange(topics.sizeTier, citable.length);
   return [
     `Repository: ${repo} (size tier ${topics.sizeTier})`,
     `Summary: ${repoSummary.summary}`,
@@ -154,6 +225,9 @@ export function buildPlanContext(
     "Packages and their clusters of files:",
     ...lines,
     "",
+    citable.length > 0 ? "Files a page can cite, with the names they define or their title:" : "",
+    ...citable.map((file) => `- ${file.path}${file.about ? `: ${file.about}` : ""}`),
+    "",
     `Plan between ${low} and ${high} pages.`,
   ]
     .filter((line) => line !== "")
@@ -174,10 +248,12 @@ export function planMessages(context: string): ChatMessage[] {
     "",
     "Rules:",
     '- The first page has slug "overview" and no parent; it introduces the repository.',
-    "- Add pages for architecture, each major package or feature area, and the detected facts that matter to contributors (for example build and tooling, testing, localization, documentation, CI and releases).",
+    "- Add pages for architecture and each major package or feature area. When the code has few clusters, give each important API, middleware, plugin, adapter or feature its own page, drawing on its source file and the documentation that describes it.",
+    "- Add pages for contributor topics such as build and tooling, testing, localization, CI and releases only when files a page can cite cover them.",
+    "- Every page other than the overview needs at least one cluster key or one file from the files a page can cite; a page with neither cannot be written.",
     "- Use at most two levels: a page either has no parent or its parent has no parent.",
     "- Every cluster key should appear in exactly one page; small related clusters can share a page.",
-    "- files lists up to 8 exact paths from the key files that a reader of the page should open first.",
+    "- files lists up to 8 exact paths from the key files or the files a page can cite that a reader of the page should open first.",
     "",
     "Reply as JSON:",
     '{"pages": [{"slug": "kebab-case-id", "title": "Page title", "parent": null or "parent-slug",',
@@ -207,15 +283,21 @@ function toSlug(text: string): string {
   return slug || "page";
 }
 
-// Repairs a model plan: unique slugs, two levels, real clusters and files, every cluster placed
+// Repairs a model plan: unique slugs, two levels, real clusters and files, every cluster placed, and no page left
+// without anything it could cite
 export function validatePlan(
   answer: PlanAnswer,
   clusterModules: ReadonlyMap<string, string>,
   knownFiles: ReadonlySet<string>,
-): { pages: PlannedPage[]; unplaced: number; dropped: { clusters: number; files: number } } {
-  const pages: PlannedPage[] = [];
+  citableFiles: ReadonlySet<string> = knownFiles,
+): {
+  pages: PlannedPage[];
+  unplaced: number;
+  dropped: { clusters: number; files: number; pages: string[] };
+} {
+  let pages: PlannedPage[] = [];
   const slugs = new Map<string, string>();
-  const dropped = { clusters: 0, files: 0 };
+  const dropped = { clusters: 0, files: 0, pages: [] as string[] };
   const placed = new Set<string>();
 
   for (const page of answer.pages) {
@@ -304,6 +386,18 @@ export function validatePlan(
     placed.add(key);
   }
 
+  // Pages that group child pages are built from the children; any other page needs a cluster or a citable file
+  const parents = new Set(pages.map((page) => page.parentSlug).filter((slug) => slug !== null));
+  pages = pages.filter((page) => {
+    const writable =
+      page.slug === "overview" ||
+      parents.has(page.slug) ||
+      page.clusters.length > 0 ||
+      page.files.some((path) => citableFiles.has(path));
+    if (!writable) dropped.pages.push(page.slug);
+    return writable;
+  });
+
   pages.forEach((page, index) => {
     page.position = index;
   });
@@ -338,6 +432,7 @@ export async function planWiki(input: PlanInput): Promise<PlanOutput> {
       [...loadSummaries<ClusterSummary>(sql, "module")].map(([key, row]) => [key, row.content]),
     );
     const topics = detectTopics(sql);
+    const citable = listCitableFiles(sql);
     const context = buildPlanContext(
       sql,
       input.repo,
@@ -345,6 +440,7 @@ export async function planWiki(input: PlanInput): Promise<PlanOutput> {
       clusterSummaries,
       moduleSummaries,
       topics,
+      citable,
     );
     // The check version is part of the hash so a better plan check replans from the cached answer
     const inputHash = hashInput(`${PLAN_PROMPT_VERSION}:${PLAN_CHECK_VERSION}`, context);
@@ -378,11 +474,15 @@ export async function planWiki(input: PlanInput): Promise<PlanOutput> {
         (row) => row.path,
       ),
     );
-    let plan = validatePlan(first.value, clusterModules, knownFiles);
+    const citableFiles = citablePaths(sql);
+    let plan = validatePlan(first.value, clusterModules, knownFiles, citableFiles);
     let result = first.result;
+    if (plan.dropped.pages.length > 0) {
+      input.log(`left out pages with nothing to cite: ${plan.dropped.pages.join(", ")}`);
+    }
 
-    // Plans that are too coarse for the repository get one request to split their largest pages
-    const [low, high] = PAGE_RANGE[topics.sizeTier] ?? PAGE_RANGE["M"]!;
+    // Plans that are too coarse for the repository get one request to split pages or add topics
+    const [low, high] = pageRange(topics.sizeTier, citable.length);
     if (plan.pages.length < low) {
       const largest = [...plan.pages]
         .sort((a, b) => b.clusters.length - a.clusters.length)
@@ -397,7 +497,7 @@ export async function planWiki(input: PlanInput): Promise<PlanOutput> {
             { role: "assistant", content: JSON.stringify(first.value) },
             {
               role: "user",
-              content: `This plan has ${plan.pages.length} pages, but a repository of this size needs between ${low} and ${high}. Split the pages that cover many clusters, such as ${largest}, into focused child pages whose parent is the original page, for example one child page per package or feature. Keep every cluster in exactly one page and reply with the complete corrected JSON.`,
+              content: `This plan has ${plan.pages.length} pages that can be written, but this repository needs between ${low} and ${high}.${plan.dropped.pages.length > 0 ? ` These pages had no cluster and no citable file, so they were left out: ${plan.dropped.pages.join(", ")}.` : ""} Split pages that cover several clusters or areas, such as ${largest}, into focused child pages whose parent is the original page, and add pages for important topics the files a page can cite cover, such as a main API, a middleware or plugin, or a guide in the documentation. Give every page at least one cluster key or citable file, keep every cluster in exactly one page and reply with the complete corrected JSON.`,
             },
           ],
           maxTokens: 16_000,
@@ -406,7 +506,7 @@ export async function planWiki(input: PlanInput): Promise<PlanOutput> {
         planSchema,
         { promptVersion: PLAN_PROMPT_VERSION },
       );
-      const retried = validatePlan(retry.value, clusterModules, knownFiles);
+      const retried = validatePlan(retry.value, clusterModules, knownFiles, citableFiles);
       input.log(
         `plan had ${plan.pages.length} pages, the revised plan has ${retried.pages.length}`,
       );

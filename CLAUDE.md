@@ -34,11 +34,14 @@ TypeScript source directly and run with tsx. Tests use Vitest.
     summarize, plan, write, glossary); a used-up model allowance pauses the job and a rerun resumes it
   - `export <owner/repo> [--out <dir>]` writes the generated pages as Markdown files for review
   - `site [--out <dir>]` writes the JSON the website is built from (`site` in dataDir by default) and
-    marks the wikis it contains as published
+    marks the wikis it contains as published; a repository without written pages is listed only while a build for it
+    is open
   - `ask <owner/repo> <question...> [--page <slug>]` answers a question with checked citations
   - `serve [--port <n>]` runs the Ask, account and repository request API on 127.0.0.1 (default port 8787) for
     the website; Ask is switched off when embeddings or models are not configured, requests keep working, and
     signing in is off until `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` are set
+  - `requests rebuild <owner/repo...>` writes published wikis again behind every request and every new wiki; the
+    site keeps showing the published version until the new one is published
   - `requests list|show|approve|decline|retry <owner/repo>` reviews repositories requested on the site;
     `approve` also adds a repository nobody asked for; `requests assign <owner/repo> <login>` links a request
     made before sign-in existed to the account of the person who made it
@@ -81,9 +84,15 @@ TypeScript source directly and run with tsx. Tests use Vitest.
   plus file ranking with a centrality prior and import expansion
 - `packages/llm`: chat models behind one OpenAI-compatible client (Gemini, Groq, Workers AI), per
   task fallback order from the `llm` config, per-minute pacing, daily request limits, a response
-  cache and JSON answers validated with zod
+  cache and JSON answers validated with zod. A refusal the provider marks as a daily quota (Gemini lists
+  `PerDay` quota ids) ends retries at once; the model then rests until the provider's reset (midnight Pacific for
+  Gemini, midnight UTC for Workers AI) or the wait the refusal names, and a model still refused after every retry
+  rests five minutes. Rests live in `model_rest` in `app.sqlite`, so every run skips a resting model and paused
+  jobs and ready times count a resting model as having nothing left
 - `packages/wiki`: cluster, package and repository summaries, the page planner with plan repair, and
-  the page writer. Every paragraph must cite numbered source chunks; the verifier drops uncited
+  the page writer. The planner also sees the files a page can cite (central code with the names it defines, then
+  documentation with its title), asks small repositories with much to cite for more pages (`pageRange`), and leaves
+  out planned pages with neither a cluster nor a citable file before any are written. Every paragraph must cite numbered source chunks; the verifier drops uncited
   blocks, names missing from the cited sources and code not copied from them, then links citations
   to commit-pinned GitHub lines. Diagrams come from the import graph. Results are stored in the
   engine database and reused while inputs are unchanged; generated text passes through `plainText`
@@ -105,7 +114,10 @@ TypeScript source directly and run with tsx. Tests use Vitest.
   `autoApprovePerDay` and `maxWaiting`; other requests wait for owner review. Every request belongs to a
   signed-in account (`user_request` keeps each account's history), and each account has one request in
   progress at a time until it is ready, failed or declined. Approved builds queue a read job, then
-  a wiki job, then a publish job, smaller tiers first; `describeRecord` turns the registry, request and jobs
+  a wiki job, then a publish job, smaller tiers first, and each step sits one place ahead of the one before it so
+  a started build is written and published before the next one of its kind starts; repositories the owner adds with `requests approve` that nobody
+  asked for wait behind every requested build, do not count toward `maxWaiting`, and move up once someone asks for
+  them; `describeRecord` turns the registry, request and jobs
   into the state a status page shows. Ready times come from `simulateLine`, which plays the line forward for
   one worker against each model's rolling-day request limit and the embedding neuron budget (`capacity.ts`),
   with work taken from each engine database once read (`packages/cli/src/build-work.ts`) or sized from the

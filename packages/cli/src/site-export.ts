@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   parseRepoRef,
@@ -10,6 +10,7 @@ import {
   type SiteWiki,
 } from "@everyrepo/core";
 import { engineDbPath, eq, openEngineDb, repoRequests, repos, type AppDb } from "@everyrepo/db";
+import { findOpenJob } from "@everyrepo/queue";
 
 const EXCERPT_LINES = 80;
 
@@ -61,19 +62,39 @@ function listedRows(db: AppDb) {
   return [...tested, ...requested].filter((row) => row.lastIndexedSha);
 }
 
+async function previousListing(out: string): Promise<Map<string, SiteRepo>> {
+  try {
+    const repos = JSON.parse(await readFile(join(out, "repos.json"), "utf8")) as SiteRepo[];
+    return new Map(repos.map((repo) => [repo.repo.toLowerCase(), repo]));
+  } catch {
+    return new Map();
+  }
+}
+
 // Writes the JSON the website is built from: a list of repositories and one file per written wiki
 export async function exportSite(db: AppDb, dataDir: string, out: string): Promise<SiteExport> {
   await mkdir(out, { recursive: true });
+  const previous = await previousListing(out);
   const listed: SiteRepo[] = [];
   const ready: ExportedWiki[] = [];
   for (const row of listedRows(db)) {
     const ref = parseRepoRef(row.fullName);
+    // A published wiki being read or written again stays on the site as last exported until its new version is published
+    const open = findOpenJob(db, row.id);
+    const kept =
+      row.publishedAt && open && open.kind !== "publish" ? previous.get(row.key) : undefined;
+    if (kept) {
+      listed.push(kept);
+      continue;
+    }
     const wiki = readWiki(
       engineDbPath(dataDir, repoDirName(ref), row.lastIndexedSha!),
       row.status === "indexing",
       row.lastIndexedAt?.getTime() ?? null,
     );
     const { overview, architecture, technologies, wikiPages, glossary, ...repo } = wiki;
+    // A repository without written pages is shown as being written only while a build for it is open
+    if (repo.status === "queued" && !findOpenJob(db, row.id)) continue;
     listed.push(repo);
     if (repo.status !== "ready" || !repo.sha) continue;
     await writeFile(

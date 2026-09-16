@@ -81,6 +81,18 @@ export function requestsCommand(): Command {
     );
 
   requests
+    .command("rebuild")
+    .description(
+      "Write published wikis again behind every request, keeping them on the site until then",
+    )
+    .argument("<repos...>", "owner/name or GitHub URLs")
+    .action((repos: string[]) =>
+      withService((service) => {
+        for (const repo of repos) console.log(describe(service.rebuild(parseRepoRef(repo))));
+      }),
+    );
+
+  requests
     .command("assign")
     .description(
       "Link a request made before sign-in existed to the account of the person who made it",

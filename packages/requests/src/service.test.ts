@@ -299,6 +299,26 @@ describe("requesting a repository", () => {
   });
 });
 
+describe("rewriting a published wiki", () => {
+  it("queues the wiki behind every request and never twice", async () => {
+    const { requests } = service({});
+    const row = ensureRepo(db, ref("acme/lib"));
+    expect(() => requests.rebuild(ref("acme/lib"))).toThrow(
+      "acme/lib has no published wiki to rebuild",
+    );
+
+    db.update(repos)
+      .set({ lastIndexedSha: "abc", sizeTier: "S", publishedSha: "abc", publishedAt: clock })
+      .where(eq(repos.id, row.id))
+      .run();
+    expect(requests.rebuild(ref("acme/lib")).state).toBe("ready");
+    requests.rebuild(ref("acme/lib"));
+    expect(jobsFor("acme/lib")).toMatchObject([
+      { kind: "wiki", origin: "request", priority: 280, status: "queued" },
+    ]);
+  });
+});
+
 describe("repositories the owner adds", () => {
   it("wait behind every build someone asked for and never fill the line for them", async () => {
     const { requests } = service(

@@ -27,6 +27,20 @@ export function enqueueBuild(db: AppDb, repo: RepoRow, priority: number): Job | 
   });
 }
 
+// Writes a published wiki again, for example after the planner learned to cover more; it waits behind every request
+export function enqueueRewrite(db: AppDb, repo: RepoRow, priority: number): Job | undefined {
+  const open = findOpenJob(db, repo.id);
+  if (open) return open;
+  if (!repo.publishedAt || !repo.lastIndexedSha) return undefined;
+  return enqueueJob(db, {
+    repoId: repo.id,
+    kind: "wiki",
+    stages: [...WIKI_STAGE_KEYS],
+    origin: "request",
+    priority,
+  });
+}
+
 // Someone asking for a repository the owner added moves its build up to just behind the requests of its size that
 // were already waiting, since its job was queued before theirs; the running job carries the place on to later steps
 export function promoteBuild(db: AppDb, repoId: number, priority: number): void {

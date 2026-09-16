@@ -40,6 +40,8 @@ TypeScript source directly and run with tsx. Tests use Vitest.
   - `serve [--port <n>]` runs the Ask, account and repository request API on 127.0.0.1 (default port 8787) for
     the website; Ask is switched off when embeddings or models are not configured, requests keep working, and
     signing in is off until `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` are set
+  - `requests rebuild <owner/repo...>` writes published wikis again behind every request; the site keeps showing
+    the published version until the new one is published
   - `requests list|show|approve|decline|retry <owner/repo>` reviews repositories requested on the site;
     `approve` also adds a repository nobody asked for; `requests assign <owner/repo> <login>` links a request
     made before sign-in existed to the account of the person who made it
@@ -88,7 +90,9 @@ TypeScript source directly and run with tsx. Tests use Vitest.
   rests five minutes. Rests live in `model_rest` in `app.sqlite`, so every run skips a resting model and paused
   jobs and ready times count a resting model as having nothing left
 - `packages/wiki`: cluster, package and repository summaries, the page planner with plan repair, and
-  the page writer. Every paragraph must cite numbered source chunks; the verifier drops uncited
+  the page writer. The planner also sees the files a page can cite (central code with the names it defines, then
+  documentation with its title), asks small repositories with much to cite for more pages (`pageRange`), and leaves
+  out planned pages with neither a cluster nor a citable file before any are written. Every paragraph must cite numbered source chunks; the verifier drops uncited
   blocks, names missing from the cited sources and code not copied from them, then links citations
   to commit-pinned GitHub lines. Diagrams come from the import graph. Results are stored in the
   engine database and reused while inputs are unchanged; generated text passes through `plainText`

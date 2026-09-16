@@ -36,7 +36,7 @@ import {
 import { GithubError, type GithubClient } from "@everyrepo/github";
 import type { Job } from "@everyrepo/queue";
 import { builderStatus } from "./builders.ts";
-import { enqueueBuild, promoteBuild } from "./builds.ts";
+import { enqueueBuild, enqueueRewrite, promoteBuild } from "./builds.ts";
 import { CapacityLedger, type CapacityConfig } from "./capacity.ts";
 import {
   PUBLISH_MS,
@@ -120,6 +120,8 @@ export interface RequestService {
   retry(ref: RepoRef): RepoView;
   // Links a request made before its requester had an account, keeping the time it was first made
   assign(ref: RepoRef, userId: number): RepoView;
+  // Writes a published wiki again behind every request; the site keeps the published version until then
+  rebuild(ref: RepoRef): RepoView;
   requests(): RepoView[];
   // Everything one account asked for, newest first
   requestsFor(userId: number): AccountRequest[];
@@ -699,6 +701,15 @@ export function createRequestService(options: RequestServiceOptions): RequestSer
         repo,
         buildPriority(record.request.estimate?.sizeTier, record.request.count > 0),
       );
+      return viewOf(repo);
+    },
+
+    rebuild(ref) {
+      const repo = findRepo(db, ref);
+      if (!repo?.publishedAt)
+        throw new Error(`${formatRepoRef(ref)} has no published wiki to rebuild`);
+      const tier = loadRecord(db, repo).request?.estimate?.sizeTier ?? repo.sizeTier;
+      enqueueRewrite(db, repo, buildPriority(tier, false));
       return viewOf(repo);
     },
 

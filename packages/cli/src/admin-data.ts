@@ -26,6 +26,7 @@ import {
   isNotNull,
   modelRests,
   neuronsUsedLastDay,
+  openEngineDb,
   openEngineReadonly,
   repoRequests,
   repos,
@@ -246,6 +247,32 @@ export function withEngine<T>(
 }
 
 export { enginePath };
+
+// Chosen pages lose their saved inputs so the writer does not reuse them; answers the slugs the wiki does not have,
+// or undefined when the repository has no stored wiki
+export function forgetWikiPages(
+  dataDir: string,
+  repo: RepoRow,
+  pages: readonly string[],
+): { unknown: string[] } | undefined {
+  const path = enginePath(dataDir, repo);
+  if (!path) return undefined;
+  const engine = openEngineDb(path).$client;
+  try {
+    const known = new Set(
+      (engine.prepare("SELECT slug FROM wiki_page").all() as Array<{ slug: string }>).map(
+        (row) => row.slug,
+      ),
+    );
+    const unknown = pages.filter((slug) => !known.has(slug));
+    if (unknown.length > 0) return { unknown };
+    const forget = engine.prepare("UPDATE wiki_page SET input_hash = NULL WHERE slug = ?");
+    engine.transaction(() => pages.forEach((slug) => forget.run(slug)))();
+    return { unknown: [] };
+  } finally {
+    engine.close();
+  }
+}
 
 export function adminWikis(db: AppDb, dataDir: string): AdminWiki[] {
   return db

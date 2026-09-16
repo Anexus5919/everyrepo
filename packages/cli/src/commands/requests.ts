@@ -1,5 +1,7 @@
 import { parseRepoRef, type RepoView } from "@everyrepo/core";
-import { sql, users } from "@everyrepo/db";
+import { findRepo, sql, users } from "@everyrepo/db";
+import { queueRewrite } from "@everyrepo/requests";
+import { forgetWikiPages } from "../admin-data.ts";
 import { Command } from "commander";
 import { openContext, openRequests, type CliContext } from "../context.ts";
 
@@ -86,9 +88,30 @@ export function requestsCommand(): Command {
       "Write published wikis again behind every request, keeping them on the site until then",
     )
     .argument("<repos...>", "owner/name or GitHub URLs")
-    .action((repos: string[]) =>
-      withService((service) => {
-        for (const repo of repos) console.log(describe(service.rebuild(parseRepoRef(repo))));
+    .option("--pages <slugs>", "comma separated page slugs to write again, for a single repository")
+    .action((repos: string[], options: { pages?: string }) =>
+      withService((service, context) => {
+        const pages = options.pages
+          ?.split(",")
+          .map((slug) => slug.trim())
+          .filter(Boolean);
+        if (!pages || pages.length === 0) {
+          for (const repo of repos) console.log(describe(service.rebuild(parseRepoRef(repo))));
+          return;
+        }
+        if (repos.length !== 1) throw new Error("Name one repository when choosing pages");
+        const repo = findRepo(context.appDb, parseRepoRef(repos[0]!));
+        if (!repo?.publishedAt) throw new Error(`${repos[0]} has no published wiki to rebuild`);
+        const forgotten = forgetWikiPages(context.config.dataDir, repo, pages);
+        if (!forgotten) throw new Error(`${repo.fullName} has no stored wiki`);
+        if (forgotten.unknown.length > 0) {
+          throw new Error(`${repo.fullName} has no page named ${forgotten.unknown.join(", ")}`);
+        }
+        const queued = queueRewrite(context.appDb, repo.id, pages);
+        if (!queued) throw new Error(`${repo.fullName} could not be queued again`);
+        console.log(
+          `Queued ${pages.join(", ")} of ${repo.fullName} to be written again (job ${queued.jobId})`,
+        );
       }),
     );
 

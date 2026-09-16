@@ -1,6 +1,6 @@
 import type { SessionRow, UserRow } from "@everyrepo/accounts";
 import { readRepoInput, repoInputMessage, type LocalConfig, type RepoRef } from "@everyrepo/core";
-import { adminActions, findRepo, openEngineDb, type AppDb } from "@everyrepo/db";
+import { adminActions, findRepo, type AppDb } from "@everyrepo/db";
 import {
   adminQueue,
   cancelBuild,
@@ -19,7 +19,7 @@ import {
   adminRequests,
   adminWikis,
   createGithubLimits,
-  enginePath,
+  forgetWikiPages,
 } from "./admin-data.ts";
 
 export interface AdminApiOptions {
@@ -236,29 +236,15 @@ export function createAdminApi(options: AdminApiOptions) {
     },
   };
 
-  // Chosen pages lose their saved inputs, so the writer does not reuse them unchanged
   function forgetPages(repo: NonNullable<ReturnType<typeof findRepo>>, pages: readonly string[]) {
-    const path = enginePath(dataDir, repo);
-    if (!path) throw new AdminError(409, "unread", "This repository has no stored wiki.");
-    const engine = openEngineDb(path).$client;
-    try {
-      const known = new Set(
-        (engine.prepare("SELECT slug FROM wiki_page").all() as Array<{ slug: string }>).map(
-          (row) => row.slug,
-        ),
+    const result = forgetWikiPages(dataDir, repo, pages);
+    if (!result) throw new AdminError(409, "unread", "This repository has no stored wiki.");
+    if (result.unknown.length > 0) {
+      throw new AdminError(
+        400,
+        "unknown-page",
+        `This wiki has no page named ${result.unknown.join(", ")}.`,
       );
-      const unknown = pages.filter((slug) => !known.has(slug));
-      if (unknown.length > 0) {
-        throw new AdminError(
-          400,
-          "unknown-page",
-          `This wiki has no page named ${unknown.join(", ")}.`,
-        );
-      }
-      const forget = engine.prepare("UPDATE wiki_page SET input_hash = NULL WHERE slug = ?");
-      engine.transaction(() => pages.forEach((slug) => forget.run(slug)))();
-    } finally {
-      engine.close();
     }
   }
 

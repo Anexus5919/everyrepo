@@ -41,7 +41,8 @@ TypeScript source directly and run with tsx. Tests use Vitest.
     the website; Ask is switched off when embeddings or models are not configured, requests keep working,
     signing in is off until `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` are set, and the admin dashboard stays
     closed until `EVERYREPO_ADMIN_GITHUB_IDS` names at least one GitHub account id
-  - `requests rebuild <owner/repo...>` writes published wikis again behind every request and every new wiki; the
+  - `requests rebuild <owner/repo...> [--pages <slugs>]` writes published wikis, or only the named pages of one wiki,
+    again behind every request and every new wiki; the
     site keeps showing the published version until the new one is published
   - `requests list|show|approve|decline|retry <owner/repo>` reviews repositories requested on the site;
     `approve` also adds a repository nobody asked for; `requests assign <owner/repo> <login>` links a request

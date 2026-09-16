@@ -262,6 +262,14 @@ export async function writePages(input: WriteInput): Promise<WriteOutput> {
       const diagram =
         page.slug === "overview" ? moduleDiagram(sql) : clusterDiagram(sql, diagramClusters);
       const ok = passes(verified.stats);
+      // A rewrite that does worse leaves the published text in place instead of taking the page off the site
+      if (!ok && page.status === "written") {
+        setReadingOrder.run(JSON.stringify(items), page.slug);
+        output.reused += 1;
+        input.heartbeat();
+        input.log(`kept the published ${page.slug}: its rewrite ${describe(verified.stats)}`);
+        continue;
+      }
       const markdown = diagram ? insertDiagram(verified.markdown, diagram) : verified.markdown;
       update.run(
         ok ? "written" : "failed",

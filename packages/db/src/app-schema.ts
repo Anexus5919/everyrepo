@@ -223,6 +223,28 @@ export const workers = sqliteTable("worker", {
   jobId: integer("job_id"),
 });
 
+// Switches the owner sets from the admin dashboard, such as pausing the builder
+export const settings = sqliteTable("setting", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: timestamp("updated_at").notNull(),
+});
+
+// Every change made from the admin dashboard, with who made it; the login is copied so the record outlives the account
+export const adminActions = sqliteTable(
+  "admin_action",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: integer("user_id").references(() => users.id, { onDelete: "set null" }),
+    login: text("login").notNull(),
+    action: text("action").notNull(),
+    target: text("target").notNull(),
+    detail: text("detail", { mode: "json" }).$type<Record<string, unknown>>(),
+    createdAt: createdAt(),
+  },
+  (table) => [index("admin_action_created").on(table.createdAt)],
+);
+
 // GitHub API answers with their entity tags, so repeat lookups can be revalidated cheaply
 export const githubCache = sqliteTable("github_cache", {
   key: text("key").primaryKey(),

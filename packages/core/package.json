@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./admin": "./src/admin.ts",
     "./repo-ref": "./src/repo-ref.ts",
     "./requests": "./src/requests.ts"
   },

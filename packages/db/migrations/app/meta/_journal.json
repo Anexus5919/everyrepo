@@ -64,6 +64,13 @@
       "when": 1789550261997,
       "tag": "0008_model_rests",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1789553081755,
+      "tag": "0009_admin",
+      "breakpoints": true
     }
   ]
 }

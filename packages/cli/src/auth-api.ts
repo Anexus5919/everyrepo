@@ -12,11 +12,12 @@ import {
   randomToken,
   saveGithubUser,
   serializeCookie,
+  sessionForToken,
   SESSION_MS,
   SIGN_IN_WINDOW_MS,
   SignInError,
   takeSignIn,
-  userForSession,
+  type SessionRow,
   type UserRow,
 } from "@everyrepo/accounts";
 import type { AppDb } from "@everyrepo/db";
@@ -34,11 +35,14 @@ export interface AuthApiOptions {
   fetch?: typeof fetch;
   now?: () => Date;
   log?: (message: string) => void;
+  // Accounts allowed into the admin dashboard, so the site can offer them the way in
+  isAdmin?: (user: UserRow) => boolean;
 }
 
 export interface AuthApi {
   handle(request: Request): Promise<Response | undefined>;
   userFor(request: Request): Promise<UserRow | undefined>;
+  sessionFor(request: Request): Promise<{ user: UserRow; session: SessionRow } | undefined>;
 }
 
 const DEFAULT_RETURN = "/account/";
@@ -104,7 +108,9 @@ export function createAuthApi(options: AuthApiOptions): AuthApi {
     return origin === null || isAllowedOrigin(origin, options.allowedOrigins);
   };
 
-  const userFor = (request: Request) => userForSession(db, cookie(request, sessionCookie), now());
+  const sessionFor = (request: Request) =>
+    sessionForToken(db, cookie(request, sessionCookie), now());
+  const userFor = async (request: Request) => (await sessionFor(request))?.user;
 
   async function callback(url: URL, request: Request): Promise<Response> {
     const state = url.searchParams.get("state") ?? "";
@@ -156,7 +162,11 @@ export function createAuthApi(options: AuthApiOptions): AuthApi {
     }
     if (path === "/api/auth/me" && request.method === "GET") {
       const user = await userFor(request);
-      return json({ user: user ? publicUser(user) : null, signInAvailable: app !== undefined });
+      return json({
+        user: user ? publicUser(user) : null,
+        signInAvailable: app !== undefined,
+        admin: user !== undefined && (options.isAdmin?.(user) ?? false),
+      });
     }
     if (path === "/api/auth/signout" && request.method === "POST") {
       if (!fromSite(request)) return problem(403, "origin", "Sign out from the EveryRepo website.");
@@ -176,5 +186,5 @@ export function createAuthApi(options: AuthApiOptions): AuthApi {
     return problem(404, "not-found", "Not found");
   }
 
-  return { handle, userFor };
+  return { handle, userFor, sessionFor };
 }

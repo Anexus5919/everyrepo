@@ -1,7 +1,13 @@
 import { hostname } from "node:os";
 import { eq, repos, type AppDb, type RepoRow } from "@everyrepo/db";
 import { claimNextJob, runJob, type Job, type StageHandler } from "@everyrepo/queue";
-import { followUp, removeWorker, touchWorker, type RequestService } from "@everyrepo/requests";
+import {
+  builderPaused,
+  followUp,
+  removeWorker,
+  touchWorker,
+  type RequestService,
+} from "@everyrepo/requests";
 
 export interface JobRuntime {
   handlers: Record<string, StageHandler>;
@@ -34,6 +40,7 @@ export function createWorker(options: WorkerOptions) {
   const workerId = options.workerId ?? `worker-${hostname()}-${process.pid}`;
   const log = options.log ?? (() => {});
   let currentJob: number | null = null;
+  let pauseNoted = false;
 
   return {
     workerId,
@@ -47,6 +54,14 @@ export function createWorker(options: WorkerOptions) {
     // Runs the next waiting requested job, if there is one, and queues the step after it
     async step(): Promise<WorkerStep | undefined> {
       touchWorker(db, workerId, null);
+      if (builderPaused(db)) {
+        if (!pauseNoted)
+          log("paused from the admin dashboard; no new job starts until it is resumed");
+        pauseNoted = true;
+        return undefined;
+      }
+      if (pauseNoted) log("resumed from the admin dashboard");
+      pauseNoted = false;
       const restarted = service.reconcile();
       if (restarted > 0) log(`queued ${restarted} approved builds that had no job`);
       const job = claimNextJob(db, workerId, {

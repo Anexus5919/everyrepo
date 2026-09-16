@@ -1,3 +1,12 @@
+export {
+  adminQueue,
+  builderPaused,
+  cancelBuild,
+  moveBuild,
+  queueRewrite,
+  setBuilderPaused,
+  type MoveDirection,
+} from "./admin.ts";
 export { builderStatus, removeWorker, touchWorker, WORKER_STALE_MS } from "./builders.ts";
 export { enqueueBuild, enqueueRewrite, followUp, markPublished, promoteBuild } from "./builds.ts";
 export {
@@ -47,4 +56,11 @@ export {
   type RequestServiceOptions,
   type SubmitResult,
 } from "./service.ts";
-export { describeRecord, isPaused, loadRecord, queuePositions, type RepoRecord } from "./views.ts";
+export {
+  describeRecord,
+  isPaused,
+  loadRecord,
+  progressFor,
+  queuePositions,
+  type RepoRecord,
+} from "./views.ts";

@@ -11,6 +11,7 @@ export {
   type RepoRef,
   type SearchInput,
 } from "./repo-ref.ts";
+export * from "./admin.ts";
 export * from "./requests.ts";
 export {
   loadLocalConfig,

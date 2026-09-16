@@ -92,11 +92,22 @@ export async function createSession(
   return { token, expiresAt };
 }
 
+export type SessionRow = typeof sessions.$inferSelect;
+
 export async function userForSession(
   db: AppDb,
   token: string | undefined,
   now = new Date(),
 ): Promise<UserRow | undefined> {
+  return (await sessionForToken(db, token, now))?.user;
+}
+
+// The account and its session, whose start time tells how long ago the person signed in
+export async function sessionForToken(
+  db: AppDb,
+  token: string | undefined,
+  now = new Date(),
+): Promise<{ user: UserRow; session: SessionRow } | undefined> {
   if (!token || token.length > 200) return undefined;
   const tokenHash = await sha256Hex(token);
   const row = db
@@ -113,7 +124,7 @@ export async function userForSession(
       .run();
     db.update(users).set({ lastSeenAt: now }).where(eq(users.id, row.user.id)).run();
   }
-  return row.user;
+  return row;
 }
 
 export async function endSession(db: AppDb, token: string | undefined): Promise<void> {

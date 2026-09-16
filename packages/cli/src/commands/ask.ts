@@ -15,6 +15,7 @@ import {
   sendWebResponse,
   toWebRequest,
 } from "../http.ts";
+import { createAdminApi, isAdminRoute } from "../admin-api.ts";
 import { createAuthApi, isAuthRoute } from "../auth-api.ts";
 import { createRequestApi, isRequestRoute, REQUEST_BODY_BYTES } from "../request-api.ts";
 
@@ -114,6 +115,16 @@ export function serveCommand(): Command {
       if (!clientId || !clientSecret) {
         log("GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET are not set, so signing in is off");
       }
+      // GitHub account ids of the people who may open the admin dashboard
+      const admins = new Set(
+        (process.env["EVERYREPO_ADMIN_GITHUB_IDS"] ?? "")
+          .split(",")
+          .map((id) => Number(id.trim()))
+          .filter((id) => Number.isInteger(id) && id > 0),
+      );
+      if (admins.size === 0) {
+        log("EVERYREPO_ADMIN_GITHUB_IDS is not set, so the admin dashboard is closed");
+      }
       const auth = createAuthApi({
         db: context.appDb,
         github: clientId && clientSecret ? { clientId, clientSecret } : undefined,
@@ -121,10 +132,22 @@ export function serveCommand(): Command {
         apiUrl,
         allowedOrigins,
         log,
+        isAdmin: (user) => admins.has(user.githubId),
+      });
+      const service = openRequests(context);
+      const admin = createAdminApi({
+        db: context.appDb,
+        service,
+        config: context.config,
+        admins,
+        siteOrigins: [new URL(siteUrl).origin, ...allowedOriginsFromEnv()],
+        sessionFor: (request) => auth.sessionFor(request),
+        githubToken: process.env["GITHUB_TOKEN"],
+        log,
       });
       const turnstileSecret = process.env["TURNSTILE_SECRET_KEY"];
       const requests = createRequestApi({
-        service: openRequests(context),
+        service,
         search: createRepoSearch({ github: openGithub(context) }),
         db: context.appDb,
         secret,
@@ -155,9 +178,12 @@ export function serveCommand(): Command {
           }
           throw error;
         }
-        const reply = isAuthRoute(new URL(web.url).pathname)
-          ? await auth.handle(web)
-          : await requests(web, clientAddress(request));
+        const path = new URL(web.url).pathname;
+        const reply = isAdminRoute(path)
+          ? await admin(web)
+          : isAuthRoute(path)
+            ? await auth.handle(web)
+            : await requests(web, clientAddress(request));
         if (reply) await sendWebResponse(response, reply);
         else json(response, 404, "not-found", "Not found");
       }
@@ -171,7 +197,7 @@ export function serveCommand(): Command {
       const server = createServer((request, response) => {
         const path = new URL(request.url ?? "/", "http://127.0.0.1").pathname;
         const work =
-          isRequestRoute(path) || isAuthRoute(path)
+          isRequestRoute(path) || isAuthRoute(path) || isAdminRoute(path)
             ? handleRequests(request, response)
             : ask
               ? ask(request, response)

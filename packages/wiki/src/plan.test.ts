@@ -1,5 +1,10 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { openEngineDb } from "@everyrepo/db";
+import type { LlmRouter } from "@everyrepo/llm";
 import { describe, expect, it } from "vitest";
-import { pageRange, validatePlan } from "./plan.ts";
+import { pageRange, planWiki, validatePlan } from "./plan.ts";
 
 const clusterModules = new Map([
   ["grid#1", "@acme/grid"],
@@ -127,5 +132,43 @@ describe("pageRange", () => {
     expect(pageRange("S", 500)).toEqual([8, 10]);
     expect(pageRange("L", 70)).toEqual([21, 40]);
     expect(pageRange("unknown", 0)).toEqual([8, 20]);
+  });
+});
+
+describe("planWiki", () => {
+  it("keeps the existing plan when only chosen pages are written again", async () => {
+    const folder = mkdtempSync(join(tmpdir(), "everyrepo-plan-"));
+    const enginePath = join(folder, "engine.sqlite");
+    const engine = openEngineDb(enginePath);
+    engine.$client
+      .prepare(
+        `INSERT INTO wiki_page (slug, parent_slug, position, title, purpose, clusters, files, status, markdown, updated_at)
+         VALUES ('overview', NULL, 0, 'Overview', 'What it is.', '[]', '[]', 'written', 'Text [S1]', 1)`,
+      )
+      .run();
+    engine.$client.close();
+    const router = {
+      completeJson: () => Promise.reject(new Error("no model call expected")),
+    } as unknown as LlmRouter;
+    const logs: string[] = [];
+    try {
+      const kept = await planWiki({
+        enginePath,
+        repo: "acme/app",
+        router,
+        log: (line) => logs.push(line),
+        keepExisting: true,
+      });
+      expect(kept).toMatchObject({ pages: 1, reused: true });
+      expect(logs).toEqual(["kept the existing plan of 1 pages"]);
+      const reopened = openEngineDb(enginePath).$client;
+      expect(reopened.prepare("SELECT status, markdown FROM wiki_page").get()).toEqual({
+        status: "written",
+        markdown: "Text [S1]",
+      });
+      reopened.close();
+    } finally {
+      rmSync(folder, { recursive: true, force: true });
+    }
   });
 });

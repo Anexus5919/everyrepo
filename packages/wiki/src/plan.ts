@@ -409,6 +409,8 @@ export interface PlanInput {
   repo: string;
   router: LlmRouter;
   log: (message: string) => void;
+  // Rewriting chosen pages keeps the plan they belong to, even one an older planner made
+  keepExisting?: boolean;
 }
 
 export interface PlanOutput {
@@ -423,6 +425,19 @@ export async function planWiki(input: PlanInput): Promise<PlanOutput> {
   const engine = openEngineDb(input.enginePath);
   const sql = engine.$client;
   try {
+    if (input.keepExisting) {
+      const planned = (sql.prepare("SELECT COUNT(*) AS n FROM wiki_page").get() as { n: number }).n;
+      if (planned > 0) {
+        input.log(`kept the existing plan of ${planned} pages`);
+        return {
+          pages: planned,
+          reused: true,
+          unplacedClusters: 0,
+          droppedClusters: 0,
+          droppedFiles: 0,
+        };
+      }
+    }
     const repoSummary = loadSummaries<RepoSummary>(sql, "repo").get("")?.content;
     if (!repoSummary) throw new Error("Run the summarize stage before planning");
     const clusterSummaries = new Map(

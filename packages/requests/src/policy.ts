@@ -94,9 +94,15 @@ export function decideRequest(
 
 // Repositories the owner adds on their own wait behind every build that someone asked for
 const OWNER_ADDED_OFFSET = 200;
+// Rewrites of published wikis wait behind every new wiki, since readers already have a version of them
+const REWRITE_OFFSET = 100;
 
 // Smaller repositories finish in far less time, so they go first and a large build cannot hold up many small ones
 export function buildPriority(tier: SizeTier | null | undefined, asked = true): number {
   const bySize = 80 + 20 * Math.max(0, SIZE_TIERS.indexOf(tier ?? "M"));
   return asked ? bySize : bySize + OWNER_ADDED_OFFSET;
+}
+
+export function rewritePriority(tier: SizeTier | null | undefined): number {
+  return buildPriority(tier, false) + REWRITE_OFFSET;
 }

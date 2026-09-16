@@ -49,6 +49,7 @@ import { reasonMessage } from "./messages.ts";
 import {
   buildPriority,
   decideRequest,
+  rewritePriority,
   DEFAULT_REQUEST_POLICY,
   inspectRepository,
   type Inspection,
@@ -709,7 +710,7 @@ export function createRequestService(options: RequestServiceOptions): RequestSer
       if (!repo?.publishedAt)
         throw new Error(`${formatRepoRef(ref)} has no published wiki to rebuild`);
       const tier = loadRecord(db, repo).request?.estimate?.sizeTier ?? repo.sizeTier;
-      enqueueRewrite(db, repo, buildPriority(tier, false));
+      enqueueRewrite(db, repo, rewritePriority(tier));
       return viewOf(repo);
     },
 

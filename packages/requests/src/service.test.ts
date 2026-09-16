@@ -314,7 +314,7 @@ describe("rewriting a published wiki", () => {
     expect(requests.rebuild(ref("acme/lib")).state).toBe("ready");
     requests.rebuild(ref("acme/lib"));
     expect(jobsFor("acme/lib")).toMatchObject([
-      { kind: "wiki", origin: "request", priority: 280, status: "queued" },
+      { kind: "wiki", origin: "request", priority: 380, status: "queued" },
     ]);
   });
 });

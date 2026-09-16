@@ -23,6 +23,7 @@ export { reasonMessage } from "./messages.ts";
 export {
   buildPriority,
   decideRequest,
+  rewritePriority,
   DEFAULT_REQUEST_POLICY,
   inspectRepository,
   type Decision,

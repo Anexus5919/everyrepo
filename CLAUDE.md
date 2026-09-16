@@ -40,8 +40,8 @@ TypeScript source directly and run with tsx. Tests use Vitest.
   - `serve [--port <n>]` runs the Ask, account and repository request API on 127.0.0.1 (default port 8787) for
     the website; Ask is switched off when embeddings or models are not configured, requests keep working, and
     signing in is off until `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` are set
-  - `requests rebuild <owner/repo...>` writes published wikis again behind every request; the site keeps showing
-    the published version until the new one is published
+  - `requests rebuild <owner/repo...>` writes published wikis again behind every request and every new wiki; the
+    site keeps showing the published version until the new one is published
   - `requests list|show|approve|decline|retry <owner/repo>` reviews repositories requested on the site;
     `approve` also adds a repository nobody asked for; `requests assign <owner/repo> <login>` links a request
     made before sign-in existed to the account of the person who made it

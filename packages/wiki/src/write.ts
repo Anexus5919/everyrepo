@@ -158,7 +158,12 @@ export async function writePages(input: WriteInput): Promise<WriteOutput> {
       outputTokens: 0,
     };
     const link = (source: Source) => githubLink(snapshot.repo, snapshot.sha, source);
-    const knownNames = [snapshot.repo, snapshot.repo.split("/").pop() ?? snapshot.repo];
+    // Pages point readers to each other by title
+    const knownNames = [
+      snapshot.repo,
+      snapshot.repo.split("/").pop() ?? snapshot.repo,
+      ...pages.flatMap((page) => [page.title, page.slug]),
+    ];
 
     for (const [position, page] of pages.entries()) {
       input.progress?.(position, pages.length);

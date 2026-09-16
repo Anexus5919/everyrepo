@@ -321,6 +321,7 @@ const actionAttributes = (action?: Action) => (action ? ACTION_ATTRIBUTES[action
         </div>
         <a class="account-item" href="/account/">Your account</a>
         <a class="account-item" href="/account/#requests">Your requests</a>
+        <a class="account-item" href="/admin/" data-account-admin hidden>Admin</a>
         <button class="account-item" type="button" data-account-signout>Sign out</button>
       </div>
     </div>
@@ -1146,6 +1147,7 @@ const actionAttributes = (action?: Action) => (action ? ACTION_ATTRIBUTES[action
     renderAccount(cachedUser());
     void getAccount().then((result) => {
       if (result.reachable) renderAccount(result.user);
+      account.querySelector<HTMLElement>("[data-account-admin]")!.hidden = !result.admin;
     });
     window.addEventListener("accountchange", (event) =>
       renderAccount((event as CustomEvent<AccountUser | null>).detail),

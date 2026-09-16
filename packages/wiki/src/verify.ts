@@ -76,6 +76,12 @@ export function splitBlocks(markdown: string): Block[] {
 
 const normalize = (text: string) => text.replace(/\s+/g, " ").trim();
 
+const FILE_EXTENSIONS = new Set(
+  "json yaml yml toml lock md txt xml html css ts tsx js jsx mjs cjs rs py go java kt rb php cs sh cfg ini env".split(
+    " ",
+  ),
+);
+
 // A name is grounded when cited code contains it in any case, it names a source file or folder, or it is a known name
 export function isGroundedName(
   name: string,
@@ -88,13 +94,36 @@ export function isGroundedName(
   if (knownNames.some((known) => known.toLowerCase() === lower)) return true;
   const trimmed = name.replace(/^\.?\//, "").replace(/\/$/, "");
   if (trimmed === "") return false;
-  return sourcePaths.some(
+  const isPath = sourcePaths.some(
     (path) =>
       path === trimmed ||
       path.endsWith(`/${trimmed}`) ||
       path.startsWith(`${trimmed}/`) ||
       path.includes(`/${trimmed}/`) ||
       (path.split("/").pop() ?? "").replace(/\.[^.]+$/, "") === trimmed,
+  );
+  return isPath || isGroundedQualifiedName(name, citedContent, sourcePaths, knownNames);
+}
+
+// Code defines `from_str` inside `impl Deserializer` or `create` inside `class Ky`, so a written
+// `Deserializer::from_str` or `Ky.create()` is grounded when each of its parts is a whole word there
+function isGroundedQualifiedName(
+  name: string,
+  citedContent: string,
+  sourcePaths: readonly string[],
+  knownNames: readonly string[],
+): boolean {
+  const bare = name.replace(/\([^()]*\)$/, "");
+  const parts = bare.split(/::|\./);
+  if (bare === name && parts.length < 2) return false;
+  if (!parts.every((part) => /^[A-Za-z_$][\w$]*$/.test(part))) return false;
+  // A missing file such as `config.yaml` is not a qualified name
+  if (parts.length === 2 && FILE_EXTENSIONS.has(parts[1]!.toLowerCase())) return false;
+  return parts.every(
+    (part) =>
+      new RegExp(`(^|[^\\w$])${part.replace(/\$/g, "\\$")}($|[^\\w$])`).test(citedContent) ||
+      knownNames.some((known) => known.toLowerCase() === part.toLowerCase()) ||
+      (parts.length === 1 && isGroundedName(part, citedContent, sourcePaths, knownNames)),
   );
 }
 

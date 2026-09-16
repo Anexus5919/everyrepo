@@ -80,6 +80,7 @@ async function runtimeFor(
         ...base,
         router: llm.router,
         allowanceAt: (task) => clock.modelsAt(task),
+        pages: pagesParam(job),
       }),
       close: () => llm.close(),
     };
@@ -111,6 +112,14 @@ async function runtimeFor(
     };
   }
   throw new Error(`The worker does not run ${job.kind} jobs`);
+}
+
+// A rewrite started from the admin dashboard may name only some pages
+function pagesParam(job: Job): string[] | undefined {
+  const pages = (job.params as { pages?: unknown } | null)?.pages;
+  return Array.isArray(pages) && pages.every((slug) => typeof slug === "string")
+    ? pages
+    : undefined;
 }
 
 export function workerCommand(): Command {

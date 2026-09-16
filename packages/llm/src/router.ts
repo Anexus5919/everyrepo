@@ -15,6 +15,8 @@ export interface ResponseCache {
 export interface CompleteOptions {
   // Bumping a prompt version makes earlier cached answers for it stale
   promptVersion: string;
+  // Asks the model again instead of using a saved answer, which then replaces the saved one
+  fresh?: boolean;
 }
 
 export function parseJson<T>(
@@ -69,7 +71,7 @@ export class LlmRouter {
       const key = createHash("sha256")
         .update(JSON.stringify([model.provider, model.model, options.promptVersion, request]))
         .digest("hex");
-      const hit = this.cache?.get(key);
+      const hit = options.fresh ? undefined : this.cache?.get(key);
       if (hit) return { ...hit, cached: true };
       try {
         const result = await model.complete(request);

@@ -74,6 +74,8 @@ export function createWikiHandlers(options: WikiOptions): Record<WikiStage, Stag
           repo: formatRepoRef(options.ref),
           router: options.router,
           log,
+          // Replanning would reset every written page when only a few were meant to be written again
+          keepExisting: options.pages !== undefined && options.pages.length > 0,
         }),
       options.allowanceAt,
     );

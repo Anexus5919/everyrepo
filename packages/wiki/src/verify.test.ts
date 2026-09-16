@@ -88,4 +88,18 @@ describe("verifyPage", () => {
     );
     expect(isGroundedName("lib", "", paths)).toBe(false);
   });
+
+  it("accepts qualified names and calls whose parts the cited code defines", () => {
+    const rust =
+      "impl<'a> Deserializer<read::SliceRead<'a>> {\n    pub fn from_slice(bytes: &'a [u8]) -> Self {";
+    expect(isGroundedName("Deserializer::from_slice", rust, [])).toBe(true);
+    expect(isGroundedName("from_slice(bytes)", rust, [])).toBe(true);
+    expect(isGroundedName("Deserializer::from_reader", rust, [])).toBe(false);
+    const ts = "class Ky {\n  static create(input, options) {";
+    expect(isGroundedName("Ky.create()", ts, [])).toBe(true);
+    expect(isGroundedName("Ky.extend()", ts, [])).toBe(false);
+    // Parts must be whole words, and a missing file stays missing
+    expect(isGroundedName("K.create", ts, [])).toBe(false);
+    expect(isGroundedName("options.json", "const options = load(json)", [])).toBe(false);
+  });
 });

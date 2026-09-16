@@ -25,7 +25,10 @@ export function applyCors(
   // The website sends its session cookie with API calls, which browsers allow only with this header
   response.setHeader("access-control-allow-credentials", "true");
   response.setHeader("access-control-allow-methods", "GET, POST, DELETE, OPTIONS");
-  response.setHeader("access-control-allow-headers", "content-type, if-none-match");
+  response.setHeader(
+    "access-control-allow-headers",
+    "content-type, if-none-match, x-everyrepo-admin",
+  );
   response.setHeader("access-control-expose-headers", "etag, retry-after");
   response.setHeader("vary", "origin");
 }

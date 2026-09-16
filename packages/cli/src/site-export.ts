@@ -94,7 +94,12 @@ export async function exportSite(db: AppDb, dataDir: string, out: string): Promi
     );
     const { overview, architecture, technologies, wikiPages, glossary, ...repo } = wiki;
     // A repository without written pages is shown as being written only while a build for it is open
-    if (repo.status === "queued" && !findOpenJob(db, row.id)) continue;
+    if (repo.status === "queued" && !open) continue;
+    // Another wiki's publish must not put out half of a first wiki, so it waits for its own publish step
+    if (repo.status === "ready" && !row.publishedAt && open && open.kind !== "publish") {
+      listed.push({ ...repo, status: "queued", pages: 0 });
+      continue;
+    }
     listed.push(repo);
     if (repo.status !== "ready" || !repo.sha) continue;
     await writeFile(

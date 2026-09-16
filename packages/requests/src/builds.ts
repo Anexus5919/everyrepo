@@ -28,7 +28,13 @@ export function enqueueBuild(db: AppDb, repo: RepoRow, priority: number): Job | 
 }
 
 // Writes a published wiki again, for example after the planner learned to cover more; it waits behind every request
-export function enqueueRewrite(db: AppDb, repo: RepoRow, priority: number): Job | undefined {
+export function enqueueRewrite(
+  db: AppDb,
+  repo: RepoRow,
+  priority: number,
+  // Only these page slugs are written again when given
+  pages?: readonly string[],
+): Job | undefined {
   const open = findOpenJob(db, repo.id);
   if (open) return open;
   if (!repo.publishedAt || !repo.lastIndexedSha) return undefined;
@@ -38,6 +44,7 @@ export function enqueueRewrite(db: AppDb, repo: RepoRow, priority: number): Job 
     stages: [...WIKI_STAGE_KEYS],
     origin: "request",
     priority,
+    ...(pages && pages.length > 0 ? { params: { pages: [...pages] } } : {}),
   });
 }
 

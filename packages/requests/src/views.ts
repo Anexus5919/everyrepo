@@ -82,7 +82,7 @@ export function queuePositions(db: AppDb, now: Date): Positions {
 
 const iso = (date: Date | null | undefined) => (date ? date.toISOString() : null);
 
-function progressFor(job: Job, stages: StageRow[]): BuildProgress | null {
+export function progressFor(job: Job, stages: StageRow[]): BuildProgress | null {
   const started = stages.length > 0 || job.progress !== null;
   if (!started) return null;
   const finished = new Set(

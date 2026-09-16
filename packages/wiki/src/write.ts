@@ -158,7 +158,12 @@ export async function writePages(input: WriteInput): Promise<WriteOutput> {
       outputTokens: 0,
     };
     const link = (source: Source) => githubLink(snapshot.repo, snapshot.sha, source);
-    const knownNames = [snapshot.repo, snapshot.repo.split("/").pop() ?? snapshot.repo];
+    // Pages point readers to each other by title
+    const knownNames = [
+      snapshot.repo,
+      snapshot.repo.split("/").pop() ?? snapshot.repo,
+      ...pages.flatMap((page) => [page.title, page.slug]),
+    ];
 
     for (const [position, page] of pages.entries()) {
       input.progress?.(position, pages.length);
@@ -223,10 +228,12 @@ export async function writePages(input: WriteInput): Promise<WriteOutput> {
         output.reused += 1;
         continue;
       }
+      // A page that failed its checks before would only get the same rejected answer back from the saved answers
+      const fresh = page.status === "failed";
       let result = await input.router.complete(
         "page",
         { messages, maxTokens: 4_000, temperature: 0.3 },
-        { promptVersion: PAGE_PROMPT_VERSION },
+        { promptVersion: PAGE_PROMPT_VERSION, fresh },
       );
       output.inputTokens += result.inputTokens;
       output.outputTokens += result.outputTokens;
@@ -244,7 +251,7 @@ export async function writePages(input: WriteInput): Promise<WriteOutput> {
             maxTokens: 4_000,
             temperature: 0.2,
           },
-          { promptVersion: PAGE_PROMPT_VERSION },
+          { promptVersion: PAGE_PROMPT_VERSION, fresh },
         );
         output.inputTokens += repair.inputTokens;
         output.outputTokens += repair.outputTokens;
@@ -260,6 +267,14 @@ export async function writePages(input: WriteInput): Promise<WriteOutput> {
       const diagram =
         page.slug === "overview" ? moduleDiagram(sql) : clusterDiagram(sql, diagramClusters);
       const ok = passes(verified.stats);
+      // A rewrite that does worse leaves the published text in place instead of taking the page off the site
+      if (!ok && page.status === "written") {
+        setReadingOrder.run(JSON.stringify(items), page.slug);
+        output.reused += 1;
+        input.heartbeat();
+        input.log(`kept the published ${page.slug}: its rewrite ${describe(verified.stats)}`);
+        continue;
+      }
       const markdown = diagram ? insertDiagram(verified.markdown, diagram) : verified.markdown;
       update.run(
         ok ? "written" : "failed",

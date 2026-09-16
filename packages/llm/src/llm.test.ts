@@ -282,6 +282,17 @@ describe("router", () => {
     const again = await router.completeJson("page", request, schema, { promptVersion: "1" });
     expect(again.result.cached).toBe(true);
     expect(backup.calls).toBe(2);
+
+    // A fresh request skips the saved answer and saves the new one in its place
+    const retried = fakeModel("retry", ["first", "second"]);
+    const retryRouter = new LlmRouter({ page: [retried] }, cache);
+    await retryRouter.complete("page", request, { promptVersion: "1" });
+    const repeat = await retryRouter.complete("page", request, { promptVersion: "1", fresh: true });
+    expect(repeat).toMatchObject({ text: "second", cached: false });
+    expect((await retryRouter.complete("page", request, { promptVersion: "1" })).text).toBe(
+      "second",
+    );
+    expect(retried.calls).toBe(2);
     expect(() => router.models("missing")).toThrow(/No models configured/);
   });
 

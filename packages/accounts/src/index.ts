@@ -17,9 +17,11 @@ export {
   publicUser,
   saveGithubUser,
   SESSION_MS,
+  sessionForToken,
   SIGN_IN_WINDOW_MS,
   takeSignIn,
   userForSession,
+  type SessionRow,
   type UserRow,
 } from "./store.ts";
 export {
